@@ -35,12 +35,15 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
 });
 
 test("patches only Cargo builds that target a local WebUI checkout", () => {
+  const checkout = resolve(REPOSITORY_ROOT, "local-webui");
+  const handler = resolve(checkout, "crates", "webui-handler")
+    .replaceAll("\\", "\\\\");
   assert.deepEqual(webuiCargoArguments(["metadata"], null), ["metadata"]);
   assert.deepEqual(
-    webuiCargoArguments(["metadata"], "C:\\src\\webui"),
+    webuiCargoArguments(["metadata"], checkout),
     [
       "--config",
-      "patch.crates-io.microsoft-webui-handler.path=\"C:\\\\src\\\\webui\\\\crates\\\\webui-handler\"",
+      `patch.crates-io.microsoft-webui-handler.path="${handler}"`,
       "metadata",
     ],
   );
