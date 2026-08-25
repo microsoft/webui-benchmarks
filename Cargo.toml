@@ -1,0 +1,57 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+[workspace]
+members = ["todo/servers/rust-actix"]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.93"
+authors = ["Microsoft Edge"]
+license = "MIT"
+repository = "https://github.com/microsoft/webui-benchmarks"
+
+[workspace.dependencies]
+actix-web = "=4.14.0"
+anyhow = "=1.0.103"
+rcgen = "=0.14.8"
+rustls = "=0.23.41"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.150", features = ["raw_value"] }
+time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
+microsoft-webui-handler = "=0.0.25"
+
+[workspace.lints.clippy]
+perf = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+large_enum_variant = "deny"
+large_stack_arrays = "deny"
+large_futures = "deny"
+needless_collect = "deny"
+redundant_clone = "deny"
+unnecessary_to_owned = "deny"
+inefficient_to_string = "deny"
+manual_memcpy = "deny"
+naive_bytecount = "deny"
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+rc_buffer = "deny"
+large_types_passed_by_value = "deny"
+vec_box = "deny"
+unnecessary_box_returns = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+
+[profile.dev]
+opt-level = 0

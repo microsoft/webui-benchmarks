@@ -1,0 +1,16 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+import "../../../../shared/styles.css";
+import { TodoApp } from "../../../preact/components/todo-app.jsx";
+
+const { initialState, renderMode } = Astro.props;
+---
+
+<TodoApp
+  state={initialState}
+  renderMode={renderMode}
+  hydrationId="astro"
+  client:visible={{ rootMargin: "200px" }}
+/>

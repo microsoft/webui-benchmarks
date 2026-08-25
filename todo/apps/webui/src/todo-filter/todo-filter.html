@@ -1,0 +1,15 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<button
+  aria-label="{{filter.label}}: {{filter.countLabel}}"
+  aria-pressed="{{filter.active}}"
+  class="todo-filter"
+  data-action="filter"
+  ?data-active="{{filter.active}}"
+  data-filter="{{filter.id}}"
+  type="button"
+>
+  <span>{{filter.label}}</span>
+  <span class="todo-filter__count">{{filter.countLabel}}</span>
+</button>

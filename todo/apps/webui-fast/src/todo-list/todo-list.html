@@ -1,0 +1,38 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<ul aria-label="Todo items" class="todo-list" role="listbox">
+  <for each="todo in rendertodos">
+    <if condition="todo.visible">
+      <todo-item
+        :assigned="{{todo.assigned}}"
+        :assigneelabel="{{todo.assigneeLabel}}"
+        :blocked="{{todo.blocked}}"
+        :blockedlabel="{{todo.blockedLabel}}"
+        :completed="{{todo.completed}}"
+        :description="{{todo.description}}"
+        :duelabel="{{todo.dueLabel}}"
+        :duetoday="{{todo.dueToday}}"
+        :hassubtasks="{{todo.hasSubtasks}}"
+        :hastags="{{todo.hasTags}}"
+        :highpriority="{{todo.isHighPriority}}"
+        :mediumpriority="{{todo.isMediumPriority}}"
+        :overdue="{{todo.overdue}}"
+        :pending="{{todo.pending}}"
+        :prioritylabel="{{todo.priorityLabel}}"
+        :recurring="{{todo.recurring}}"
+        :recurringlabel="{{todo.recurringLabel}}"
+        :selected="{{todo.selected}}"
+        :selectionlabel="{{todo.selectionLabel}}"
+        :statuslabel="{{todo.statusLabel}}"
+        :subtaskcountlabel="{{todo.subtaskCountLabel}}"
+        :subtaskprogresslabel="{{todo.subtaskProgressLabel}}"
+        :tagcountlabel="{{todo.tagCountLabel}}"
+        :tags="{{todo.tags}}"
+        :title="{{todo.title}}"
+        :todoid="{{todo.id}}"
+        data-component="todo-item"
+      ></todo-item>
+    </if>
+  </for>
+</ul>

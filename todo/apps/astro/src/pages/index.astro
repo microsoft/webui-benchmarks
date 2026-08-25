@@ -1,0 +1,24 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+export const prerender = true;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SSR Todo Benchmark</title>
+  </head>
+  <body>
+    <main>
+      <h1>SSR Todo Benchmark</h1>
+      <nav aria-label="Benchmark render modes">
+        <a href="/dynamic">Dynamic SSR</a>
+        <a href="/cached">Static cached response</a>
+      </nav>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "todo-bench-webui-shadowdom",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@microsoft/webui": "0.0.25"
+  }
+}

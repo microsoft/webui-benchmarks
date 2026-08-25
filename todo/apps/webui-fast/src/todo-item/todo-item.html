@@ -1,0 +1,80 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<template w-render="lazy" w-reserve-block-size="18rem">
+  <li
+    aria-selected="{{selected}}"
+    class="todo-item"
+    ?data-selected="{{selected}}"
+    data-todo-id="{{todoid}}"
+    role="option"
+    tabindex="0"
+  >
+  <todo-checkbox
+    :completed="{{completed}}"
+    :statuslabel="{{statuslabel}}"
+    :title="{{title}}"
+    :todoid="{{todoid}}"
+    data-component="todo-checkbox"
+  ></todo-checkbox>
+  <div class="todo-item__content">
+    <strong class="todo-item__title">{{title}}</strong>
+    <span class="todo-item__description">{{description}}</span>
+    <div aria-label="Todo attributes" class="todo-item__badges">
+      <if condition="completed">
+        <todo-badge class="todo-badge" data-branch="completed" data-component="todo-badge">{{statuslabel}}</todo-badge>
+      </if>
+      <if condition="pending">
+        <todo-badge class="todo-badge" data-branch="pending" data-component="todo-badge">{{statuslabel}}</todo-badge>
+      </if>
+      <if condition="highpriority">
+        <todo-badge class="todo-badge" data-branch="high-priority" data-component="todo-badge">{{prioritylabel}}</todo-badge>
+      </if>
+      <if condition="mediumpriority">
+        <todo-badge class="todo-badge" data-branch="medium-priority" data-component="todo-badge">{{prioritylabel}}</todo-badge>
+      </if>
+      <if condition="overdue">
+        <todo-badge class="todo-badge" data-branch="overdue" data-component="todo-badge">{{duelabel}}</todo-badge>
+      </if>
+      <if condition="duetoday">
+        <todo-badge class="todo-badge" data-branch="due-today" data-component="todo-badge">{{duelabel}}</todo-badge>
+      </if>
+      <if condition="blocked">
+        <todo-badge class="todo-badge" data-branch="blocked" data-component="todo-badge">{{blockedlabel}}</todo-badge>
+      </if>
+      <if condition="recurring">
+        <todo-badge class="todo-badge" data-branch="recurring" data-component="todo-badge">{{recurringlabel}}</todo-badge>
+      </if>
+      <if condition="assigned">
+        <todo-badge class="todo-badge" data-branch="assigned" data-component="todo-badge">{{assigneelabel}}</todo-badge>
+      </if>
+      <if condition="hastags">
+        <todo-badge class="todo-badge" data-branch="has-tags" data-component="todo-badge">{{tagcountlabel}}</todo-badge>
+      </if>
+      <if condition="hassubtasks">
+        <todo-badge class="todo-badge" data-branch="has-subtasks" data-component="todo-badge">{{subtaskprogresslabel}}</todo-badge>
+      </if>
+      <if condition="selected">
+        <todo-badge class="todo-badge" data-branch="selected" data-component="todo-badge">{{selectionlabel}}</todo-badge>
+      </if>
+    </div>
+    <todo-tag-list
+      :tagcountlabel="{{tagcountlabel}}"
+      :tags="{{tags}}"
+      data-component="todo-tag-list"
+    ></todo-tag-list>
+  </div>
+  <div class="todo-item__meta">
+    <span>{{prioritylabel}}</span>
+    <span>{{duelabel}}</span>
+    <span>{{assigneelabel}}</span>
+    <span>{{subtaskcountlabel}}</span>
+    <todo-button
+      :selected="{{selected}}"
+      :todotitle="{{title}}"
+      :todoid="{{todoid}}"
+      data-component="todo-button"
+    ></todo-button>
+  </div>
+  </li>
+</template>

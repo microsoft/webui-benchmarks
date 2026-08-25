@@ -1,0 +1,26 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<if condition="todo.id">
+  <button
+    aria-label="Select {{todo.title}}"
+    aria-pressed="{{todo.selected}}"
+    class="todo-button"
+    data-action="select"
+    data-todo-id="{{todo.id}}"
+    type="button"
+  >
+    Select
+  </button>
+</if>
+<if condition="control.clearCompletedLabel">
+  <button
+    aria-label="{{control.clearCompletedLabel}}"
+    class="todo-button"
+    data-action="clear-completed"
+    ?disabled="{{!control.hasCompleted}}"
+    type="button"
+  >
+    {{control.clearCompletedLabel}}
+  </button>
+</if>

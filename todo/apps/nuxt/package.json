@@ -1,0 +1,34 @@
+{
+  "name": "todo-bench-nuxt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "start": "node .output/server/index.mjs"
+  },
+  "engines": {
+    "node": "22.23.1"
+  },
+  "webuiBenchmark": {
+    "schema": "webui.ssr-todo-app/v1",
+    "id": "nuxt",
+    "buildOutput": ".output/server/index.mjs",
+    "frameworkPackages": [
+      "nuxt",
+      "vue"
+    ],
+    "productionEntry": ".output/server/index.mjs",
+    "productionArgs": [],
+    "routes": {
+      "cached": "/cached",
+      "dynamic": "/dynamic"
+    },
+    "compression": false,
+    "workerCount": 1
+  },
+  "dependencies": {
+    "nuxt": "4.2.2",
+    "vue": "3.5.41"
+  }
+}

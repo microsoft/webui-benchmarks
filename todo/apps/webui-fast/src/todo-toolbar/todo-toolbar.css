@@ -1,0 +1,33 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--todo-border);
+  border-radius: 0.875rem;
+  background: var(--todo-surface);
+}
+
+.todo-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 48rem) {
+  .todo-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

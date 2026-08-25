@@ -1,0 +1,24 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<section aria-label="Todo controls" class="todo-toolbar">
+  <div aria-label="Filter todos" class="todo-toolbar__filters" role="group">
+    <for each="filter in filters">
+      <todo-filter
+        :active="{{filter.active}}"
+        :countlabel="{{filter.countLabel}}"
+        :filterid="{{filter.id}}"
+        :label="{{filter.label}}"
+        data-component="todo-filter"
+      ></todo-filter>
+    </for>
+  </div>
+  <span aria-live="polite" class="todo-toolbar__selection">
+    {{selectionlabel}}
+  </span>
+  <todo-button
+    :clearcompletedlabel="{{clearcompletedlabel}}"
+    :hascompleted="{{hascompleted}}"
+    data-component="todo-button"
+  ></todo-button>
+</section>

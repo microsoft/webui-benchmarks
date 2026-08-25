@@ -1,0 +1,15 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-checkbox {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.2rem 0 0;
+  accent-color: var(--todo-accent);
+}

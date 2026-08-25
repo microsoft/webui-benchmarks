@@ -1,0 +1,44 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  color: #344054;
+  background: var(--todo-surface-subtle);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.todo-badge[data-branch~="completed"] {
+  color: #17623a;
+  background: #dcf7e7;
+}
+
+.todo-badge[data-branch~="pending"] {
+  color: #754800;
+  background: #fff0c2;
+}
+
+.todo-badge[data-branch~="high-priority"],
+.todo-badge[data-branch~="overdue"],
+.todo-badge[data-branch~="blocked"] {
+  color: #9f1c1c;
+  background: #fee2e2;
+}
+
+.todo-badge[data-branch~="medium-priority"],
+.todo-badge[data-branch~="due-today"] {
+  color: #075b8a;
+  background: #dff3ff;
+}

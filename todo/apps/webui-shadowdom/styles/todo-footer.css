@@ -1,0 +1,27 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--todo-border);
+  border-radius: 0.875rem;
+  color: var(--todo-muted);
+  background: var(--todo-surface);
+}
+
+@media (max-width: 48rem) {
+  .todo-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
