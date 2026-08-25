@@ -1,0 +1,13 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<ul aria-label="Todo items" class="todo-list" role="listbox">
+  <for each="todo in todos">
+    <if condition="todo.visible">
+      <todo-item
+        :todo="{{todo}}"
+        data-component="todo-item"
+      ></todo-item>
+    </if>
+  </for>
+</ul>

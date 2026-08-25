@@ -1,0 +1,16 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+packages:
+  - .
+  - todo/apps/*
+
+overrides:
+  babel-preset-solid: 1.9.12
+
+allowBuilds:
+  '@microsoft/webui': true
+  bun: true
+  deno: true
+  esbuild: true
+  sharp: true

@@ -1,0 +1,43 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<main aria-labelledby="todo-app-title" class="todo-app" @click="{onClick($e)}">
+  <todo-header
+    :description="{{app.description}}"
+    :eyebrow="{{app.eyebrow}}"
+    :subtitle="{{app.subtitle}}"
+    :title="{{app.title}}"
+    :variantlabel="{{variantLabel}}"
+    data-component="todo-header"
+  ></todo-header>
+  <todo-summary
+    :completedcount="{{summary.completedCount}}"
+    :completedlabel="{{summary.completedLabel}}"
+    :highprioritycount="{{summary.highPriorityCount}}"
+    :highprioritylabel="{{summary.highPriorityLabel}}"
+    :overduecount="{{summary.overdueCount}}"
+    :overduelabel="{{summary.overdueLabel}}"
+    :pendingcount="{{summary.pendingCount}}"
+    :pendinglabel="{{summary.pendingLabel}}"
+    :totalcount="{{summary.totalCount}}"
+    :totallabel="{{summary.totalLabel}}"
+    data-component="todo-summary"
+  ></todo-summary>
+  <todo-toolbar
+    :clearcompletedlabel="{{toolbar.clearCompletedLabel}}"
+    :filters="{{toolbar.filters}}"
+    :hascompleted="{{toolbar.hasCompleted}}"
+    :selectionlabel="{{selection.label}}"
+    data-component="todo-toolbar"
+  ></todo-toolbar>
+  <todo-list
+    :rendertodos="{{todos}}"
+    data-component="todo-list"
+  ></todo-list>
+  <todo-footer
+    :itemcountlabel="{{footer.itemCountLabel}}"
+    :label="{{footer.label}}"
+    :variantlabel="{{footer.variantLabel}}"
+    data-component="todo-footer"
+  ></todo-footer>
+</main>

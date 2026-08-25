@@ -1,0 +1,13 @@
+{
+  "name": "todo-bench-webui-fast",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@microsoft/fast-element": "3.0.1",
+    "@microsoft/webui": "0.0.25"
+  }
+}

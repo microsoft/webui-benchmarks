@@ -1,0 +1,42 @@
+{
+  "name": "todo-bench-next",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "start": "next start"
+  },
+  "engines": {
+    "node": "22.23.1"
+  },
+  "webuiBenchmark": {
+    "schema": "webui.ssr-todo-app/v1",
+    "id": "next",
+    "buildOutput": ".next",
+    "frameworkPackages": [
+      "next",
+      "react",
+      "react-dom"
+    ],
+    "productionEntry": "node_modules/next/dist/bin/next",
+    "productionArgs": [
+      "start",
+      "--hostname",
+      "{host}",
+      "--port",
+      "{port}"
+    ],
+    "routes": {
+      "cached": "/cached",
+      "dynamic": "/dynamic"
+    },
+    "compression": false,
+    "workerCount": 1
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  }
+}

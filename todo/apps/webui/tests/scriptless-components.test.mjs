@@ -1,0 +1,53 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+import { COMPONENTS } from "../../../shared/contract.mjs";
+
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+test("only the interaction-owning root has authored TypeScript", async () => {
+  for (const tagName of COMPONENTS) {
+    const sourceRoot = resolve(appRoot, "src", tagName, tagName);
+    const hasBehavior = existsSync(`${sourceRoot}.ts`);
+    assert.equal(
+      hasBehavior,
+      tagName === "todo-app",
+      `${tagName} should ${tagName === "todo-app" ? "" : "not "}have authored behavior`,
+    );
+    const template = await readFile(`${sourceRoot}.html`, "utf8");
+    assert.equal(
+      /@[a-z-]+=/u.test(template),
+      tagName === "todo-app",
+      `${tagName} event ownership must match its authored behavior module`,
+    );
+  }
+});
+
+test("the browser component entry imports only authored behavior", async () => {
+  const entry = await readFile(
+    resolve(appRoot, "component-definitions.ts"),
+    "utf8",
+  );
+  assert.match(entry, /lazy-hydration\.js/u);
+  assert.match(entry, /todo-app\/todo-app\.js/u);
+  assert.doesNotMatch(
+    entry,
+    /todo-(?:button|checkbox|filter|footer|header|item|list|summary|tag-list|toolbar)\//u,
+  );
+});
+
+test("todo rows use reserved viewport rendering and hydration", async () => {
+  const template = await readFile(
+    resolve(appRoot, "src", "todo-item", "todo-item.html"),
+    "utf8",
+  );
+  assert.match(template, /w-render="lazy"/u);
+  assert.match(template, /w-reserve-block-size="18rem"/u);
+  assert.doesNotMatch(template, /w-hydrate="lazy"/u);
+});

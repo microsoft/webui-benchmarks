@@ -1,0 +1,74 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--todo-border);
+  border-radius: 0.75rem;
+  background: var(--todo-surface);
+}
+
+.todo-item[data-selected],
+.todo-item[aria-selected="true"] {
+  border-color: var(--todo-accent);
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 12%);
+}
+
+.todo-item__content {
+  min-width: 0;
+}
+
+.todo-item__title {
+  display: block;
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-item__description {
+  display: block;
+  overflow: hidden;
+  margin: 0.2rem 0 0.55rem;
+  color: var(--todo-muted);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-item__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.todo-item__meta {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: end;
+  color: var(--todo-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 48rem) {
+  .todo-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .todo-item__meta {
+    grid-column: 2;
+    justify-items: start;
+  }
+}

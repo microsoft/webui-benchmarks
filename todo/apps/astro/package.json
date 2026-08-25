@@ -1,0 +1,38 @@
+{
+  "name": "todo-bench-astro",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build && node write-h2-entry.mjs",
+    "start": "node dist/server/entry.mjs"
+  },
+  "engines": {
+    "node": "22.23.1"
+  },
+  "webuiBenchmark": {
+    "schema": "webui.ssr-todo-app/v1",
+    "id": "astro",
+    "buildOutput": "dist/server/entry.mjs",
+    "frameworkPackages": [
+      "@astrojs/node",
+      "@astrojs/preact",
+      "preact",
+      "astro"
+    ],
+    "productionEntry": "dist/server/entry.mjs",
+    "productionArgs": [],
+    "routes": {
+      "cached": "/cached",
+      "dynamic": "/dynamic"
+    },
+    "compression": false,
+    "workerCount": 1
+  },
+  "dependencies": {
+    "@astrojs/node": "9.5.1",
+    "@astrojs/preact": "4.1.3",
+    "astro": "5.16.6",
+    "preact": "10.29.8"
+  }
+}

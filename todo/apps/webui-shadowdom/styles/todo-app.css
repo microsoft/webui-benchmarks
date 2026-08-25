@@ -1,0 +1,33 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+:host {
+  display: block;
+}
+
+.todo-app {
+  --todo-accent: #2563eb;
+  --todo-border: #d7deea;
+  --todo-muted: #59657a;
+  --todo-surface: #ffffff;
+  --todo-surface-subtle: #f5f7fb;
+  --todo-text: #172033;
+  width: min(100%, 90rem);
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: var(--todo-text);
+  background: #eef2f7;
+  font: 400 0.9375rem/1.45 system-ui, sans-serif;
+}
+
+@media (max-width: 48rem) {
+  .todo-app {
+    padding: 0.75rem;
+  }
+}

@@ -1,0 +1,12 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<div aria-label="{{tagcountlabel}}" class="todo-tag-list">
+  <for each="tag in tags">
+    <span
+      class="todo-tag"
+      data-tag-id="{{tag.id}}"
+      data-tone="{{tag.tone}}"
+    >{{tag.label}}</span>
+  </for>
+</div>

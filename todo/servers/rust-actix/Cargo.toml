@@ -1,0 +1,24 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+[package]
+name = "ssr-framework-bench-todo-actix"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[features]
+optimized-webui-writer = []
+
+[dependencies]
+actix-web = { workspace = true, features = ["rustls-0_23"] }
+anyhow = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+microsoft-webui-handler = { workspace = true }
+
+[lints]
+workspace = true
