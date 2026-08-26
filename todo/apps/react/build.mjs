@@ -36,7 +36,7 @@ export function build() {
       minify: true,
       outfile: artifactPath,
       platform: "node",
-      target: "node22",
+      target: "node24",
     });
     return { artifactPath, css };
   });

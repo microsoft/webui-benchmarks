@@ -35,7 +35,7 @@ the released platform package when no path is supplied. Native-addon failure
 exits with code 78 after emitting one JSON `unsupported` record; WebAssembly is
 never used.
 
-`node todo/servers/verify-runtimes.mjs --official` enforces Node 22.23.1,
+`node todo/servers/verify-runtimes.mjs --official` enforces Node 24.19.0,
 Bun 1.3.14, and Deno 2.9.5. Local verification reports an absent Deno as
 `skipped`; official verification fails it. Generate the Rust state input with:
 

@@ -31,7 +31,7 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   assert.equal(tsconfig.compilerOptions.useDefineForClassFields, false);
   assert.equal(runtimes.runtimes.bun.version, "1.3.14");
   assert.equal(runtimes.runtimes.deno.version, "2.9.5");
-  assert.equal(runtimes.runtimes.node.version, "22.23.1");
+  assert.equal(runtimes.runtimes.node.version, "24.19.0");
 });
 
 test("patches only Cargo builds that target a local WebUI checkout", () => {
