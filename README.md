@@ -147,6 +147,17 @@ successful rounds for every product, and verified pinned runtimes. It adds FCP,
 LCP, JavaScript heap, and renderer-private-memory metrics without retaining
 stale browser data. Without that option, the DTO contains SSR throughput only.
 
+Derive a WebUI-only state file from that compact summary with:
+
+```bash
+pnpm run export:webui -- --input results/benchmark-summary.json
+```
+
+The extractor writes `webui.json` beside the input by default. Pass
+`--output <path>` to choose another location. It keeps only `webui-*` rows,
+rebuilds each metric summary, re-ranks the filtered rows, and keeps
+`benchmarksJson` synchronized with `benchmarks`.
+
 ## Measurement contract
 
 - Dynamic SSR renders HTML for every measured request; final HTML is never
