@@ -185,6 +185,13 @@ test("saturation analysis distinguishes a plateau from an unfinished sweep", () 
       sample(192, 700, { durationSeconds: 4 }),
       sample(200, 800, { durationSeconds: 4 }),
     ]).status,
+    "saturated",
+  );
+  assert.equal(
+    analyzeSaturation([
+      sample(192, 700, { durationSeconds: 4 }),
+      sample(200, 850, { durationSeconds: 4 }),
+    ]).status,
     "server-unsaturated",
   );
 });

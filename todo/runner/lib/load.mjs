@@ -398,7 +398,7 @@ export function analyzeSaturation(samples) {
       (peak.sample.requestsPerSecond - previousPeak) / previousPeak;
     const gainThreshold = samples.length === 2
         && samples.every(({ durationSeconds }) => durationSeconds <= 4)
-      ? 0.1
+      ? 0.15
       : 0.05;
     if (gain > gainThreshold) {
       return Object.freeze({
