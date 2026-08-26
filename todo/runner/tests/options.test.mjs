@@ -20,7 +20,7 @@ test("default options use the timeboxed official measurement protocol", () => {
     durationSeconds: 20,
     loadWorkers: 2,
     rounds: 1,
-    saturationConnections: [64, 128],
+    saturationConnections: [192, 200],
     saturationDurationSeconds: 4,
     warmupSeconds: 3,
   });

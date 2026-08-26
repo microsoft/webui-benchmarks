@@ -9,7 +9,7 @@ export const DEFAULT_PROTOCOL = Object.freeze({
   durationSeconds: 20,
   loadWorkers: 2,
   rounds: 1,
-  saturationConnections: Object.freeze([64, 128]),
+  saturationConnections: Object.freeze([192, 200]),
   saturationDurationSeconds: 4,
   warmupSeconds: 3,
 });
