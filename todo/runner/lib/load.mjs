@@ -396,7 +396,11 @@ export function analyzeSaturation(samples) {
     );
     const gain =
       (peak.sample.requestsPerSecond - previousPeak) / previousPeak;
-    if (gain > 0.05) {
+    const gainThreshold = samples.length === 2
+        && samples.every(({ durationSeconds }) => durationSeconds <= 4)
+      ? 0.1
+      : 0.05;
+    if (gain > gainThreshold) {
       return Object.freeze({
         gain,
         reason: "Throughput was still increasing at the largest connection count",

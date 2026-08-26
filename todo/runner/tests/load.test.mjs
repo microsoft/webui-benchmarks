@@ -173,6 +173,20 @@ test("saturation analysis distinguishes a plateau from an unfinished sweep", () 
     ]).status,
     "saturated",
   );
+  assert.equal(
+    analyzeSaturation([
+      sample(192, 700, { durationSeconds: 4 }),
+      sample(200, 745, { durationSeconds: 4 }),
+    ]).status,
+    "saturated",
+  );
+  assert.equal(
+    analyzeSaturation([
+      sample(192, 700, { durationSeconds: 4 }),
+      sample(200, 800, { durationSeconds: 4 }),
+    ]).status,
+    "server-unsaturated",
+  );
 });
 
 test("saturation analysis reports load and process metric uncertainty", () => {
