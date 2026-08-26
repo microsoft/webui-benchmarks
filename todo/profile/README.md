@@ -283,8 +283,8 @@ for 332,831-333,536 B responses.
 Quick subset runs are smoke and profiling evidence only. They do not use the
 complete official matrix and cannot support a cross-product ranking. A
 publishable result requires all fourteen rows under the normal pinned,
-randomized seven-round protocol plus one successful hydration and interaction
-gate round per product.
+timeboxed protocol plus one successful hydration and interaction gate round per
+product.
 
 ## Optimization decisions
 

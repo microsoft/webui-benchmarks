@@ -22,6 +22,7 @@ import {
 } from "../../todo/runner/lib/metrics.mjs";
 import { analyzeSaturation } from "../../todo/runner/lib/load.mjs";
 import { deterministicOrder } from "../../todo/runner/lib/order.mjs";
+import { DEFAULT_PROTOCOL } from "../../todo/runner/lib/options.mjs";
 import {
   summarizeResponseByteProfiles,
   summarizeRounds,
@@ -124,7 +125,7 @@ function rawRound(benchmarkCase, round, orderIndex) {
     serverMetrics: { status: "available" },
     throughputBytesPerSecond: 10_000_000,
     warmup: {
-      durationSeconds: 5,
+      durationSeconds: DEFAULT_PROTOCOL.warmupSeconds,
       requests: 1_000,
       status: "ok",
     },
@@ -137,7 +138,7 @@ function report() {
     status: "complete",
   }));
   const rawRounds = Array.from(
-    { length: 7 },
+    { length: DEFAULT_PROTOCOL.rounds },
     (_, round) => deterministicOrder(cases, round).map((benchmarkCase, index) =>
       rawRound(benchmarkCase, round, index)
     ),
@@ -170,17 +171,17 @@ function report() {
     config: {
       build: true,
       caseFilters: [],
-      connections: 64,
-      durationSeconds: 10,
-      loadWorkers: 2,
+      connections: DEFAULT_PROTOCOL.connections,
+      durationSeconds: DEFAULT_PROTOCOL.durationSeconds,
+      loadWorkers: DEFAULT_PROTOCOL.loadWorkers,
       quick: false,
-      rounds: 7,
+      rounds: DEFAULT_PROTOCOL.rounds,
       runtimeMode: "official",
-      saturationConnections: [1, 8, 32, 64, 128, 192, 200],
-      saturationDurationSeconds: 8,
+      saturationConnections: [...DEFAULT_PROTOCOL.saturationConnections],
+      saturationDurationSeconds: DEFAULT_PROTOCOL.saturationDurationSeconds,
       scalingCores: [1],
       serverCpu: 0,
-      warmupSeconds: 5,
+      warmupSeconds: DEFAULT_PROTOCOL.warmupSeconds,
     },
     createdAt: "2026-08-25T00:00:00.000Z",
     fixture: {
@@ -206,10 +207,10 @@ function report() {
     rawRounds,
     ...runtimeEvidence(),
     saturation: cases.map((benchmarkCase) => {
-      const samples = [1, 8, 32, 64, 128, 192, 200].map(
+      const samples = DEFAULT_PROTOCOL.saturationConnections.map(
         (connections, index) => ({
         connections,
-        durationSeconds: 8,
+        durationSeconds: DEFAULT_PROTOCOL.saturationDurationSeconds,
         errors: 0,
         latencyP50Ms: 10,
         latencyP95Ms: 20,
@@ -219,7 +220,7 @@ function report() {
         measurementAttempts: 1,
         non2xx: 0,
         requests: 1_000,
-        requestsPerSecond: [100, 300, 450, 500, 490, 450, 430][index],
+        requestsPerSecond: 100 + index * 4,
         serverMetrics: { status: "available" },
         throughputBytesPerSecond: 1_000_000,
         timeouts: 0,
@@ -263,7 +264,7 @@ function windowsPartialReport() {
     const samples = value.config.saturationConnections.map(
       (connections, index) => ({
       connections,
-      durationSeconds: 8,
+      durationSeconds: DEFAULT_PROTOCOL.saturationDurationSeconds,
       errors: 0,
       latencyP50Ms: 10,
       latencyP95Ms: 20,
@@ -273,7 +274,7 @@ function windowsPartialReport() {
       measurementAttempts: 1,
       non2xx: 0,
       requests: 1_000,
-      requestsPerSecond: [100, 300, 450, 500, 490, 450, 430][index],
+      requestsPerSecond: 100 + index * 4,
       serverMetrics: serverMetrics(),
       throughputBytesPerSecond: 1_000_000,
       timeouts: 0,
@@ -461,7 +462,10 @@ test("exports only the compact homepage benchmark DTO", () => {
   assert.deepEqual(Object.keys(summary), ["benchmarks", "benchmarksJson"]);
   assert.equal(summary.benchmarks.rows.length, 14);
   assert.equal(summary.benchmarks.rows[0].rank, "1");
-  assert.equal(summary.benchmarks.rows[0].primary, true);
+  assert.equal(
+    summary.benchmarks.rows.filter(({ primary }) => primary).length,
+    6,
+  );
   assert.deepEqual(JSON.parse(summary.benchmarksJson), summary.benchmarks);
   assert.equal("rawRounds" in summary, false);
 });
@@ -567,7 +571,7 @@ test("refuses dirty or incomplete benchmark evidence", () => {
   dirty.sourceRevision.workingTreeDirty = true;
   assert.throws(
     () => buildBenchmarkSummary(dirty),
-    /clean, complete, unfiltered seven-round official report/u,
+    /clean, complete, unfiltered canonical official report/u,
   );
 });
 
@@ -608,7 +612,7 @@ test("rejects noncanonical or stale complete reports", async (t) => {
     }],
     ["nonrandomized order", (value) => {
       value.rawRounds = Array.from(
-        { length: 7 },
+        { length: DEFAULT_PROTOCOL.rounds },
         (_, round) => value.cases.map((benchmarkCase, orderIndex) =>
           rawRound(benchmarkCase, round, orderIndex)
         ),
@@ -621,7 +625,7 @@ test("rejects noncanonical or stale complete reports", async (t) => {
       mutate(value);
       assert.throws(
         () => buildBenchmarkSummary(value),
-        /clean, complete, unfiltered seven-round official report/u,
+        /clean, complete, unfiltered canonical official report/u,
       );
     });
   }

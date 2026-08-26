@@ -9,12 +9,21 @@ import {
   parseOptions,
 } from "../lib/options.mjs";
 
-test("default options use the seven-round official measurement protocol", () => {
+test("default options use the timeboxed official measurement protocol", () => {
   const options = parseOptions([], {});
   assert.equal(options.quick, false);
   assert.equal(options.build, true);
   assert.equal(options.runtimeMode, "local");
   assert.equal(options.serverCpu, null);
+  assert.deepEqual(options.protocol, {
+    connections: 64,
+    durationSeconds: 20,
+    loadWorkers: 2,
+    rounds: 1,
+    saturationConnections: [64, 128],
+    saturationDurationSeconds: 4,
+    warmupSeconds: 3,
+  });
   assert.deepEqual(options.protocol, DEFAULT_PROTOCOL);
 });
 
