@@ -113,7 +113,7 @@ function buildServer() {
     outfile: serverArtifactPath,
     platform: "node",
     plugins: [singleFileComponentPlugin(true)],
-    target: "node22",
+    target: "node24",
   });
 }
 

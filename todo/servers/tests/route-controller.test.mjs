@@ -79,7 +79,7 @@ test("cached route renders once and reuses complete bytes", async () => {
       return `<p>${state.variantIndex}</p>`;
     },
     runtimeId: "node",
-    runtimeVersion: "22.23.1",
+    runtimeVersion: "24.19.0",
     serverId: "node-http",
     states: fakeStates(),
   });
@@ -110,7 +110,7 @@ test("renderer route emits a hydratable document with request state", async () =
       return `<todo-app data-variant="${state.variantIndex}"></todo-app>`;
     },
     runtimeId: "node",
-    runtimeVersion: "22.23.1",
+    runtimeVersion: "24.19.0",
     serverId: "node-http",
     states: fakeStates(),
   });
@@ -138,7 +138,7 @@ test("dispatcher exposes metadata and equivalent cache headers", async () => {
       return `<p>${state.variantIndex}</p>`;
     },
     runtimeId: "node",
-    runtimeVersion: "22.23.1",
+    runtimeVersion: "24.19.0",
     serverId: "node-http",
     states: fakeStates(),
   });

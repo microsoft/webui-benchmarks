@@ -18,7 +18,7 @@ import { spawnServer } from "./child-server.mjs";
 
 test("official runtime metadata pins the approved versions", () => {
   const pins = loadRuntimePins();
-  assert.equal(pins.runtimes.node.version, "22.23.1");
+  assert.equal(pins.runtimes.node.version, "24.19.0");
   assert.equal(pins.runtimes.bun.version, "1.3.14");
   assert.equal(pins.runtimes.deno.version, "2.9.5");
 });

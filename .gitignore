@@ -3,6 +3,7 @@
 
 node_modules/
 target/
+results/*.json
 .cache/
 .webui-local.json
 
