@@ -14,6 +14,9 @@ import {
 } from "../todo/runner/lib/metrics.mjs";
 import { assertReportSchema } from "../todo/runner/lib/schema.mjs";
 import { isMainModule } from "../todo/servers/lib/cli.mjs";
+import {
+  buildBrowserSummaryExtension,
+} from "./browser-benchmark-summary.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const officialCases = createCaseMatrix();
@@ -76,6 +79,12 @@ function hasExactIds(values, expectedIds, selectId) {
     && expectedIds.every((id) => ids.includes(id));
 }
 
+function hasExactOrderedIds(values, expectedIds, selectId) {
+  return Array.isArray(values)
+    && values.length === expectedIds.length
+    && values.every((value, index) => selectId(value) === expectedIds[index]);
+}
+
 function hasCompleteStatistic(statistic, rounds) {
   return statistic?.count === rounds
     && summaryStatisticFields
@@ -117,7 +126,7 @@ function hasCompleteSummaries(report) {
     report.matrix?.summaries,
   ];
   return summaryCollections.every((summaries) =>
-    hasExactIds(summaries, officialCaseIds, (summary) => summary?.caseId)
+    hasExactOrderedIds(summaries, officialCaseIds, (summary) => summary?.caseId)
     && summaries.every((summary) =>
       isCompleteSummary(summary, rounds, stateVariants)
     )
@@ -271,7 +280,7 @@ function isCanonicalOfficialReport(report) {
     && Array.isArray(report.config?.caseFilters)
     && report.config.caseFilters.length === 0
     && report.sourceRevision?.workingTreeDirty === false
-    && hasExactIds(report.cases, officialCaseIds, (benchmarkCase) =>
+    && hasExactOrderedIds(report.cases, officialCaseIds, (benchmarkCase) =>
       benchmarkCase?.id
     )
     && report.cases.every(({ status }) => status === "complete")
@@ -289,38 +298,58 @@ function matrixRows(report) {
       `Official matrix must contain ${OFFICIAL_CASE_COUNT} summaries`,
     );
   }
-  return summaries.map((summary, index) => ({
-    caseId: requiredString(summary.caseId, `summaries[${index}].caseId`),
-    label: requiredString(summary.label, `summaries[${index}].label`),
-    madRequestsPerSecond: requiredNumber(
-      summary.requestsPerSecond?.mad,
-      `summaries[${index}].requestsPerSecond.mad`,
-    ),
-    maximumResponseBytes: requiredNumber(
-      summary.responseByteProfile?.dynamic?.maximum,
-      `summaries[${index}].responseByteProfile.dynamic.maximum`,
-    ),
-    medianP95LatencyMs: requiredNumber(
-      summary.latencyP95Ms?.median,
-      `summaries[${index}].latencyP95Ms.median`,
-    ),
-    medianRequestsPerSecond: requiredNumber(
-      summary.requestsPerSecond?.median,
-      `summaries[${index}].requestsPerSecond.median`,
-    ),
-    minimumResponseBytes: requiredNumber(
-      summary.responseByteProfile?.dynamic?.minimum,
-      `summaries[${index}].responseByteProfile.dynamic.minimum`,
-    ),
-    renderer: requiredString(
+  return summaries.map((summary, index) => {
+    const benchmarkCase = officialCases[index];
+    const caseId = requiredString(
+      summary.caseId,
+      `summaries[${index}].caseId`,
+    );
+    const label = requiredString(summary.label, `summaries[${index}].label`);
+    const renderer = requiredString(
       summary.renderer,
       `summaries[${index}].renderer`,
-    ),
-    transport: requiredString(
+    );
+    const transport = requiredString(
       summary.transport,
       `summaries[${index}].transport`,
-    ),
-  }));
+    );
+    if (
+      caseId !== benchmarkCase.id
+      || label !== benchmarkCase.label
+      || renderer !== benchmarkCase.renderer
+      || transport !== benchmarkCase.transport
+    ) {
+      throw new Error(
+        `summaries[${index}] must match canonical case '${benchmarkCase.id}'`,
+      );
+    }
+    return {
+      caseId,
+      label,
+      madRequestsPerSecond: requiredNumber(
+        summary.requestsPerSecond?.mad,
+        `summaries[${index}].requestsPerSecond.mad`,
+      ),
+      maximumResponseBytes: requiredNumber(
+        summary.responseByteProfile?.dynamic?.maximum,
+        `summaries[${index}].responseByteProfile.dynamic.maximum`,
+      ),
+      medianP95LatencyMs: requiredNumber(
+        summary.latencyP95Ms?.median,
+        `summaries[${index}].latencyP95Ms.median`,
+      ),
+      medianRequestsPerSecond: requiredNumber(
+        summary.requestsPerSecond?.median,
+        `summaries[${index}].requestsPerSecond.median`,
+      ),
+      minimumResponseBytes: requiredNumber(
+        summary.responseByteProfile?.dynamic?.minimum,
+        `summaries[${index}].responseByteProfile.dynamic.minimum`,
+      ),
+      renderer,
+      transport,
+    };
+  });
 }
 
 function winnerStatement(rows) {
@@ -424,7 +453,7 @@ function renderRows(rows) {
   });
 }
 
-export function buildBenchmarkSummary(report) {
+export function buildBenchmarkSummary(report, browserReport = undefined) {
   assertReportSchema(report);
   if (
     !isCanonicalOfficialReport(report)
@@ -440,9 +469,24 @@ export function buildBenchmarkSummary(report) {
   const rows = matrixRows(report);
   const summary = winnerStatement(rows);
   const method = methodology(report);
+  const browserExtension = browserReport === undefined
+    ? undefined
+    : buildBrowserSummaryExtension(report, browserReport, rows);
+  const renderedRows = renderRows(rows).map((row) => {
+    const browserMetrics = browserExtension?.metricsByCaseId.get(row.caseId);
+    return browserMetrics === undefined
+      ? row
+      : {
+          ...row,
+          metrics: {
+            ...browserMetrics,
+            ...row.metrics,
+          },
+        };
+  });
   const benchmarks = {
-    description:
-      "Compare the complete product matrix by single-core server throughput.",
+    description: browserExtension?.description
+      ?? "Compare the complete product matrix by single-core server throughput.",
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: method,
@@ -461,8 +505,9 @@ export function buildBenchmarkSummary(report) {
         summary,
         unit: "req/s",
       },
+      ...(browserExtension?.metrics ?? []),
     ],
-    rows: renderRows(rows),
+    rows: renderedRows,
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
       "Median dynamic SSR throughput across seven randomized ten-second rounds.",
@@ -475,9 +520,16 @@ export function buildBenchmarkSummary(report) {
   };
 }
 
-export async function exportBenchmarkSummary(inputPath, outputPath) {
+export async function exportBenchmarkSummary(
+  inputPath,
+  outputPath,
+  browserInputPath = undefined,
+) {
   const report = JSON.parse(await readFile(inputPath, "utf8"));
-  const summary = buildBenchmarkSummary(report);
+  const browserReport = browserInputPath === undefined
+    ? undefined
+    : JSON.parse(await readFile(browserInputPath, "utf8"));
+  const summary = buildBenchmarkSummary(report, browserReport);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   return summary;
@@ -498,7 +550,7 @@ function option(argv, name) {
 export async function main(argv = process.argv.slice(2)) {
   if (argv.includes("--help")) {
     process.stdout.write(
-      "Usage: node scripts/export-benchmark-summary.mjs --input <report.json> [--output <benchmark-summary.json>]\n",
+      "Usage: node scripts/export-benchmark-summary.mjs --input <report.json> [--browser-input <browser-report.json>] [--output <benchmark-summary.json>]\n",
     );
     return null;
   }
@@ -511,7 +563,11 @@ export async function main(argv = process.argv.slice(2)) {
     repositoryRoot,
     option(argv, "--output") ?? defaultOutputPath,
   );
-  await exportBenchmarkSummary(inputPath, outputPath);
+  const browserInput = option(argv, "--browser-input");
+  const browserInputPath = browserInput === undefined
+    ? undefined
+    : resolve(repositoryRoot, browserInput);
+  await exportBenchmarkSummary(inputPath, outputPath, browserInputPath);
   process.stdout.write(`${outputPath}\n`);
   return outputPath;
 }

@@ -124,7 +124,7 @@ Full raw reports and named baselines belong in [`results/`](./results/).
 CI runs may retain them as workflow artifacts. The WebUI documentation
 repository does not need to check in a duplicate full `latest.json`.
 
-Export only the compact homepage DTO from a clean, unfiltered, complete
+Export the SSR-only compact homepage DTO from a clean, unfiltered, complete
 seven-round official SSR report:
 
 ```bash
@@ -133,12 +133,30 @@ pnpm run export:summary -- \
   --output results/benchmark-summary.json
 ```
 
+To add the separate browser tabs, provide the matching clean, complete,
+seven-round official browser report:
+
+```bash
+pnpm run export:summary -- \
+  --input results/ssr-todo-2026-08-25-windows-285k.json \
+  --browser-input results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json \
+  --output results/benchmark-summary-combined.json
+```
+
+The combined exporter requires identical source commit, source digest, fixture
+identity, framework versions, runtime versions, and build tools. It validates
+all hydration, readiness, semantic, interaction, freshness, metric, case, and
+round evidence before emitting the compact DTO. Browser outcomes remain
+separate selectable metrics and never enter headline SSR scoring.
+
 The exporter writes only `{ benchmarks, benchmarksJson }`, matching the WebUI
 homepage state contract; raw rounds, machine details, and full evidence remain
-here. On Windows, an otherwise complete official report is intentionally marked
-`partial` because synchronous process sampling would perturb load measurements.
-The exporter accepts that status only when every case and round is complete and
-all unavailable telemetry has the runner's documented Windows sampler reason.
+in this repository's `results/` directory. Copy only the generated compact DTO
+to the WebUI repository. On Windows, an otherwise complete official SSR report
+is intentionally marked `partial` because synchronous process sampling would
+perturb load measurements. The exporter accepts that status only when every
+case and round is complete and all unavailable telemetry has the runner's
+documented Windows sampler reason.
 
 ## Measurement contract
 
