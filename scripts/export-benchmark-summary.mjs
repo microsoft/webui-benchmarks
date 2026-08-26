@@ -9,14 +9,30 @@ import {
   createCaseMatrix,
   OFFICIAL_CASE_COUNT,
 } from "../todo/runner/lib/cases.mjs";
+import { createBuildPlan } from "../todo/runner/lib/builds.mjs";
 import {
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../todo/runner/lib/metrics.mjs";
+import { analyzeSaturation } from "../todo/runner/lib/load.mjs";
+import { DEFAULT_PROTOCOL } from "../todo/runner/lib/options.mjs";
+import { deterministicOrder } from "../todo/runner/lib/order.mjs";
 import { assertReportSchema } from "../todo/runner/lib/schema.mjs";
+import {
+  summarizeResponseByteProfiles,
+  summarizeRounds,
+} from "../todo/runner/lib/statistics.mjs";
+import { TODO_STATE_VARIANTS } from "../todo/shared/state.mjs";
 import { isMainModule } from "../todo/servers/lib/cli.mjs";
+import { loadRuntimePins } from "../todo/servers/verify-runtimes.mjs";
+import {
+  createBrowserSummaryEvidence,
+} from "./lib/browser-benchmark-summary.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const officialCases = createCaseMatrix();
+const officialBuildIds = Object.freeze(
+  createBuildPlan(officialCases, { localWebui: false }).map(({ id }) => id),
+);
 const officialCaseIds = Object.freeze(
   officialCases.map((benchmarkCase) => benchmarkCase.id),
 );
@@ -36,6 +52,7 @@ const summaryStatisticFields = Object.freeze([
   "p95",
 ]);
 const windowsSaturationReason = "Server process metrics were unavailable";
+const runtimePins = loadRuntimePins();
 const defaultOutputPath = resolve(
   repositoryRoot,
   "results",
@@ -64,6 +81,170 @@ function formatNumber(value) {
   return fraction === undefined
     ? `${sign}${grouped}`
     : `${sign}${grouped}.${fraction}`;
+}
+
+function arraysEqual(left, right) {
+  return Array.isArray(left)
+    && left.length === right.length
+    && left.every((value, index) => value === right[index]);
+}
+
+function numbersEqual(left, right) {
+  const scale = Math.max(Math.abs(left), Math.abs(right), 1);
+  return Number.isFinite(left)
+    && Number.isFinite(right)
+    && Math.abs(left - right) <= scale * 1e-12;
+}
+
+function statisticsEqual(actual, expected) {
+  return summaryStatisticFields.every((field) =>
+    numbersEqual(actual?.[field], expected?.[field])
+  );
+}
+
+function responseByteProfilesEqual(actual, expected) {
+  return numbersEqual(
+    actual?.cachedRouteContract,
+    expected.cachedRouteContract,
+  )
+    && numbersEqual(actual?.dynamic?.maximum, expected.dynamic.maximum)
+    && numbersEqual(actual?.dynamic?.mean, expected.dynamic.mean)
+    && numbersEqual(actual?.dynamic?.minimum, expected.dynamic.minimum)
+    && Array.isArray(actual?.dynamic?.byVariant)
+    && actual.dynamic.byVariant.length === expected.dynamic.byVariant.length
+    && actual.dynamic.byVariant.every((value, index) =>
+      numbersEqual(value, expected.dynamic.byVariant[index])
+    );
+}
+
+function hasCanonicalProtocol(report) {
+  const config = report.config;
+  return config?.build === true
+    && config.connections === DEFAULT_PROTOCOL.connections
+    && config.durationSeconds === DEFAULT_PROTOCOL.durationSeconds
+    && config.loadWorkers === DEFAULT_PROTOCOL.loadWorkers
+    && config.rounds === DEFAULT_PROTOCOL.rounds
+    && arraysEqual(
+      config.saturationConnections,
+      DEFAULT_PROTOCOL.saturationConnections,
+    )
+    && config.saturationDurationSeconds
+      === DEFAULT_PROTOCOL.saturationDurationSeconds
+    && config.warmupSeconds === DEFAULT_PROTOCOL.warmupSeconds
+    && arraysEqual(config.scalingCores, [1])
+    && config.serverCpu === 0
+    && hasExactIds(report.builds, officialBuildIds, ({ id }) => id)
+    && report.builds.every(({ status }) => status === "ok");
+}
+
+function summaryMatchesRawRounds(summary, rounds) {
+  const statistics = summarizeRounds(rounds);
+  const responseByteProfile = summarizeResponseByteProfiles(
+    rounds.map((round) => round.responseByteProfile),
+  );
+  return [
+    "latencyP50Ms",
+    "latencyP95Ms",
+    "requestsPerSecond",
+    "throughputBytesPerSecond",
+  ].every((field) => statisticsEqual(summary?.[field], statistics[field]))
+    && responseByteProfilesEqual(
+      summary?.responseByteProfile,
+      responseByteProfile,
+    )
+    && numbersEqual(
+      summary?.naturalResponseBytes,
+      responseByteProfile.dynamic.mean,
+    )
+    && numbersEqual(
+      summary?.responseBytes,
+      responseByteProfile.dynamic.mean,
+    );
+}
+
+function hasDerivedSummaries(report) {
+  const collections = [report.summaries, report.matrix?.summaries];
+  return officialCaseIds.every((caseId) => {
+    const rounds = report.rawRounds.filter((round) =>
+      round.caseId === caseId
+    );
+    return collections.every((summaries) => {
+      const summary = summaries.find((candidate) =>
+        candidate.caseId === caseId
+      );
+      return summaryMatchesRawRounds(summary, rounds);
+    });
+  });
+}
+
+function isCompleteSaturationSample(sample, connection) {
+  return sample?.connections === connection
+    && sample.durationSeconds === DEFAULT_PROTOCOL.saturationDurationSeconds
+    && sample.errors === 0
+    && sample.non2xx === 0
+    && sample.timeouts === 0
+    && sample.latencyP95Status === "histogram-10us"
+    && sample.loadGenerator?.status === "available"
+    && Number.isInteger(sample.measurementAttempts)
+    && sample.measurementAttempts >= 1
+    && [
+      sample.latencyP50Ms,
+      sample.latencyP95Ms,
+      sample.latencyP99Ms,
+      sample.requests,
+      sample.requestsPerSecond,
+      sample.throughputBytesPerSecond,
+    ].every(Number.isFinite);
+}
+
+function saturationAnalysisMatches(entry) {
+  const expected = analyzeSaturation(entry.samples);
+  return [
+    "status",
+    "reason",
+    "plateauStatus",
+    "peakConnections",
+  ].every((field) => entry.analysis?.[field] === expected[field])
+    && [
+      "peakRequestsPerSecond",
+      "gain",
+    ].every((field) =>
+      expected[field] === undefined
+        ? entry.analysis?.[field] === undefined
+        : numbersEqual(entry.analysis?.[field], expected[field])
+    );
+}
+
+function hasCompleteSaturationEvidence(report) {
+  if (
+    !hasExactIds(
+      report.saturation,
+      officialCaseIds,
+      (entry) => entry?.caseId,
+    )
+  ) {
+    return false;
+  }
+  return report.saturation.every((entry) =>
+    entry.affinity?.status === "applied"
+    && Array.isArray(entry.samples)
+    && entry.samples.length === DEFAULT_PROTOCOL.saturationConnections.length
+    && entry.samples.every((sample, index) =>
+      isCompleteSaturationSample(
+        sample,
+        DEFAULT_PROTOCOL.saturationConnections[index],
+      )
+      && (
+        report.status !== "ok"
+        || sample.serverMetrics?.status === "available"
+      )
+    )
+    && saturationAnalysisMatches(entry)
+    && (
+      report.status !== "ok"
+      || entry.analysis?.status === "saturated"
+    )
+  );
 }
 
 function hasExactIds(values, expectedIds, selectId) {
@@ -128,6 +309,15 @@ function isCompleteRawRound(round, stateVariants) {
   return round?.headline === true
     && round.inputPolicy === "request-timestamped-input"
     && round.payloadPolicy === "natural"
+    && round.affinity?.cpuIndex === 0
+    && round.affinity?.status === "applied"
+    && round.latencyP95Status === "histogram-10us"
+    && round.loadGenerator?.status === "available"
+    && Number.isInteger(round.measurementAttempts)
+    && round.measurementAttempts >= 1
+    && round.warmup?.status === "ok"
+    && round.warmup.durationSeconds === DEFAULT_PROTOCOL.warmupSeconds
+    && Number.isFinite(round.warmup.requests)
     && [
       round.latencyP50Ms,
       round.latencyP95Ms,
@@ -158,6 +348,11 @@ function hasCompleteRawRounds(report) {
     return false;
   }
   const orderIndexes = Array.from({ length: rounds }, () => new Set());
+  const expectedOrders = Array.from(
+    { length: rounds },
+    (_, round) =>
+      deterministicOrder(officialCases, round).map(({ id }) => id),
+  );
   for (const rawRound of report.rawRounds) {
     const key = `${rawRound?.caseId}\0${rawRound?.round}`;
     const round = rawRound?.round;
@@ -171,6 +366,7 @@ function hasCompleteRawRounds(report) {
       || orderIndex < 0
       || orderIndex >= OFFICIAL_CASE_COUNT
       || orderIndexes[round].has(orderIndex)
+      || expectedOrders[round][orderIndex] !== rawRound.caseId
       || !isCompleteRawRound(rawRound, report.fixture?.stateVariants)
     ) {
       return false;
@@ -206,6 +402,11 @@ function hasGreenRuntimeEvidence(report) {
       && runtime.installed === true
       && runtime.versionMatches === true
       && runtime.status === "available"
+      && runtime.code === null
+      && runtime.error === null
+      && runtime.expectedVersion
+        === runtimePins.runtimes[runtime.runtimeId].version
+      && runtime.version === runtimePins.runtimes[runtime.runtimeId].version
     )
     && policy?.status === "ok"
     && hasExactIds(
@@ -265,18 +466,23 @@ function isDocumentedWindowsPartialReport(report) {
 }
 
 function isCanonicalOfficialReport(report) {
-  return report.config?.quick === false
+  return hasCanonicalProtocol(report)
+    && report.config?.quick === false
     && report.config?.rounds === 7
     && report.config?.runtimeMode === "official"
     && Array.isArray(report.config?.caseFilters)
     && report.config.caseFilters.length === 0
+    && report.fixture?.stateVariants === TODO_STATE_VARIANTS.length
     && report.sourceRevision?.workingTreeDirty === false
+    && hasGreenRuntimeEvidence(report)
     && hasExactIds(report.cases, officialCaseIds, (benchmarkCase) =>
       benchmarkCase?.id
     )
     && report.cases.every(({ status }) => status === "complete")
     && hasCompleteSummaries(report)
-    && hasCompleteRawRounds(report);
+    && hasCompleteRawRounds(report)
+    && hasDerivedSummaries(report)
+    && hasCompleteSaturationEvidence(report);
 }
 
 function matrixRows(report) {
@@ -383,7 +589,7 @@ function methodology(report) {
   return `100 todos · 12 component types · ${variants} warm structural variants · current UTC state materialized per request · ${connections} connections from ${workers} load workers · 1 server process/worker pinned to 1 CPU · ${rounds} × ${duration} s randomized rounds · dynamic SSR · natural bytes`;
 }
 
-function renderRows(rows) {
+function renderRows(rows, browserEvidence) {
   const ordered = [...rows].sort(
     (left, right) =>
       right.medianRequestsPerSecond - left.medianRequestsPerSecond
@@ -417,14 +623,17 @@ function renderRows(rows) {
         `${(row.medianRequestsPerSecond / maximum * 100).toFixed(1)}%`,
       caseId: row.caseId,
       label: row.label,
-      metrics: { requestsPerSecond: metric },
+      metrics: {
+        requestsPerSecond: metric,
+        ...(browserEvidence?.metricsByCase.get(row.caseId) ?? {}),
+      },
       primary: row.caseId.startsWith("webui-"),
       rank: String(displayedRank),
     };
   });
 }
 
-export function buildBenchmarkSummary(report) {
+export function buildBenchmarkSummary(report, browserReport = null) {
   assertReportSchema(report);
   if (
     !isCanonicalOfficialReport(report)
@@ -437,12 +646,14 @@ export function buildBenchmarkSummary(report) {
       "Summary export requires a clean, complete, unfiltered seven-round official report; partial reports are allowed only for documented Windows process telemetry unavailability",
     );
   }
+  const browserEvidence = createBrowserSummaryEvidence(report, browserReport);
   const rows = matrixRows(report);
   const summary = winnerStatement(rows);
   const method = methodology(report);
   const benchmarks = {
     description:
-      "Compare the complete product matrix by single-core server throughput.",
+      browserEvidence?.description
+      ?? "Compare the complete product matrix by single-core server throughput.",
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: method,
@@ -461,8 +672,9 @@ export function buildBenchmarkSummary(report) {
         summary,
         unit: "req/s",
       },
+      ...(browserEvidence?.metrics ?? []),
     ],
-    rows: renderRows(rows),
+    rows: renderRows(rows, browserEvidence),
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
       "Median dynamic SSR throughput across seven randomized ten-second rounds.",
@@ -475,9 +687,16 @@ export function buildBenchmarkSummary(report) {
   };
 }
 
-export async function exportBenchmarkSummary(inputPath, outputPath) {
+export async function exportBenchmarkSummary(
+  inputPath,
+  outputPath,
+  browserInputPath = undefined,
+) {
   const report = JSON.parse(await readFile(inputPath, "utf8"));
-  const summary = buildBenchmarkSummary(report);
+  const browserReport = browserInputPath === undefined
+    ? null
+    : JSON.parse(await readFile(browserInputPath, "utf8"));
+  const summary = buildBenchmarkSummary(report, browserReport);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   return summary;
@@ -498,7 +717,7 @@ function option(argv, name) {
 export async function main(argv = process.argv.slice(2)) {
   if (argv.includes("--help")) {
     process.stdout.write(
-      "Usage: node scripts/export-benchmark-summary.mjs --input <report.json> [--output <benchmark-summary.json>]\n",
+      "Usage: node scripts/export-benchmark-summary.mjs --input <report.json> [--browser-input <browser-report.json>] [--output <benchmark-summary.json>]\n",
     );
     return null;
   }
@@ -507,11 +726,15 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error("--input is required");
   }
   const inputPath = resolve(repositoryRoot, input);
+  const browserInput = option(argv, "--browser-input");
+  const browserInputPath = browserInput === undefined
+    ? undefined
+    : resolve(repositoryRoot, browserInput);
   const outputPath = resolve(
     repositoryRoot,
     option(argv, "--output") ?? defaultOutputPath,
   );
-  await exportBenchmarkSummary(inputPath, outputPath);
+  await exportBenchmarkSummary(inputPath, outputPath, browserInputPath);
   process.stdout.write(`${outputPath}\n`);
   return outputPath;
 }
