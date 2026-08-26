@@ -98,8 +98,9 @@ pnpm run bench:quick -- --case react
 pnpm run bench:quick -- --case webui-*
 ```
 
-Run and save the official seven-round SSR matrix under a stable, descriptive
-name:
+Run and save the official timeboxed SSR matrix under a stable, descriptive
+name. Each product gets two four-second saturation probes, a three-second
+warmup, and one twenty-second measured round:
 
 ```bash
 pnpm run bench:ssr:save -- \
@@ -125,7 +126,7 @@ CI runs may retain them as workflow artifacts. The WebUI documentation
 repository does not need to check in a duplicate full `latest.json`.
 
 Export only the compact homepage DTO from a clean, unfiltered, complete
-seven-round official SSR report. Add the matching headed browser report when
+canonical official SSR report. Add the matching headed browser report when
 the homepage should include browser metrics:
 
 ```bash
@@ -170,7 +171,8 @@ rebuilds each metric summary, re-ranks the filtered rows, and keeps
   requires real hydration and the shared filter, selection, toggle, and clear
   interactions.
 - Every case uses one server process/worker pinned to one CPU, two load workers,
-  and seven randomized official rounds.
+  two four-second saturation probes, a three-second warmup, and one twenty-second
+  official measured round.
 - All apps retain the same 100-todo state, 12-component semantic graph,
   branches, loops, selectors, sentinels, route headers, and exact validation
   over all 32 variants.

@@ -468,7 +468,7 @@ function isDocumentedWindowsPartialReport(report) {
 function isCanonicalOfficialReport(report) {
   return hasCanonicalProtocol(report)
     && report.config?.quick === false
-    && report.config?.rounds === 7
+    && report.config?.rounds === DEFAULT_PROTOCOL.rounds
     && report.config?.runtimeMode === "official"
     && Array.isArray(report.config?.caseFilters)
     && report.config.caseFilters.length === 0
@@ -586,7 +586,8 @@ function methodology(report) {
     report.config?.durationSeconds,
     "config.durationSeconds",
   );
-  return `100 todos · 12 component types · ${variants} warm structural variants · current UTC state materialized per request · ${connections} connections from ${workers} load workers · 1 server process/worker pinned to 1 CPU · ${rounds} × ${duration} s randomized rounds · dynamic SSR · natural bytes`;
+  const roundLabel = rounds === 1 ? "measured round" : "randomized rounds";
+  return `100 todos · 12 component types · ${variants} warm structural variants · current UTC state materialized per request · ${connections} connections from ${workers} load workers · 1 server process/worker pinned to 1 CPU · ${rounds} × ${duration} s ${roundLabel} · dynamic SSR · natural bytes`;
 }
 
 function renderRows(rows, browserEvidence) {
@@ -643,7 +644,7 @@ export function buildBenchmarkSummary(report, browserReport = null) {
     )
   ) {
     throw new Error(
-      "Summary export requires a clean, complete, unfiltered seven-round official report; partial reports are allowed only for documented Windows process telemetry unavailability",
+      "Summary export requires a clean, complete, unfiltered canonical official report; partial reports are allowed only for documented Windows process telemetry unavailability",
     );
   }
   const browserEvidence = createBrowserSummaryEvidence(report, browserReport);
@@ -662,7 +663,7 @@ export function buildBenchmarkSummary(report, browserReport = null) {
       {
         available: true,
         description:
-          "Median dynamic SSR throughput across seven randomized ten-second rounds.",
+          "Dynamic SSR throughput from one timeboxed 20-second measured round.",
         direction: "higher",
         directionLabel: "higher is better",
         id: "requestsPerSecond",
@@ -677,7 +678,7 @@ export function buildBenchmarkSummary(report, browserReport = null) {
     rows: renderRows(rows, browserEvidence),
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
-      "Median dynamic SSR throughput across seven randomized ten-second rounds.",
+      "Dynamic SSR throughput from one timeboxed 20-second measured round.",
     selectedMetricLabel: "Single-core RPS",
     title: "Same workload. Choose the metric.",
   };

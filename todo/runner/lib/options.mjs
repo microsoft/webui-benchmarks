@@ -6,12 +6,12 @@ const RUNTIME_MODES = new Set(["local", "official"]);
 
 export const DEFAULT_PROTOCOL = Object.freeze({
   connections: 64,
-  durationSeconds: 10,
+  durationSeconds: 20,
   loadWorkers: 2,
-  rounds: 7,
-  saturationConnections: Object.freeze([1, 8, 32, 64, 128, 192, 200]),
-  saturationDurationSeconds: 8,
-  warmupSeconds: 5,
+  rounds: 1,
+  saturationConnections: Object.freeze([64, 128]),
+  saturationDurationSeconds: 4,
+  warmupSeconds: 3,
 });
 
 export const QUICK_PROTOCOL = Object.freeze({
