@@ -124,8 +124,8 @@ Full raw reports and named baselines belong in [`results/`](./results/).
 CI runs may retain them as workflow artifacts. The WebUI documentation
 repository does not need to check in a duplicate full `latest.json`.
 
-Export only the compact homepage DTO from a clean, complete seven-round SSR
-report:
+Export only the compact homepage DTO from a clean, unfiltered, complete
+seven-round official SSR report:
 
 ```bash
 pnpm run export:summary -- \
@@ -135,7 +135,10 @@ pnpm run export:summary -- \
 
 The exporter writes only `{ benchmarks, benchmarksJson }`, matching the WebUI
 homepage state contract; raw rounds, machine details, and full evidence remain
-here.
+here. On Windows, an otherwise complete official report is intentionally marked
+`partial` because synchronous process sampling would perturb load measurements.
+The exporter accepts that status only when every case and round is complete and
+all unavailable telemetry has the runner's documented Windows sampler reason.
 
 ## Measurement contract
 

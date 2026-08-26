@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
+export const WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON =
+  "Windows process sampling is disabled because synchronous PowerShell probes perturb load measurements";
+
 function linuxSample(pid) {
   const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
   const fields = stat.slice(stat.lastIndexOf(") ") + 2).trim().split(/\s+/u);
@@ -100,8 +103,7 @@ export function startProcessMetrics(
     return {
       finish() {
         return Object.freeze({
-          reason:
-            "Windows process sampling is disabled because synchronous PowerShell probes perturb load measurements",
+          reason: WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
           status: "unavailable",
         });
       },

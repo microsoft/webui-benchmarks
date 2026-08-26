@@ -3,13 +3,15 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startProcessMetrics } from "../lib/metrics.mjs";
+import {
+  startProcessMetrics,
+  WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
+} from "../lib/metrics.mjs";
 
 test("Windows load measurement never runs synchronous process probes", () => {
   const metrics = startProcessMetrics(123, { platform: "win32" });
   assert.deepEqual(metrics.finish(), {
-    reason:
-      "Windows process sampling is disabled because synchronous PowerShell probes perturb load measurements",
+    reason: WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
     status: "unavailable",
   });
 });

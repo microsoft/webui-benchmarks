@@ -5,11 +5,37 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { OFFICIAL_CASE_COUNT } from "../todo/runner/lib/cases.mjs";
+import {
+  createCaseMatrix,
+  OFFICIAL_CASE_COUNT,
+} from "../todo/runner/lib/cases.mjs";
+import {
+  WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
+} from "../todo/runner/lib/metrics.mjs";
 import { assertReportSchema } from "../todo/runner/lib/schema.mjs";
 import { isMainModule } from "../todo/servers/lib/cli.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const officialCases = createCaseMatrix();
+const officialCaseIds = Object.freeze(
+  officialCases.map((benchmarkCase) => benchmarkCase.id),
+);
+const requiredRuntimeIds = Object.freeze([
+  ...new Set(
+    officialCases
+      .map((benchmarkCase) => benchmarkCase.runtimeId)
+      .filter((runtimeId) => runtimeId !== "rust"),
+  ),
+]);
+const summaryStatisticFields = Object.freeze([
+  "count",
+  "mad",
+  "max",
+  "median",
+  "min",
+  "p95",
+]);
+const windowsSaturationReason = "Server process metrics were unavailable";
 const defaultOutputPath = resolve(
   repositoryRoot,
   "results",
@@ -38,6 +64,219 @@ function formatNumber(value) {
   return fraction === undefined
     ? `${sign}${grouped}`
     : `${sign}${grouped}.${fraction}`;
+}
+
+function hasExactIds(values, expectedIds, selectId) {
+  if (!Array.isArray(values) || values.length !== expectedIds.length) {
+    return false;
+  }
+  const ids = values.map(selectId);
+  return ids.every((id) => typeof id === "string")
+    && new Set(ids).size === expectedIds.length
+    && expectedIds.every((id) => ids.includes(id));
+}
+
+function hasCompleteStatistic(statistic, rounds) {
+  return statistic?.count === rounds
+    && summaryStatisticFields
+      .filter((field) => field !== "count")
+      .every((field) => Number.isFinite(statistic[field]));
+}
+
+function hasCompleteResponseBytes(value, stateVariants) {
+  const dynamic = value?.dynamic;
+  return Number.isFinite(value?.cachedRouteContract)
+    && Number.isFinite(dynamic?.maximum)
+    && Number.isFinite(dynamic?.mean)
+    && Number.isFinite(dynamic?.minimum)
+    && Array.isArray(dynamic?.byVariant)
+    && dynamic.byVariant.length === stateVariants
+    && dynamic.byVariant.every(Number.isFinite);
+}
+
+function isCompleteSummary(summary, rounds, stateVariants) {
+  return ["label", "renderer", "transport"].every((field) =>
+    typeof summary?.[field] === "string" && summary[field].length > 0
+  )
+    && [
+      summary?.latencyP50Ms,
+    summary?.latencyP95Ms,
+    summary?.requestsPerSecond,
+      summary?.throughputBytesPerSecond,
+    ].every((statistic) => hasCompleteStatistic(statistic, rounds))
+    && Number.isFinite(summary?.naturalResponseBytes)
+    && Number.isFinite(summary?.responseBytes)
+    && hasCompleteResponseBytes(summary?.responseByteProfile, stateVariants);
+}
+
+function hasCompleteSummaries(report) {
+  const rounds = report.config?.rounds;
+  const stateVariants = report.fixture?.stateVariants;
+  const summaryCollections = [
+    report.summaries,
+    report.matrix?.summaries,
+  ];
+  return summaryCollections.every((summaries) =>
+    hasExactIds(summaries, officialCaseIds, (summary) => summary?.caseId)
+    && summaries.every((summary) =>
+      isCompleteSummary(summary, rounds, stateVariants)
+    )
+  );
+}
+
+function isCompleteRawRound(round, stateVariants) {
+  return round?.headline === true
+    && round.inputPolicy === "request-timestamped-input"
+    && round.payloadPolicy === "natural"
+    && [
+      round.latencyP50Ms,
+      round.latencyP95Ms,
+      round.latencyP99Ms,
+      round.naturalResponseBytes,
+      round.requests,
+      round.requestsPerSecond,
+      round.responseBytes,
+      round.throughputBytesPerSecond,
+    ].every(Number.isFinite)
+    && hasCompleteResponseBytes(round.responseByteProfile, stateVariants);
+}
+
+function hasCompleteRawRounds(report) {
+  const rounds = report.config?.rounds;
+  const expectedKeys = new Set(
+    officialCaseIds.flatMap((caseId) =>
+      Array.from(
+        { length: rounds },
+        (_, round) => `${caseId}\0${round}`,
+      )
+    ),
+  );
+  if (
+    !Array.isArray(report.rawRounds)
+    || report.rawRounds.length !== expectedKeys.size
+  ) {
+    return false;
+  }
+  const orderIndexes = Array.from({ length: rounds }, () => new Set());
+  for (const rawRound of report.rawRounds) {
+    const key = `${rawRound?.caseId}\0${rawRound?.round}`;
+    const round = rawRound?.round;
+    const orderIndex = rawRound?.orderIndex;
+    if (
+      !expectedKeys.delete(key)
+      || !Number.isInteger(round)
+      || round < 0
+      || round >= rounds
+      || !Number.isInteger(orderIndex)
+      || orderIndex < 0
+      || orderIndex >= OFFICIAL_CASE_COUNT
+      || orderIndexes[round].has(orderIndex)
+      || !isCompleteRawRound(rawRound, report.fixture?.stateVariants)
+    ) {
+      return false;
+    }
+    orderIndexes[round].add(orderIndex);
+  }
+  return expectedKeys.size === 0
+    && orderIndexes.every((indexes) => indexes.size === OFFICIAL_CASE_COUNT);
+}
+
+function isWindowsProcessMetricsUnavailable(serverMetrics) {
+  return serverMetrics !== null
+    && typeof serverMetrics === "object"
+    && !Array.isArray(serverMetrics)
+    && Object.keys(serverMetrics).length === 2
+    && serverMetrics.status === "unavailable"
+    && serverMetrics.reason === WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON;
+}
+
+function hasGreenRuntimeEvidence(report) {
+  const verification = report.runtimeVerification;
+  const policy = report.runtimePolicy;
+  return verification?.schema === "webui.ssr-todo-runtime-pins/v1"
+    && verification.mode === "official"
+    && verification.status === "ok"
+    && hasExactIds(
+      verification.runtimes,
+      requiredRuntimeIds,
+      (runtime) => runtime?.runtimeId,
+    )
+    && verification.runtimes.every((runtime) =>
+      runtime.required === true
+      && runtime.installed === true
+      && runtime.versionMatches === true
+      && runtime.status === "available"
+    )
+    && policy?.status === "ok"
+    && hasExactIds(
+      policy.decisions,
+      requiredRuntimeIds,
+      (decision) => decision?.runtimeId,
+    )
+    && policy.decisions.every((decision) =>
+      decision.status === "available"
+      && decision.code === null
+      && decision.reason === null
+    );
+}
+
+function hasOnlyWindowsSaturationWarnings(report) {
+  const connections = report.config?.saturationConnections;
+  if (
+    !Array.isArray(connections)
+    || connections.length === 0
+    || !hasExactIds(
+      report.saturation,
+      officialCaseIds,
+      (entry) => entry?.caseId,
+    )
+  ) {
+    return false;
+  }
+  return report.saturation.every((entry) =>
+    entry.analysis?.status === "process-metrics-unavailable"
+    && entry.analysis.plateauStatus === "saturated"
+    && entry.analysis.reason === windowsSaturationReason
+    && Number.isFinite(entry.analysis.peakConnections)
+    && Number.isFinite(entry.analysis.peakRequestsPerSecond)
+    && Array.isArray(entry.samples)
+    && entry.samples.length === connections.length
+    && entry.samples.every((sample, index) =>
+      sample.connections === connections[index]
+      && sample.latencyP95Status === "histogram-10us"
+      && sample.loadGenerator?.status === "available"
+      && isWindowsProcessMetricsUnavailable(sample.serverMetrics)
+    )
+  );
+}
+
+function isDocumentedWindowsPartialReport(report) {
+  return report.status === "partial"
+    && report.machine?.osPlatform === "win32"
+    && report.machine?.processPlatform === "win32"
+    && hasGreenRuntimeEvidence(report)
+    && report.rawRounds.every((round) =>
+      round.metricsStatus === "metrics-unavailable"
+      && round.latencyP95Status === "histogram-10us"
+      && round.loadGenerator?.status === "available"
+      && isWindowsProcessMetricsUnavailable(round.serverMetrics)
+    )
+    && hasOnlyWindowsSaturationWarnings(report);
+}
+
+function isCanonicalOfficialReport(report) {
+  return report.config?.quick === false
+    && report.config?.rounds === 7
+    && report.config?.runtimeMode === "official"
+    && Array.isArray(report.config?.caseFilters)
+    && report.config.caseFilters.length === 0
+    && report.sourceRevision?.workingTreeDirty === false
+    && hasExactIds(report.cases, officialCaseIds, (benchmarkCase) =>
+      benchmarkCase?.id
+    )
+    && report.cases.every(({ status }) => status === "complete")
+    && hasCompleteSummaries(report)
+    && hasCompleteRawRounds(report);
 }
 
 function matrixRows(report) {
@@ -188,16 +427,14 @@ function renderRows(rows) {
 export function buildBenchmarkSummary(report) {
   assertReportSchema(report);
   if (
-    report.status !== "ok"
-    || report.config?.quick !== false
-    || report.config?.rounds !== 7
-    || report.config?.runtimeMode !== "official"
-    || report.sourceRevision?.workingTreeDirty !== false
-    || report.cases?.length !== OFFICIAL_CASE_COUNT
-    || report.cases?.some(({ status }) => status !== "complete")
+    !isCanonicalOfficialReport(report)
+    || (
+      report.status !== "ok"
+      && !isDocumentedWindowsPartialReport(report)
+    )
   ) {
     throw new Error(
-      "Summary export requires a clean, complete seven-round official report",
+      "Summary export requires a clean, complete, unfiltered seven-round official report; partial reports are allowed only for documented Windows process telemetry unavailability",
     );
   }
   const rows = matrixRows(report);
