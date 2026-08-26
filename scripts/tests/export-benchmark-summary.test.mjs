@@ -2,23 +2,86 @@
 // Licensed under the MIT license.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
+import {
+  BROWSER_REPORT_SCHEMA,
+  BROWSER_TIER,
+  createBrowserCases,
+} from "../../todo/browser/apps.mjs";
+import {
+  METRIC_PATHS,
+  aggregateAppRounds,
+  availableMetric,
+  metricAt,
+} from "../../todo/browser/metrics.mjs";
+import { createBuildPlan } from "../../todo/runner/lib/builds.mjs";
 import { createCaseMatrix } from "../../todo/runner/lib/cases.mjs";
 import {
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../../todo/runner/lib/metrics.mjs";
+import { analyzeSaturation } from "../../todo/runner/lib/load.mjs";
+import { deterministicOrder } from "../../todo/runner/lib/order.mjs";
+import {
+  summarizeResponseByteProfiles,
+  summarizeRounds,
+} from "../../todo/runner/lib/statistics.mjs";
+import { TODO_STATE_VARIANTS } from "../../todo/shared/state.mjs";
+import { loadRuntimePins } from "../../todo/servers/verify-runtimes.mjs";
 import { buildBenchmarkSummary } from "../export-benchmark-summary.mjs";
 
-const WINDOWS_SATURATION_REASON = "Server process metrics were unavailable";
+const BROWSER_LAUNCH_ARGUMENTS = Object.freeze([
+  "--disable-backgrounding-occluded-windows",
+  "--disable-background-timer-throttling",
+  "--disable-renderer-backgrounding",
+  "--disable-features=CalculateNativeWinOcclusion",
+  "--enable-precise-memory-info",
+  "--enable-blink-features=DeclarativeCSSModules",
+  "--process-per-tab",
+]);
+const OFFICIAL_CASES = createCaseMatrix();
+const OFFICIAL_BUILD_IDS = Object.freeze(
+  createBuildPlan(OFFICIAL_CASES, { localWebui: false }).map(({ id }) => id),
+);
+const OFFICIAL_BROWSER_BUILD_IDS = Object.freeze(
+  createBuildPlan(OFFICIAL_CASES, {
+    browser: true,
+    localWebui: false,
+  }).map(({ id }) => id),
+);
+const RUNTIME_PINS = loadRuntimePins();
+const SHARED_STATE_DIGEST = createHash("sha256")
+  .update(JSON.stringify(TODO_STATE_VARIANTS))
+  .digest("hex");
 
-function statistic(median, mad = 1) {
+function runtimeEvidence() {
+  const runtimeIds = Object.keys(RUNTIME_PINS.runtimes);
   return {
-    count: 7,
-    mad,
-    max: median + mad,
-    median,
-    min: median - mad,
-    p95: median + mad,
+    runtimePolicy: {
+      decisions: runtimeIds.map((runtimeId) => ({
+        code: null,
+        reason: null,
+        runtimeId,
+        status: "available",
+      })),
+      status: "ok",
+    },
+    runtimeVerification: {
+      mode: "official",
+      runtimes: runtimeIds.map((runtimeId) => ({
+        code: null,
+        error: null,
+        expectedVersion: RUNTIME_PINS.runtimes[runtimeId].version,
+        installed: true,
+        required: true,
+        runtimeId,
+        status: "available",
+        version: RUNTIME_PINS.runtimes[runtimeId].version,
+        versionMatches: true,
+      })),
+      schema: RUNTIME_PINS.schema,
+      status: "ok",
+    },
   };
 }
 
@@ -39,6 +102,7 @@ function responseByteProfile(index = 0) {
 
 function rawRound(benchmarkCase, round, orderIndex) {
   return {
+    affinity: { cpuIndex: 0, status: "applied" },
     caseId: benchmarkCase.id,
     headline: true,
     inputPolicy: "request-timestamped-input",
@@ -47,6 +111,7 @@ function rawRound(benchmarkCase, round, orderIndex) {
     latencyP99Ms: 30 + orderIndex,
     latencyP95Status: "histogram-10us",
     loadGenerator: { status: "available" },
+    measurementAttempts: 1,
     metricsStatus: "ok",
     naturalResponseBytes: 10_065.5 + orderIndex,
     orderIndex,
@@ -58,39 +123,49 @@ function rawRound(benchmarkCase, round, orderIndex) {
     round,
     serverMetrics: { status: "available" },
     throughputBytesPerSecond: 10_000_000,
+    warmup: {
+      durationSeconds: 5,
+      requests: 1_000,
+      status: "ok",
+    },
   };
 }
 
 function report() {
-  const cases = createCaseMatrix().map((benchmarkCase) => ({
+  const cases = OFFICIAL_CASES.map((benchmarkCase) => ({
     ...benchmarkCase,
     status: "complete",
   }));
-  const summaries = cases.map((benchmarkCase, index) => ({
-    caseId: benchmarkCase.id,
-    headline: true,
-    inputPolicy: "request-timestamped-input",
-    label: benchmarkCase.label,
-    latencyP50Ms: statistic(10 + index),
-    latencyP95Ms: statistic(20 + index),
-    naturalResponseBytes: 10_065.5 + index,
-    payloadPolicy: "natural",
-    renderer: benchmarkCase.renderer,
-    requestsPerSecond: statistic(1_000 - index * 10),
-    responseByteProfile: responseByteProfile(index),
-    responseBytes: 10_065.5 + index,
-    throughputBytesPerSecond: statistic(10_000_000 - index * 10_000),
-    transport: benchmarkCase.transport,
-    workerCount: 1,
-  }));
   const rawRounds = Array.from(
     { length: 7 },
-    (_, round) => cases.map((benchmarkCase, index) =>
+    (_, round) => deterministicOrder(cases, round).map((benchmarkCase, index) =>
       rawRound(benchmarkCase, round, index)
     ),
   ).flat();
+  const summaries = cases.map((benchmarkCase) => {
+    const rounds = rawRounds.filter(({ caseId }) =>
+      caseId === benchmarkCase.id
+    );
+    const profile = summarizeResponseByteProfiles(
+      rounds.map((round) => round.responseByteProfile),
+    );
+    return {
+      caseId: benchmarkCase.id,
+      headline: true,
+      inputPolicy: "request-timestamped-input",
+      label: benchmarkCase.label,
+      naturalResponseBytes: profile.dynamic.mean,
+      payloadPolicy: "natural",
+      renderer: benchmarkCase.renderer,
+      responseByteProfile: profile,
+      responseBytes: profile.dynamic.mean,
+      transport: benchmarkCase.transport,
+      workerCount: 1,
+      ...summarizeRounds(rounds),
+    };
+  });
   return {
-    builds: [],
+    builds: OFFICIAL_BUILD_IDS.map((id) => ({ id, status: "ok" })),
     cases,
     config: {
       build: true,
@@ -102,6 +177,10 @@ function report() {
       rounds: 7,
       runtimeMode: "official",
       saturationConnections: [1, 8, 32, 64, 128, 192, 200],
+      saturationDurationSeconds: 8,
+      scalingCores: [1],
+      serverCpu: 0,
+      warmupSeconds: 5,
     },
     createdAt: "2026-08-25T00:00:00.000Z",
     fixture: {
@@ -125,6 +204,34 @@ function report() {
       workersPerCase: 1,
     },
     rawRounds,
+    ...runtimeEvidence(),
+    saturation: cases.map((benchmarkCase) => {
+      const samples = [1, 8, 32, 64, 128, 192, 200].map(
+        (connections, index) => ({
+        connections,
+        durationSeconds: 8,
+        errors: 0,
+        latencyP50Ms: 10,
+        latencyP95Ms: 20,
+        latencyP95Status: "histogram-10us",
+        latencyP99Ms: 30,
+        loadGenerator: { status: "available" },
+        measurementAttempts: 1,
+        non2xx: 0,
+        requests: 1_000,
+        requestsPerSecond: [100, 300, 450, 500, 490, 450, 430][index],
+        serverMetrics: { status: "available" },
+        throughputBytesPerSecond: 1_000_000,
+        timeouts: 0,
+        }),
+      );
+      return {
+        affinity: { cpuIndex: 0, status: "applied" },
+        analysis: analyzeSaturation(samples),
+        caseId: benchmarkCase.id,
+        samples,
+      };
+    }),
     schema: "webui.ssr-todo-benchmark/v1",
     sourceRevision: {
       commit: "b".repeat(40),
@@ -152,51 +259,201 @@ function windowsPartialReport() {
     metricsStatus: "metrics-unavailable",
     serverMetrics: serverMetrics(),
   }));
-  const runtimeIds = [
-    ...new Set(
-      value.cases
-        .map((benchmarkCase) => benchmarkCase.runtimeId)
-        .filter((runtimeId) => runtimeId !== "rust"),
-    ),
-  ];
-  value.runtimeVerification = {
-    mode: "official",
-    runtimes: runtimeIds.map((runtimeId) => ({
-      installed: true,
-      required: true,
-      runtimeId,
-      status: "available",
-      versionMatches: true,
-    })),
-    schema: "webui.ssr-todo-runtime-pins/v1",
-    status: "ok",
-  };
-  value.runtimePolicy = {
-    decisions: runtimeIds.map((runtimeId) => ({
-      code: null,
-      reason: null,
-      runtimeId,
-      status: "available",
-    })),
-    status: "ok",
-  };
-  value.saturation = value.cases.map((benchmarkCase) => ({
-    analysis: {
-      peakConnections: 64,
-      peakRequestsPerSecond: 1_000,
-      plateauStatus: "saturated",
-      reason: WINDOWS_SATURATION_REASON,
-      status: "process-metrics-unavailable",
-    },
-    caseId: benchmarkCase.id,
-    samples: value.config.saturationConnections.map((connections) => ({
+  value.saturation = value.cases.map((benchmarkCase) => {
+    const samples = value.config.saturationConnections.map(
+      (connections, index) => ({
       connections,
+      durationSeconds: 8,
+      errors: 0,
+      latencyP50Ms: 10,
+      latencyP95Ms: 20,
       latencyP95Status: "histogram-10us",
+      latencyP99Ms: 30,
       loadGenerator: { status: "available" },
+      measurementAttempts: 1,
+      non2xx: 0,
+      requests: 1_000,
+      requestsPerSecond: [100, 300, 450, 500, 490, 450, 430][index],
       serverMetrics: serverMetrics(),
-    })),
-  }));
+      throughputBytesPerSecond: 1_000_000,
+      timeouts: 0,
+      }),
+    );
+    return {
+      affinity: { cpuIndex: 0, status: "applied" },
+      analysis: analyzeSaturation(samples),
+      caseId: benchmarkCase.id,
+      samples,
+    };
+  });
   return value;
+}
+
+function setAt(target, path, value) {
+  const segments = path.split(".");
+  let current = target;
+  for (const segment of segments.slice(0, -1)) {
+    current[segment] ??= {};
+    current = current[segment];
+  }
+  current[segments.at(-1)] = value;
+}
+
+function browserMetrics(index, round) {
+  const metrics = {};
+  for (const [metricIndex, path] of METRIC_PATHS.entries()) {
+    const bytes = path.startsWith("document.")
+      || path.startsWith("javascript.") && path.endsWith("Bytes")
+      || path.startsWith("memory.");
+    const count = path.endsWith("Count");
+    const value = bytes
+      ? (32 + index + round + metricIndex / 100) * 1024 * 1024
+      : 80 + index * 5 + round + metricIndex / 100;
+    setAt(
+      metrics,
+      path,
+      availableMetric(
+        value,
+        bytes ? "bytes" : count ? "count" : "milliseconds",
+        "test",
+      ),
+    );
+  }
+  return metrics;
+}
+
+function browserReport(ssrReport = report()) {
+  const browserCases = createBrowserCases();
+  const rawRounds = browserCases.flatMap((browserCase, index) =>
+    Array.from({ length: 7 }, (_, round) => ({
+      appId: browserCase.appId,
+      browserVersion: "151.0.0.0",
+      fullHydration: {
+        atMs: 50,
+        framework: browserCase.hydration.framework,
+        status: "hydrated",
+      },
+      headline: false,
+      metrics: browserMetrics(index, round),
+      navigationTiming: { nextHopProtocol: "h2" },
+      order: index,
+      paint: {
+        finalizedAtMs: 50,
+        interactionStartedAtMs: 60,
+        label: "pre-interaction LCP",
+      },
+      processMemory: {
+        garbageCollection: {
+          completedPasses: 2,
+          requestedPasses: 2,
+          status: "available",
+        },
+      },
+      productId: browserCase.productId,
+      readiness: { clientMode: browserCase.clientMode },
+      requestState: {
+        itemCount: 100,
+        requestTimestamp: "2026-08-25T00:00:00.000000Z",
+        status: "validated",
+      },
+      round,
+      route: browserCase.primaryRoute,
+      runtime: {
+        id: browserCase.sourceCase.runtimeId,
+        version: browserCase.sourceCase.runtimeId === "rust"
+          ? "native"
+          : RUNTIME_PINS.runtimes[browserCase.sourceCase.runtimeId].version,
+      },
+      status: "ok",
+    }))
+  );
+  return {
+    apps: browserCases.map((browserCase) => ({
+      appId: browserCase.appId,
+      browserOutcome: browserCase.browserOutcome,
+      browserTierSsr: browserCase.browserTierSsr,
+      clientMode: browserCase.clientMode,
+      frameworkVersions: { test: "1.0.0" },
+      headline: false,
+      hydration: browserCase.hydration,
+      id: browserCase.id,
+      initialStateSource: browserCase.initialStateSource,
+      label: browserCase.label,
+      lazyHydration: browserCase.lazyHydration,
+      primaryRoute: browserCase.primaryRoute,
+      productId: browserCase.productId,
+      readinessDefinition: browserCase.readinessDefinition,
+      runtime: {
+        id: browserCase.sourceCase.runtimeId,
+        version: browserCase.sourceCase.runtimeId === "rust"
+          ? "native"
+          : RUNTIME_PINS.runtimes[browserCase.sourceCase.runtimeId].version,
+      },
+      sourceSsrCaseId: browserCase.sourceSsrCaseId,
+      tier: BROWSER_TIER,
+    })),
+    browser: {
+      cachePolicy:
+        "fresh browser process and context start empty; same-navigation resource reuse remains enabled",
+      contextIsolation:
+        "fresh foreground Chromium process, context, and page per product round",
+      cpuThrottling: "none",
+      engine: "chromium",
+      headless: false,
+      launchArguments: BROWSER_LAUNCH_ARGUMENTS,
+      networkThrottling: "none",
+      processPerSample: true,
+      processWarmup:
+        "two unmeasured foreground animation frames before each product navigation",
+      transportProtocol: "h2",
+      version: "151.0.0.0",
+    },
+    builds: OFFICIAL_BROWSER_BUILD_IDS.map((id) => ({
+      id,
+      status: "ok",
+    })),
+    cleanup: {
+      processRegistryEmpty: true,
+      status: "verified",
+    },
+    fixture: {
+      hash: { ...ssrReport.fixture.hash },
+    },
+    mode: "official",
+    rawRounds,
+    roundOrder: Array.from(
+      { length: 7 },
+      () => browserCases.map(({ productId }) => productId),
+    ),
+    roundsPerApp: 7,
+    ...runtimeEvidence(),
+    schema: BROWSER_REPORT_SCHEMA,
+    snapshotIntegrity: {
+      fixtureHashAfter: ssrReport.fixture.hash.value,
+      fixtureHashBefore: ssrReport.fixture.hash.value,
+      sharedStateHashAfter: SHARED_STATE_DIGEST,
+      sharedStateHashBefore: SHARED_STATE_DIGEST,
+      status: "verified",
+    },
+    sourceRevision: { ...ssrReport.sourceRevision },
+    summaries: browserCases.map((browserCase) => ({
+      appId: browserCase.appId,
+      productId: browserCase.productId,
+      ...aggregateAppRounds(
+        rawRounds.filter(
+          ({ productId }) => productId === browserCase.productId,
+        ),
+      ),
+    })),
+    tier: {
+      headline: false,
+      id: BROWSER_TIER,
+    },
+    viewport: {
+      height: 900,
+      width: 1_440,
+    },
+  };
 }
 
 test("exports only the compact homepage benchmark DTO", () => {
@@ -215,6 +472,96 @@ test("accepts complete Windows reports with intentional process telemetry gaps",
   assert.equal(summary.benchmarks.hasUnavailable, false);
 });
 
+test("combines matching official browser outcomes", () => {
+  const ssrReport = report();
+  const summary = buildBenchmarkSummary(ssrReport, browserReport(ssrReport));
+  assert.deepEqual(
+    summary.benchmarks.metrics.map(({ id }) => id),
+    [
+      "requestsPerSecond",
+      "firstContentfulPaintMs",
+      "largestContentfulPaintMs",
+      "jsHeapUsedBytes",
+      "rendererPrivateBytes",
+    ],
+  );
+  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(
+    summary.benchmarks.rows.every(
+      (row) => Object.keys(row.metrics).length === 5,
+    ),
+    true,
+  );
+});
+
+test("rejects mismatched or noncanonical browser evidence", async (t) => {
+  const scenarios = [
+    ["dirty source", (value) => {
+      value.sourceRevision.workingTreeDirty = true;
+    }],
+    ["mismatched fixture", (value) => {
+      value.fixture.hash.value = "c".repeat(64);
+      value.sourceRevision.sourceDigest = "c".repeat(64);
+    }],
+    ["headless mode", (value) => {
+      value.browser.headless = true;
+    }],
+    ["CPU throttling", (value) => {
+      value.browser.cpuThrottling = "4x";
+    }],
+    ["missing required build", (value) => {
+      value.builds.pop();
+    }],
+    ["self-asserted runtime version", (value) => {
+      value.runtimeVerification.runtimes[0].expectedVersion = "0.0.0";
+      value.runtimeVerification.runtimes[0].version = "0.0.0";
+    }],
+    ["self-asserted runtime identity", (value) => {
+      const productId = "webui-rust-actix";
+      const app = value.apps.find((candidate) =>
+        candidate.productId === productId
+      );
+      app.runtime = {
+        id: "node",
+        version: RUNTIME_PINS.runtimes.node.version,
+      };
+      for (const round of value.rawRounds.filter((candidate) =>
+        candidate.productId === productId
+      )) {
+        round.runtime = {
+          id: "node",
+          version: RUNTIME_PINS.runtimes.node.version,
+        };
+      }
+    }],
+    ["missing shared-state digest", (value) => {
+      delete value.snapshotIntegrity.sharedStateHashBefore;
+      delete value.snapshotIntegrity.sharedStateHashAfter;
+    }],
+    ["wrong FCP units", (value) => {
+      for (const round of value.rawRounds) {
+        metricAt(round.metrics, "timings.firstContentfulPaintMs").unit =
+          "seconds";
+      }
+      for (const summary of value.summaries) {
+        metricAt(summary.metrics, "timings.firstContentfulPaintMs").unit =
+          "seconds";
+      }
+    }],
+  ];
+  for (const [name, mutate] of scenarios) {
+    await t.test(name, () => {
+      const ssrReport = report();
+      const value = structuredClone(browserReport(ssrReport));
+      mutate(value);
+      assert.throws(
+        () => buildBenchmarkSummary(ssrReport, value),
+        /canonical methodology/u,
+      );
+    });
+  }
+});
+
 test("refuses dirty or incomplete benchmark evidence", () => {
   const dirty = report();
   dirty.sourceRevision.workingTreeDirty = true;
@@ -222,6 +569,62 @@ test("refuses dirty or incomplete benchmark evidence", () => {
     () => buildBenchmarkSummary(dirty),
     /clean, complete, unfiltered seven-round official report/u,
   );
+});
+
+test("rejects noncanonical or stale complete reports", async (t) => {
+  const scenarios = [
+    ["noncanonical duration", (value) => {
+      value.config.durationSeconds = 1;
+    }],
+    ["noncanonical state count", (value) => {
+      value.fixture.stateVariants = 1;
+    }],
+    ["failed build", (value) => {
+      value.builds[0].status = "failed";
+    }],
+    ["missing required build", (value) => {
+      value.builds.pop();
+    }],
+    ["self-asserted runtime version", (value) => {
+      value.runtimeVerification.runtimes[0].expectedVersion = "0.0.0";
+      value.runtimeVerification.runtimes[0].version = "0.0.0";
+    }],
+    ["summary not derived from raw rounds", (value) => {
+      const requestsPerSecond =
+        value.matrix.summaries[0].requestsPerSecond;
+      value.matrix.summaries[0].requestsPerSecond = {
+        ...requestsPerSecond,
+        median: requestsPerSecond.median + 1,
+      };
+    }],
+    ["incomplete saturation evidence", (value) => {
+      value.saturation[0].samples = [];
+    }],
+    ["stale saturation conclusion", (value) => {
+      value.saturation[0].samples.at(-1).requestsPerSecond = 5_000;
+    }],
+    ["unapplied affinity", (value) => {
+      value.rawRounds[0].affinity.status = "unavailable";
+    }],
+    ["nonrandomized order", (value) => {
+      value.rawRounds = Array.from(
+        { length: 7 },
+        (_, round) => value.cases.map((benchmarkCase, orderIndex) =>
+          rawRound(benchmarkCase, round, orderIndex)
+        ),
+      ).flat();
+    }],
+  ];
+  for (const [name, mutate] of scenarios) {
+    await t.test(name, () => {
+      const value = report();
+      mutate(value);
+      assert.throws(
+        () => buildBenchmarkSummary(value),
+        /clean, complete, unfiltered seven-round official report/u,
+      );
+    });
+  }
 });
 
 test("rejects partial reports with any non-Windows-sampler cause", async (t) => {
@@ -282,7 +685,10 @@ test("rejects partial reports with any non-Windows-sampler cause", async (t) => 
       value.saturation[0].samples[0].serverMetrics.reason = "A different failure";
     }],
     ["additional saturation failure", (value) => {
-      value.saturation[0].analysis.status = "server-unsaturated";
+      value.saturation[0].analysis = {
+        ...value.saturation[0].analysis,
+        status: "server-unsaturated",
+      };
     }],
   ];
   for (const [name, mutate] of scenarios) {

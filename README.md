@@ -125,11 +125,13 @@ CI runs may retain them as workflow artifacts. The WebUI documentation
 repository does not need to check in a duplicate full `latest.json`.
 
 Export only the compact homepage DTO from a clean, unfiltered, complete
-seven-round official SSR report:
+seven-round official SSR report. Add the matching headed browser report when
+the homepage should include browser metrics:
 
 ```bash
 pnpm run export:summary -- \
   --input results/ssr-todo-2026-08-25-windows-285k.json \
+  --browser-input results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json \
   --output results/benchmark-summary.json
 ```
 
@@ -139,6 +141,11 @@ here. On Windows, an otherwise complete official report is intentionally marked
 `partial` because synchronous process sampling would perturb load measurements.
 The exporter accepts that status only when every case and round is complete and
 all unavailable telemetry has the runner's documented Windows sampler reason.
+When `--browser-input` is present, the exporter also requires matching source
+and fixture digests, the canonical 1,440×900 headed Chromium methodology, seven
+successful rounds for every product, and verified pinned runtimes. It adds FCP,
+LCP, JavaScript heap, and renderer-private-memory metrics without retaining
+stale browser data. Without that option, the DTO contains SSR throughput only.
 
 ## Measurement contract
 
