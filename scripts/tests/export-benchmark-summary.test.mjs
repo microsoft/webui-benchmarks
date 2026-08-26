@@ -498,6 +498,21 @@ test("combines matching official browser outcomes", () => {
   );
 });
 
+test("accepts exact local WebUI checkout build plans", () => {
+  const ssrReport = report();
+  ssrReport.builds = createBuildPlan(OFFICIAL_CASES, {
+    localWebui: true,
+  }).map(({ id }) => ({ id, status: "ok" }));
+  const browser = browserReport(ssrReport);
+  browser.builds = createBuildPlan(OFFICIAL_CASES, {
+    browser: true,
+    localWebui: true,
+  }).map(({ id }) => ({ id, status: "ok" }));
+
+  const summary = buildBenchmarkSummary(ssrReport, browser);
+  assert.equal(summary.benchmarks.rows.length, 14);
+});
+
 test("rejects mismatched or noncanonical browser evidence", async (t) => {
   const scenarios = [
     ["dirty source", (value) => {

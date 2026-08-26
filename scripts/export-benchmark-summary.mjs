@@ -30,8 +30,12 @@ import {
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const officialCases = createCaseMatrix();
-const officialBuildIds = Object.freeze(
-  createBuildPlan(officialCases, { localWebui: false }).map(({ id }) => id),
+const officialBuildIdSets = Object.freeze(
+  [false, true].map((localWebui) =>
+    Object.freeze(
+      createBuildPlan(officialCases, { localWebui }).map(({ id }) => id),
+    )
+  ),
 );
 const officialCaseIds = Object.freeze(
   officialCases.map((benchmarkCase) => benchmarkCase.id),
@@ -133,7 +137,9 @@ function hasCanonicalProtocol(report) {
     && config.warmupSeconds === DEFAULT_PROTOCOL.warmupSeconds
     && arraysEqual(config.scalingCores, [1])
     && config.serverCpu === 0
-    && hasExactIds(report.builds, officialBuildIds, ({ id }) => id)
+    && officialBuildIdSets.some((ids) =>
+      hasExactIds(report.builds, ids, ({ id }) => id)
+    )
     && report.builds.every(({ status }) => status === "ok");
 }
 

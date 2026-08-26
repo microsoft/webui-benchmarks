@@ -22,11 +22,15 @@ const browserLaunchArguments = Object.freeze([
   "--process-per-tab",
 ]);
 const officialCases = createCaseMatrix();
-const officialBuildIds = Object.freeze(
-  createBuildPlan(officialCases, {
-    browser: true,
-    localWebui: false,
-  }).map(({ id }) => id),
+const officialBuildIdSets = Object.freeze(
+  [false, true].map((localWebui) =>
+    Object.freeze(
+      createBuildPlan(officialCases, {
+        browser: true,
+        localWebui,
+      }).map(({ id }) => id),
+    )
+  ),
 );
 const officialCaseIds = Object.freeze(
   officialCases.map(({ id }) => id),
@@ -226,10 +230,12 @@ function hasMatchingEvidence(ssrReport, browserReport) {
     && hasCanonicalBrowserMethodology(browserReport)
     && browserReport.cleanup?.status === "verified"
     && browserReport.cleanup?.processRegistryEmpty === true
-    && hasExactIds(
-      browserReport.builds,
-      officialBuildIds,
-      ({ id }) => id,
+    && officialBuildIdSets.some((ids) =>
+      hasExactIds(
+        browserReport.builds,
+        ids,
+        ({ id }) => id,
+      )
     )
     && browserReport.builds.every(({ status }) => status === "ok")
     && hasGreenRuntimeEvidence(browserReport)
