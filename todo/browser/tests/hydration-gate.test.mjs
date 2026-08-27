@@ -12,6 +12,7 @@ import { CANONICAL_INTERACTION_STEP_IDS } from "../interactions.mjs";
 
 function successfulRound(productId) {
   const available = { status: "available", unit: "milliseconds", value: 1 };
+  const transferred = { status: "available", unit: "bytes", value: 1 };
   return {
     fullHydration: {
       atMs: 10,
@@ -53,6 +54,15 @@ function successfulRound(productId) {
         ),
         totalDurationMs: available,
       },
+      javascript: {
+        features: {
+          exportTransferBytes: transferred,
+          insightsTransferBytes: transferred,
+          savedViewTransferBytes: transferred,
+          scheduleTransferBytes: transferred,
+          searchTransferBytes: transferred,
+        },
+      },
       timings: {
         requestToFullHydrationMs: available,
       },
@@ -87,5 +97,18 @@ test("rejects a product without completed interactions", () => {
   assert.throws(
     () => assertHydrationGate(report),
     /canonical interaction sequence did not complete/u,
+  );
+});
+
+test("rejects an eagerly bundled workspace feature", () => {
+  const report = successfulReport();
+  report.rawRounds[0].metrics.javascript.features.scheduleTransferBytes = {
+    status: "available",
+    unit: "bytes",
+    value: 0,
+  };
+  assert.throws(
+    () => assertHydrationGate(report),
+    /Schedule must load a non-empty JavaScript feature chunk/u,
   );
 });

@@ -9,20 +9,13 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { createContext, useContext } from "react";
-import { ActivityPage } from "../react/components/activity-page.jsx";
-import { SettingsPage } from "../react/components/settings-page.jsx";
 import { TodoApp } from "../react/components/todo-app.jsx";
+import {
+  WorkspaceStateProvider,
+  useWorkspaceState,
+} from "./workspace-state.jsx";
 
-const WorkspaceState = createContext(null);
-
-function useWorkspaceState() {
-  const state = useContext(WorkspaceState);
-  if (state === null) {
-    throw new Error("The TanStack workspace state provider is missing");
-  }
-  return state;
-}
+export { WorkspaceStateProvider };
 
 function WorkspaceShell() {
   return (
@@ -55,14 +48,6 @@ function WorkRoute() {
   );
 }
 
-function ActivityRoute() {
-  return <ActivityPage state={useWorkspaceState()} />;
-}
-
-function SettingsRoute() {
-  return <SettingsPage state={useWorkspaceState()} />;
-}
-
 const rootRoute = createRootRoute({ component: WorkspaceShell });
 const routeTree = rootRoute.addChildren([
   createRoute({
@@ -81,15 +66,13 @@ const routeTree = rootRoute.addChildren([
     path: "/cached",
   }),
   createRoute({
-    component: ActivityRoute,
     getParentRoute: () => rootRoute,
     path: "/activity",
-  }),
+  }).lazy(() => import("./activity-route.lazy.jsx").then(({ Route }) => Route)),
   createRoute({
-    component: SettingsRoute,
     getParentRoute: () => rootRoute,
     path: "/settings",
-  }),
+  }).lazy(() => import("./settings-route.lazy.jsx").then(({ Route }) => Route)),
 ]);
 
 export function createWorkspaceRouter(requestPath) {
@@ -103,12 +86,4 @@ export function createWorkspaceRouter(requestPath) {
         }),
     routeTree,
   });
-}
-
-export function WorkspaceStateProvider({ children, state }) {
-  return (
-    <WorkspaceState.Provider value={state}>
-      {children}
-    </WorkspaceState.Provider>
-  );
 }

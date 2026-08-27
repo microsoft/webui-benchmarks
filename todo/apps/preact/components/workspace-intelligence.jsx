@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { useRef } from "preact/hooks";
 import {
   archiveWorkspaceSelection,
   exportWorkspaceRows,
@@ -12,11 +13,23 @@ import {
   selectWorkspaceView,
   setWorkspaceSchedule,
   toggleWorkspaceRow,
-} from "../../../shared/workspace-intelligence.mjs";
+} from "../../../shared/workspace-intelligence-client.mjs";
 
 export function WorkspaceIntelligence({ current, onStateChange }) {
   const model = current.intelligence;
-  const update = (reducer) => onStateChange((state) => reducer(state));
+  const currentRef = useRef(current);
+  const updateQueue = useRef(Promise.resolve());
+  currentRef.current = current;
+  const update = (reducer) => {
+    const run = async () => {
+      const next = await reducer(() => currentRef.current);
+      currentRef.current = next;
+      onStateChange(next);
+    };
+    const operation = updateQueue.current.then(run, run);
+    updateQueue.current = operation;
+    return operation;
+  };
 
   return (
     <workspace-intelligence data-component="workspace-intelligence">
@@ -42,8 +55,10 @@ export function WorkspaceIntelligence({ current, onStateChange }) {
             <span>Search work</span>
             <input
               data-action="workspace-search"
-              onInput={(event) =>
-                update((state) => searchWorkspace(state, event.currentTarget.value))}
+              onInput={(event) => {
+                const { value } = event.currentTarget;
+                void update((state) => searchWorkspace(state, value));
+              }}
               placeholder="Title, owner, tag, status…"
               type="search"
               value={model.query}
@@ -60,9 +75,11 @@ export function WorkspaceIntelligence({ current, onStateChange }) {
               <select
                 data-action="workspace-filter"
                 data-facet={facet}
-                onChange={(event) =>
-                  update((state) =>
-                    filterWorkspace(state, facet, event.currentTarget.value))}
+                onChange={(event) => {
+                  const { value } = event.currentTarget;
+                  void update((state) =>
+                    filterWorkspace(state, facet, value));
+                }}
                 value={model[facet]}
               >
                 {options.map((option) => (
@@ -143,7 +160,7 @@ export function WorkspaceIntelligence({ current, onStateChange }) {
         <footer class="workspace-intelligence__automation">
           <details>
             <summary>Automation schedule · {model.schedulePreview.label}</summary>
-            <label><span>Digest cadence</span><select data-action="workspace-schedule" onChange={(event) => update((state) => setWorkspaceSchedule(state, event.currentTarget.value))} value={model.schedule}>{model.scheduleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+            <label><span>Digest cadence</span><select data-action="workspace-schedule" onChange={(event) => { const { value } = event.currentTarget; void update((state) => setWorkspaceSchedule(state, value)); }} value={model.schedule}>{model.scheduleOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
             <p>Next run {model.schedulePreview.humanized}</p>
             <ol>{model.schedulePreview.dates.map((date) => <li key={date.id}>{date.label}</li>)}</ol>
           </details>

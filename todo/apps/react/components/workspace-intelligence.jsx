@@ -3,6 +3,7 @@
 
 "use client";
 
+import { useRef } from "react";
 import {
   archiveWorkspaceSelection,
   exportWorkspaceRows,
@@ -14,11 +15,23 @@ import {
   selectWorkspaceView,
   setWorkspaceSchedule,
   toggleWorkspaceRow,
-} from "../../../shared/workspace-intelligence.mjs";
+} from "../../../shared/workspace-intelligence-client.mjs";
 
 export function WorkspaceIntelligence({ current, onStateChange }) {
   const model = current.intelligence;
-  const update = (reducer) => onStateChange((state) => reducer(state));
+  const currentRef = useRef(current);
+  const updateQueue = useRef(Promise.resolve());
+  currentRef.current = current;
+  const update = (reducer) => {
+    const run = async () => {
+      const next = await reducer(() => currentRef.current);
+      currentRef.current = next;
+      onStateChange(next);
+    };
+    const operation = updateQueue.current.then(run, run);
+    updateQueue.current = operation;
+    return operation;
+  };
 
   return (
     <workspace-intelligence data-component="workspace-intelligence">

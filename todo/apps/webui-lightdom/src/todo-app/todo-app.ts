@@ -9,7 +9,7 @@ import {
   filterTodos,
   selectTodo,
   toggleTodoCompletion,
-} from "../../interactions.mjs";
+} from "../../client-interactions.mjs";
 
 interface TodoItem {
   id: string;

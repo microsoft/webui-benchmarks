@@ -13,6 +13,13 @@ const defaultOutputPath = resolve(
   BASELINE_ROOT,
   "ssr-todo-hydration-gate.json",
 );
+const FEATURE_JAVASCRIPT_METRICS = Object.freeze([
+  ["searchTransferBytes", "Search"],
+  ["exportTransferBytes", "Export"],
+  ["savedViewTransferBytes", "Save View"],
+  ["insightsTransferBytes", "Insights"],
+  ["scheduleTransferBytes", "Schedule"],
+]);
 
 function interactionFailure(round) {
   const interactions = round.metrics?.interactions;
@@ -60,6 +67,17 @@ function interactionFailure(round) {
   return null;
 }
 
+function featureJavascriptFailure(round) {
+  const features = round.metrics?.javascript?.features;
+  for (const [metric, label] of FEATURE_JAVASCRIPT_METRICS) {
+    const value = features?.[metric];
+    if (value?.status !== "available" || value.value <= 0) {
+      return `${label} must load a non-empty JavaScript feature chunk`;
+    }
+  }
+  return null;
+}
+
 export function hydrationGateFailures(report) {
   const expected = createCaseMatrix().map(({ id }) => id);
   const rounds = Array.isArray(report?.rawRounds) ? report.rawRounds : [];
@@ -98,6 +116,11 @@ export function hydrationGateFailures(report) {
     const interaction = interactionFailure(round);
     if (interaction !== null) {
       failures.push(`${productId}: ${interaction}`);
+      continue;
+    }
+    const featureJavascript = featureJavascriptFailure(round);
+    if (featureJavascript !== null) {
+      failures.push(`${productId}: ${featureJavascript}`);
     }
   }
   return failures;

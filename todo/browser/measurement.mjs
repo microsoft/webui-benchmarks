@@ -920,6 +920,13 @@ export async function measureBrowserRound({
   const session = await context.newCDPSession(page);
   const browserSession = await browser.newBrowserCDPSession();
   const network = new NetworkCollector(session);
+  const javascriptPhases = new Map();
+  await page.exposeFunction(
+    "__TODO_BENCH_JAVASCRIPT_PHASE__",
+    (phase) => {
+      javascriptPhases.set(phase, network.javascript());
+    },
+  );
   try {
     await session.send("Network.enable");
     await session.send("Performance.enable");
@@ -1026,6 +1033,25 @@ export async function measureBrowserRound({
         timeoutMs: 10_000,
       },
     );
+    const requiredJavascriptPhases = [
+      "search",
+      "export",
+      "saved-view",
+      "insights",
+      "schedule",
+      "work-complete",
+    ];
+    for (const phase of requiredJavascriptPhases) {
+      if (!javascriptPhases.has(phase)) {
+        throw new Error(`Interaction journey omitted JavaScript phase '${phase}'`);
+      }
+    }
+    const searchJavascript = javascriptPhases.get("search");
+    const exportJavascript = javascriptPhases.get("export");
+    const savedViewJavascript = javascriptPhases.get("saved-view");
+    const insightsJavascript = javascriptPhases.get("insights");
+    const scheduleJavascript = javascriptPhases.get("schedule");
+    const workJavascript = javascriptPhases.get("work-complete");
     const javascript = network.javascript();
     return Object.freeze({
       diagnostics: Object.freeze(diagnostics),
@@ -1091,14 +1117,57 @@ export async function measureBrowserRound({
             "bytes",
             "additional executable JavaScript transferred during interaction-triggered hydration",
           ),
+          featureRequestCount: availableMetric(
+            workJavascript.requestCount - hydratedJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during Work-route feature interactions",
+          ),
+          featureTransferBytes: availableMetric(
+            workJavascript.externalTransferBytes
+              - hydratedJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during Work-route feature interactions",
+          ),
+          features: Object.freeze({
+            searchTransferBytes: availableMetric(
+              searchJavascript.externalTransferBytes
+                - hydratedJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Search interaction",
+            ),
+            exportTransferBytes: availableMetric(
+              exportJavascript.externalTransferBytes
+                - searchJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Export interaction",
+            ),
+            savedViewTransferBytes: availableMetric(
+              savedViewJavascript.externalTransferBytes
+                - exportJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Save View interaction",
+            ),
+            insightsTransferBytes: availableMetric(
+              insightsJavascript.externalTransferBytes
+                - savedViewJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Insights interaction",
+            ),
+            scheduleTransferBytes: availableMetric(
+              scheduleJavascript.externalTransferBytes
+                - insightsJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Schedule interaction",
+            ),
+          }),
           routeRequestCount: availableMetric(
-            javascript.requestCount - hydratedJavascript.requestCount,
+            javascript.requestCount - workJavascript.requestCount,
             "count",
             "additional executable JavaScript requests during client route transitions",
           ),
           routeTransferBytes: availableMetric(
             javascript.externalTransferBytes
-              - hydratedJavascript.externalTransferBytes,
+              - workJavascript.externalTransferBytes,
             "bytes",
             "additional executable JavaScript transferred during client route transitions",
           ),

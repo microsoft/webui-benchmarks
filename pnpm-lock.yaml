@@ -40,6 +40,9 @@ importers:
       d3:
         specifier: 7.9.0
         version: 7.9.0
+      d3-dsv:
+        specifier: 3.0.1
+        version: 3.0.1
       date-fns:
         specifier: 4.4.0
         version: 4.4.0

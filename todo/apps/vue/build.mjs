@@ -3,7 +3,7 @@
 
 import { build as buildBundle } from "esbuild";
 import { createHash } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,9 +126,13 @@ function buildBrowser() {
     format: "esm",
     legalComments: "none",
     minify: true,
-    outfile: clientArtifactPath,
+    chunkNames: "client-chunks/[name]-[hash]",
+    entryNames: "client",
+    outdir: outputDirectory,
+    outExtension: { ".js": ".mjs" },
     platform: "browser",
     plugins: [singleFileComponentPlugin(false)],
+    splitting: true,
     target: "chrome120",
   });
 }
@@ -143,9 +147,13 @@ function buildComponents() {
     external: ["vue", "vue/*", "vue-router", "@vue/*"],
     format: "esm",
     legalComments: "none",
-    outfile: componentsArtifactPath,
+    chunkNames: "component-chunks/[name]-[hash]",
+    entryNames: "components",
+    outdir: outputDirectory,
+    outExtension: { ".js": ".mjs" },
     platform: "neutral",
     plugins: [singleFileComponentPlugin(false)],
+    splitting: true,
     target: "es2022",
   });
 }
@@ -155,6 +163,18 @@ export function build() {
     mkdir(outputDirectory, { recursive: true }),
     readFile(stylesPath, "utf8"),
   ]).then(async ([, css]) => {
+    await Promise.all([
+      rm(resolve(outputDirectory, "client-chunks"), {
+        force: true,
+        recursive: true,
+      }),
+      rm(resolve(outputDirectory, "component-chunks"), {
+        force: true,
+        recursive: true,
+      }),
+      rm(resolve(outputDirectory, "client.js"), { force: true }),
+      rm(resolve(outputDirectory, "components.js"), { force: true }),
+    ]);
     await Promise.all([buildServer(), buildBrowser(), buildComponents()]);
     return {
       artifactPath: serverArtifactPath,

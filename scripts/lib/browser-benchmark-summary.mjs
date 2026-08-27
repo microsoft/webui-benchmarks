@@ -105,6 +105,17 @@ const metricDefinitions = Object.freeze([
   }),
   Object.freeze({
     description:
+      "Additional executable JavaScript transferred on demand by Work-route feature interactions.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "featureJavascriptBytes",
+    label: "Feature JavaScript",
+    path: "javascript.featureTransferBytes",
+    sourceUnit: "bytes",
+    unit: "KiB",
+  }),
+  Object.freeze({
+    description:
       "Additional executable JavaScript transferred while visiting Activity and Settings.",
     direction: "lower",
     directionLabel: "lower is better",

@@ -56,7 +56,8 @@ Reports default to
   browser-only document adapter around their natural dynamic SSR fragment;
   full-stack Next, Nuxt, SvelteKit, and Astro use their production server
   document directly. No full-response cache result enters primary evidence.
-- WebUI / Rust / Actix is served directly by Actix with no Node document proxy.
+- WebUI / Light DOM / Rust / Actix is served directly by Actix with no Node
+  document proxy.
   The Rust server injects the browser bootstrap through `RenderOptions` and
   serves both WebUI browser assets itself.
 - WebUI / Shadow DOM / Rust / Actix uses that same direct server, state, and
@@ -121,8 +122,9 @@ Reports default to
   Activity filtering/expansion/read state, Settings toggle/density/save, and
   return navigation. Every route waits for framework-authored interactive
   readiness and validates semantic DOM state.
-- JavaScript is split into startup, interaction-hydration, and route-transition
-  transfer bytes. WebUI
+- JavaScript is split into startup, interaction-hydration, on-demand Work
+  features, and route-transition transfer bytes. Search, Export, Save View,
+  Insights, and Schedule each retain their own transfer breakdown. WebUI
   and FAST use `Router.start({ loaders })` so Activity and Settings are real
   dynamic imports. Framework-native route chunks are measured when their
   routers request them. Shared frozen server snapshots are hashed before and

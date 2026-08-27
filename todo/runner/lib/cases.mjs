@@ -96,7 +96,7 @@ function officialCases() {
       appId: "webui",
       buildIds: ["webui", "native-addon", "state-pool", "rust-actix"],
       id: "webui-rust-actix",
-      label: "WebUI / Rust / Actix",
+      label: "WebUI / Light DOM / Rust / Actix",
       launcher: { kind: "rust-actix" },
       productKind: PRODUCT_KINDS.webui,
       renderer: "webui-handler WebUIHandler (Rust)",

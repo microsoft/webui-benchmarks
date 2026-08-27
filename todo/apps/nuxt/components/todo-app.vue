@@ -5,7 +5,7 @@
 import { onMounted, ref } from "vue";
 import { BRANCHES } from "../../../shared/contract.mjs";
 import { publishHydrated } from "../../../shared/hydration.mjs";
-import { createWorkspaceIntelligence } from "../../../shared/workspace-intelligence.mjs";
+import { createClientWorkspaceIntelligence } from "../../../shared/workspace-intelligence-client.mjs";
 import TodoFooter from "./todo-footer.vue";
 import TodoHeader from "./todo-header.vue";
 import TodoList from "./todo-list.vue";
@@ -74,7 +74,7 @@ function refreshDerivedState(current, todos) {
       ...current.footer,
       itemCountLabel: plural(totalCount, "item"),
     },
-    intelligence: createWorkspaceIntelligence(todos, current.intelligence),
+    intelligence: createClientWorkspaceIntelligence(todos, current.intelligence),
     selection: {
       todoId: selectedTodo?.id ?? "",
       label: selectedTodo ? `Selected ${selectedTodo.id}` : "No todo selected",

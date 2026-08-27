@@ -13,7 +13,7 @@ const adapterLoaders = Object.freeze({
   "react-tanstack": () => import("../../apps/react-tanstack/adapter.mjs"),
   solid: () => import("../../apps/solid/adapter.mjs"),
   vue: () => import("../../apps/vue/adapter.mjs"),
-  webui: () => import("../../apps/webui/adapter.mjs"),
+  webui: () => import("../../apps/webui-lightdom/adapter.mjs"),
 });
 
 export const RENDERER_IDS = Object.freeze(

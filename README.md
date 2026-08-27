@@ -211,9 +211,11 @@ keeps `benchmarksJson` synchronized with `benchmarks`.
   requires real hydration and the 29-step shared workbench/todo interaction
   sequence, followed by the canonical Activity and Settings route journey.
 - Browser evidence covers the full request-to-interactive lifecycle, startup
-  JavaScript, interaction-hydration JavaScript, lazy route JavaScript, and
-  interactive route navigation—not only component render time. WebUI Light and
-  Shadow use `w-hydrate="interaction"` on the server-rendered application shell.
+  JavaScript, interaction-hydration JavaScript, on-demand feature JavaScript,
+  lazy route JavaScript, and interactive route navigation—not only component
+  render time. WebUI Light and Shadow use `w-hydrate="interaction"` on the
+  server-rendered application shell; Search, Export, Save View, Insights, and
+  Schedule load separate feature chunks on first use.
 - Every case uses one server process/worker pinned to one CPU, two load workers,
   two four-second saturation probes, a three-second warmup, and one twenty-second
   official measured round.

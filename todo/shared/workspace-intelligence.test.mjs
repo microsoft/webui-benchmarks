@@ -17,6 +17,12 @@ import {
   setWorkspaceSchedule,
   toggleWorkspaceRow,
 } from "./workspace-intelligence.mjs";
+import {
+  createClientWorkspaceIntelligence,
+  filterWorkspace as filterClientWorkspace,
+  searchWorkspace as searchClientWorkspace,
+  selectWorkspaceView as selectClientWorkspaceView,
+} from "./workspace-intelligence-client.mjs";
 
 test("creates a deterministic analytics workbench from the todo fixture", () => {
   const { intelligence } = createTodoState(0);
@@ -86,4 +92,58 @@ test("supports fuzzy search and rejects unsupported controls", () => {
     () => setWorkspaceSchedule(state, "monthly"),
     /Unknown schedule/u,
   );
+});
+
+test("client search preserves empty results and refreshes after todo changes", async () => {
+  const initial = createTodoState(0);
+  let state = await searchClientWorkspace(initial, "no matching work item");
+  assert.equal(state.intelligence.resultCount, 0);
+  state = await filterClientWorkspace(state, "sort", "title");
+  assert.equal(state.intelligence.resultCount, 0);
+
+  state = await searchClientWorkspace(initial, "Completed");
+  const matchedId = state.intelligence.previewRows[0].id;
+  const todos = state.todos.map((todo) =>
+    todo.id === matchedId
+      ? {
+          ...todo,
+          completed: false,
+          pending: true,
+          statusLabel: "Pending",
+        }
+      : todo
+  );
+  const intelligence = createClientWorkspaceIntelligence(
+    todos,
+    state.intelligence,
+  );
+  assert.equal(intelligence.resultCount, 24);
+  assert.equal(
+    intelligence.previewRows.some(({ id }) => id === matchedId),
+    false,
+  );
+});
+
+test("client analytics follow active insight filters", async () => {
+  const initial = createTodoState(0);
+  let state = await selectClientWorkspaceView(initial, "insights");
+  state = await filterClientWorkspace(state, "priority", "high");
+  assert.equal(state.intelligence.resultCount, 20);
+  assert.equal(
+    state.intelligence.analytics.priorityBars.reduce(
+      (total, { count }) => total + count,
+      0,
+    ),
+    20,
+  );
+});
+
+test("async client features apply to the latest application state", async () => {
+  const initial = createTodoState(0);
+  let current = initial;
+  const search = searchClientWorkspace(() => current, "Todo 0050");
+  current = { ...current, concurrentMarker: "preserved" };
+  const next = await search;
+  assert.equal(next.concurrentMarker, "preserved");
+  assert.equal(next.intelligence.resultCount, 1);
 });

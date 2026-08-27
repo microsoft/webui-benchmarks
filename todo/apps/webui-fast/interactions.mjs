@@ -6,4 +6,4 @@ export {
   filterTodos,
   selectTodo,
   toggleTodoCompletion,
-} from "../webui/interactions.mjs";
+} from "../webui-lightdom/interactions.mjs";

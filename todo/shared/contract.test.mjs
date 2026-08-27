@@ -218,7 +218,10 @@ test("framework reducers keep footer and selection state valid after clear", asy
       "webui-fast",
     ]
   ) {
-    const interactions = await import(`../apps/${appId}/interactions.mjs`);
+    const appDirectory = appId === "webui" ? "webui-lightdom" : appId;
+    const interactions = await import(
+      `../apps/${appDirectory}/interactions.mjs`
+    );
     const cleared = interactions.clearCompletedTodos(createTodoState(0));
     assert.equal(cleared.todos.length, 75, `${appId} must remove completed todos`);
     assert.equal(cleared.summary.totalCount, 75);

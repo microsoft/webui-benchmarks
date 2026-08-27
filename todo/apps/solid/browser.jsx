@@ -2,7 +2,10 @@
 // Licensed under the MIT license.
 
 import { hydrate } from "solid-js/web";
-import { WorkspaceApp } from "./components/workspace-app.jsx";
+import {
+  WorkspaceApp,
+  loadInitialWorkspaceRoute,
+} from "./components/workspace-app.jsx";
 
 class TodoBadgeElement extends HTMLElement {
   get dataBranch() {
@@ -26,16 +29,22 @@ function readInitialState() {
   return JSON.parse(script.textContent ?? "");
 }
 
-export function startTodoApp(
+export async function startTodoApp(
   target = document.querySelector("#todo-browser-root") ?? document.body,
   state = readInitialState(),
 ) {
   if (customElements.get("todo-badge") === undefined) {
     customElements.define("todo-badge", TodoBadgeElement);
   }
-  return hydrate(() => <WorkspaceApp state={state} />, target);
+  const initialRoute = await loadInitialWorkspaceRoute(
+    globalThis.location.pathname,
+  );
+  return hydrate(
+    () => <WorkspaceApp state={state} {...initialRoute} />,
+    target,
+  );
 }
 
 if (document.querySelector("script[data-todo-app-state]") !== null) {
-  startTodoApp();
+  void startTodoApp();
 }

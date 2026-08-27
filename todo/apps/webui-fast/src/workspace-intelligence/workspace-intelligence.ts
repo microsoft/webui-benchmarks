@@ -6,6 +6,7 @@ import { declarativeTemplate } from "@microsoft/fast-element/declarative.js";
 import { observerMap } from "@microsoft/fast-element/observer-map.js";
 import {
   archiveWorkspaceSelection,
+  createClientWorkspaceIntelligence,
   exportWorkspaceRows,
   filterWorkspace,
   resetWorkspaceIntelligence,
@@ -15,9 +16,16 @@ import {
   selectWorkspaceView,
   setWorkspaceSchedule,
   toggleWorkspaceRow,
-} from "../../../../shared/workspace-intelligence.mjs";
+} from "../../../../shared/workspace-intelligence-client.mjs";
 
 type WorkspaceModel = Record<string, unknown>;
+type WorkspaceState = {
+  intelligence: WorkspaceModel;
+  todos: Array<Record<string, unknown>>;
+};
+type WorkspaceReducer = (
+  state: () => WorkspaceState,
+) => Promise<WorkspaceState>;
 
 function isWorkspaceRow(
   value: unknown,
@@ -31,13 +39,19 @@ function isWorkspaceRow(
 export class WorkspaceIntelligence extends FASTElement {
   @observable intelligence: WorkspaceModel = {};
   @observable todos: Array<Record<string, unknown>> = [];
+  private applyQueue = Promise.resolve();
 
   setWorkspaceState(
     todos: Array<Record<string, unknown>>,
     intelligence: WorkspaceModel,
   ): void {
+    const todosChanged = this.todos !== todos;
     this.todos = todos;
-    this.commitIntelligence(intelligence);
+    this.commitIntelligence(
+      todosChanged
+        ? createClientWorkspaceIntelligence(todos, intelligence)
+        : intelligence,
+    );
   }
 
   onSearch(event: Event): void {
@@ -93,21 +107,15 @@ export class WorkspaceIntelligence extends FASTElement {
     return true;
   }
 
-  private apply(
-    reducer: (state: {
-      intelligence: WorkspaceModel;
-      todos: Array<Record<string, unknown>>;
-    }) => {
-      intelligence: WorkspaceModel;
-      todos: Array<Record<string, unknown>>;
-    },
-  ): void {
-    this.commitIntelligence(
-      reducer({
+  private apply(reducer: WorkspaceReducer): void {
+    const run = async () => {
+      const next = await reducer(() => ({
         intelligence: this.intelligence,
         todos: this.todos,
-      }).intelligence,
-    );
+      }));
+      this.commitIntelligence(next.intelligence);
+    };
+    this.applyQueue = this.applyQueue.then(run, run);
   }
 
   private commitIntelligence(next: WorkspaceModel): void {

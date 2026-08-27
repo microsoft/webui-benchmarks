@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildClient,
@@ -24,6 +24,21 @@ const FORBIDDEN_WEBUI_CLIENT_FRAMEWORKS = Object.freeze([
   "svelte",
   "vue",
 ]);
+const LAZY_FEATURES = Object.freeze([
+  "analytics",
+  "csv",
+  "saved-view",
+  "schedule",
+  "search",
+]);
+const ASYNC_FACADE_IMPLEMENTATIONS = Object.freeze([
+  ["FAST", "../../apps/webui-fast/src/workspace-intelligence/workspace-intelligence.ts"],
+  ["React, React + TanStack Router, and Next", "../../apps/react/components/workspace-intelligence.jsx"],
+  ["Preact and Astro", "../../apps/preact/components/workspace-intelligence.jsx"],
+  ["Solid", "../../apps/solid/components/workspace-intelligence.jsx"],
+  ["SvelteKit", "../../apps/sveltekit/src/lib/components/workspace-intelligence.svelte"],
+  ["Vue and Nuxt", "../../apps/vue/components/workspace-intelligence.vue"],
+]);
 
 for (
   const appId of [
@@ -42,8 +57,37 @@ for (
     assert.ok(bundle.byteLength > 100);
     if (appId === "preact") {
       assert.ok(
-        bundle.byteLength >= WORKSPACE_MINIMUM_EMITTED_BYTES,
+        bundle.totalJavaScriptBytes >= WORKSPACE_MINIMUM_EMITTED_BYTES,
         `Preact must emit at least ${WORKSPACE_MINIMUM_EMITTED_BYTES} bytes`,
+      );
+    }
+    for (const feature of LAZY_FEATURES) {
+      const assetPath = bundle.featureAssets[feature];
+      assert.equal(
+        typeof assetPath,
+        "string",
+        `${appId} must emit workspace-${feature} as a lazy chunk`,
+      );
+      assert.ok(
+        bundle.additionalAssets.has(assetPath),
+        `${appId} must serve the workspace-${feature} chunk`,
+      );
+    }
+    assert.equal(
+      new Set(Object.values(bundle.featureAssets)).size,
+      LAZY_FEATURES.length,
+      `${appId} must keep each workspace feature in an independent chunk`,
+    );
+    for (const route of ["activity-page", "settings-page"]) {
+      const assetPath = bundle.routeAssets[route];
+      assert.equal(
+        typeof assetPath,
+        "string",
+        `${appId} must emit ${route} as a lazy route chunk`,
+      );
+      assert.ok(
+        bundle.additionalAssets.has(assetPath),
+        `${appId} must serve the ${route} chunk`,
       );
     }
     if (appId === "preact" || appId === "webui") {
@@ -65,6 +109,36 @@ for (
   });
 }
 
+test("every framework implementation uses lazy workspace features", async () => {
+  for (const [label, path] of ASYNC_FACADE_IMPLEMENTATIONS) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    assert.match(
+      source,
+      /workspace-intelligence-client\.mjs/u,
+      `${label} must use the async workspace facade`,
+    );
+  }
+
+  for (
+    const [label, path] of [
+      ["shared client facade", "../../shared/workspace-intelligence-client.mjs"],
+      ["WebUI Light and Shadow", "../../apps/webui-lightdom/src/workspace-intelligence/workspace-intelligence.ts"],
+    ]
+  ) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    for (const feature of LAZY_FEATURES) {
+      assert.match(
+        source,
+        new RegExp(
+          `import\\([\\s\\S]*?workspace-${feature}\\.mjs`,
+          "u",
+        ),
+        `${label} must dynamically import workspace-${feature}`,
+      );
+    }
+  }
+});
+
 test("writes WebUI assets for the direct Rust browser server", async () => {
   for (const appId of ["webui", "webui-fast"]) {
     const bundle = await buildClient(appId);
@@ -76,6 +150,16 @@ test("writes WebUI assets for the direct Rust browser server", async () => {
       ),
       `${appId} must emit lazy browser chunks`,
     );
+    if (appId === "webui") {
+      for (const dom of ["light", "shadow"]) {
+        assert.ok(
+          bundle.additionalAssets.has(
+            `/__browser/${dom}/app-shell.css`,
+          ),
+          `WebUI must serve ${dom} DOM component CSS`,
+        );
+      }
+    }
   }
 });
 

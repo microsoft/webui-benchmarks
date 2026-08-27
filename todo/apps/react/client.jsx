@@ -3,13 +3,13 @@
 
 import { hydrateRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
-import { WorkspaceApp } from "./components/workspace-app.jsx";
+import { WorkspaceClientApp } from "./components/workspace-app-client.jsx";
 
 export function hydrateTodoApp(target, state, options = undefined) {
   return hydrateRoot(
     target,
     <BrowserRouter>
-      <WorkspaceApp state={state} />
+      <WorkspaceClientApp state={state} />
     </BrowserRouter>,
     options,
   );

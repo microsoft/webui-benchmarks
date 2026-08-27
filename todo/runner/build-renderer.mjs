@@ -10,7 +10,7 @@ const builders = Object.freeze({
   "react-tanstack": () => import("../apps/react-tanstack/build.mjs"),
   solid: () => import("../apps/solid/build.mjs"),
   vue: () => import("../apps/vue/build.mjs"),
-  webui: () => import("../apps/webui/build.mjs"),
+  webui: () => import("../apps/webui-lightdom/build.mjs"),
   "webui-fast": () => import("../apps/webui-fast/build.mjs"),
   "webui-shadowdom": () => import("../apps/webui-shadowdom/build.mjs"),
 });

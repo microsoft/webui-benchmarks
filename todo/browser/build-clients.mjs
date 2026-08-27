@@ -43,7 +43,6 @@ function buildOptions(appId) {
     throw new RangeError(`No controlled browser client for '${appId}'`);
   }
 
-  const webuiClient = isWebUiClient(appId);
   return {
     banner: {
       js: "// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT license.",
@@ -65,14 +64,9 @@ function buildOptions(appId) {
     legalComments: "none",
     metafile: true,
     minify: true,
-    ...(webuiClient
-      ? {
-          chunkNames: "chunks/[name]-[hash]",
-          entryNames: appId,
-          outdir: resolve(here, ".browser-build", appId),
-          splitting: true,
-        }
-      : { outfile: `${appId}.js` }),
+    chunkNames: "chunks/[name]-[hash]",
+    entryNames: appId,
+    outdir: resolve(here, ".browser-build", appId),
     platform: "browser",
     plugins: [
       ...(appId === "solid"
@@ -80,6 +74,7 @@ function buildOptions(appId) {
         : []),
     ],
     sourcemap: false,
+    splitting: true,
     target: "chrome120",
     write: false,
   };
@@ -105,6 +100,10 @@ async function collectCssAssets(root) {
 }
 
 async function buildClient(appId) {
+  if (appId === "vue") {
+    const { build } = await import("../apps/vue/build.mjs");
+    await build();
+  }
   const options = buildOptions(appId);
   const result = await buildBundle(options);
   const javascript = result.outputFiles.find(
@@ -114,6 +113,74 @@ async function buildClient(appId) {
     throw new Error(`${appId} browser build did not emit JavaScript`);
   }
   const bundle = Buffer.from(javascript.contents);
+  const outputRoot = options.outdir;
+  const chunkAssets = result.outputFiles
+    .filter(
+      ({ path }) =>
+        path !== javascript.path
+        && [".js", ".mjs"].includes(extname(path)),
+    )
+    .map(({ contents, path }) => [
+      `/__browser/${
+        relative(outputRoot, path).replaceAll("\\", "/")
+      }`,
+      Buffer.from(contents),
+    ]);
+  bundle.additionalAssets = new Map(chunkAssets);
+  bundle.totalJavaScriptBytes = result.outputFiles
+    .filter(({ path }) => [".js", ".mjs"].includes(extname(path)))
+    .reduce((total, { contents }) => total + contents.byteLength, 0);
+  bundle.featureAssets = Object.freeze(
+    Object.fromEntries(
+      [
+        "analytics",
+        "csv",
+        "saved-view",
+        "schedule",
+        "search",
+      ].map((feature) => {
+        const suffix = `/workspace-${feature}.mjs`;
+        const output = Object.entries(result.metafile.outputs).find(
+          ([, metadata]) =>
+            Object.keys(metadata.inputs).some((inputPath) =>
+              `/${inputPath.replaceAll("\\", "/")}`.endsWith(suffix)
+              || basename(inputPath).startsWith(`workspace-${feature}-`)
+            ),
+        );
+        bundle.routeAssets = Object.freeze(
+            Object.fromEntries(
+              ["activity-page", "settings-page"].map((route) => {
+                const output = Object.entries(result.metafile.outputs).find(
+                  ([, metadata]) =>
+                    Object.keys(metadata.inputs).some((inputPath) =>
+                      basename(inputPath).startsWith(`${route}-`)
+                      || [".js", ".jsx", ".mjs", ".ts"].some((extension) =>
+                        `/${inputPath.replaceAll("\\", "/")}`.endsWith(
+                          `/${route}${extension}`,
+                        )
+                      )
+                    ),
+                );
+                if (output === undefined) return [route, null];
+                return [
+                  route,
+                  `/__browser/${
+                    relative(outputRoot, resolve(output[0])).replaceAll("\\", "/")
+                  }`,
+                ];
+              }),
+            ),
+        );
+        if (output === undefined) return [feature, null];
+        return [
+          feature,
+          `/__browser/${
+            relative(outputRoot, resolve(output[0])).replaceAll("\\", "/")
+          }`,
+        ];
+      }),
+    ),
+  );
   bundle.packageBytes = Object.freeze(
     Object.fromEntries(
       [
@@ -133,33 +200,21 @@ async function buildClient(appId) {
     ),
   );
   if (isWebUiClient(appId)) {
-    const outputRoot = options.outdir;
-    const routeAssets = result.outputFiles
-      .filter(
-        ({ path }) =>
-          path !== javascript.path
-          && [".js", ".mjs"].includes(extname(path)),
-      )
-      .map(({ contents, path }) => [
-        `/__browser/${
-          relative(outputRoot, path).replaceAll("\\", "/")
-        }`,
-        Buffer.from(contents),
-      ]);
+    const appDirectory = appId === "webui" ? "webui-lightdom" : appId;
     const browserAssetDirectory = resolve(
       here,
       "..",
       "apps",
-      appId,
+      appDirectory,
       "dist",
       "browser",
     );
+    await mkdir(browserAssetDirectory, { recursive: true });
     const cssAssets = await collectCssAssets(browserAssetDirectory);
     bundle.additionalAssets = new Map([
-      ...routeAssets,
+      ...chunkAssets,
       ...cssAssets,
     ]);
-    await mkdir(browserAssetDirectory, { recursive: true });
     await Promise.all([
       rm(resolve(browserAssetDirectory, "chunks"), {
         force: true,
@@ -171,7 +226,7 @@ async function buildClient(appId) {
     ]);
     await Promise.all([
       writeFile(resolve(browserAssetDirectory, "webui.js"), bundle),
-      ...routeAssets.map(async ([assetPath, contents]) => {
+      ...chunkAssets.map(async ([assetPath, contents]) => {
         const destination = resolve(
           browserAssetDirectory,
           assetPath.replace(/^\/__browser\//u, ""),

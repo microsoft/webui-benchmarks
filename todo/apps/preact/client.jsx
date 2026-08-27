@@ -2,9 +2,9 @@
 // Licensed under the MIT license.
 
 import { hydrate } from "preact";
-import { WorkspaceApp } from "./components/workspace-app.jsx";
+import { WorkspaceClientApp } from "./components/workspace-app-client.jsx";
 
 export function hydrateTodoApp(target, state) {
-  hydrate(<WorkspaceApp state={state} />, target);
+  hydrate(<WorkspaceClientApp state={state} />, target);
   return target;
 }

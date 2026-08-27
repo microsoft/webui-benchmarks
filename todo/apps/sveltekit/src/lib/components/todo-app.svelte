@@ -4,7 +4,7 @@
 <script>
   import { BRANCHES } from "../../../../../shared/contract.mjs";
   import { publishHydrated } from "../../../../../shared/hydration.mjs";
-  import { createWorkspaceIntelligence } from "../../../../../shared/workspace-intelligence.mjs";
+  import { createClientWorkspaceIntelligence } from "../../../../../shared/workspace-intelligence-client.mjs";
   import { onMount } from "svelte";
   import TodoFooter from "./todo-footer.svelte";
   import TodoHeader from "./todo-header.svelte";
@@ -71,7 +71,7 @@
         ...current.footer,
         itemCountLabel: plural(totalCount, "item"),
       },
-      intelligence: createWorkspaceIntelligence(todos, current.intelligence),
+      intelligence: createClientWorkspaceIntelligence(todos, current.intelligence),
       selection: {
         todoId: selectedTodo?.id ?? "",
         label: selectedTodo ? `Selected ${selectedTodo.id}` : "No todo selected",

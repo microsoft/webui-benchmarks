@@ -359,7 +359,13 @@ export async function assertBuildArtifacts(cases) {
   }
   const rendererArtifacts = {
     solid: resolve(TODO_ROOT, "apps", "solid", "dist", "server.mjs"),
-    webui: resolve(TODO_ROOT, "apps", "webui", "dist", "protocol.bin"),
+    webui: resolve(
+      TODO_ROOT,
+      "apps",
+      "webui-lightdom",
+      "dist",
+      "protocol.bin",
+    ),
   };
   for (const [appId, path] of Object.entries(rendererArtifacts)) {
     if (
@@ -380,7 +386,7 @@ export async function assertBuildArtifacts(cases) {
     const protocol = resolve(
       TODO_ROOT,
       "apps",
-      "webui",
+      "webui-lightdom",
       "dist",
       "protocol.bin",
     );

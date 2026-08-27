@@ -6,7 +6,7 @@ import { Protocol } from "@microsoft/webui";
 import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { build } from "../build.mjs";
-import { build as buildWebUi } from "../../webui/build.mjs";
+import { build as buildWebUi } from "../../webui-lightdom/build.mjs";
 import { createTodoState } from "../../../shared/state.mjs";
 
 test("builds a distinct FAST V3 protocol for the shared todo contract", async () => {

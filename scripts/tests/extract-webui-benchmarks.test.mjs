@@ -74,7 +74,12 @@ function benchmarkSummary() {
     ],
     rows: [
       row("react", "React", 120, 30),
-      row("webui-rust-actix", "WebUI / Rust / Actix", 110, 35),
+      row(
+        "webui-rust-actix",
+        "WebUI / Light DOM / Rust / Actix",
+        110,
+        35,
+      ),
       row(
         "webui-shadowdom-rust-actix",
         "WebUI / Shadow DOM / Rust / Actix",
@@ -127,7 +132,7 @@ test("keeps only the primary WebUI Rust row by default", () => {
   assert.doesNotMatch(filtered.benchmarks.metricSummary, /React/u);
   assert.match(
     filtered.benchmarks.metrics[1].summary,
-    /WebUI \/ Rust \/ Actix.*35 ms/u,
+    /WebUI \/ Light DOM \/ Rust \/ Actix.*35 ms/u,
   );
   assert.deepEqual(
     JSON.parse(filtered.benchmarksJson),

@@ -14,7 +14,7 @@ import {
   selectWorkspaceView,
   setWorkspaceSchedule,
   toggleWorkspaceRow,
-} from "../../../shared/workspace-intelligence.mjs";
+} from "../../../shared/workspace-intelligence-client.mjs";
 
 defineOptions({ name: "workspace-intelligence" });
 const props = defineProps({
@@ -22,16 +22,30 @@ const props = defineProps({
 });
 const emit = defineEmits(["state-change"]);
 const model = computed(() => props.state.intelligence);
-const update = (reducer) => emit("state-change", reducer(props.state));
+let updateQueue = Promise.resolve();
+const update = (reducer) => {
+  const run = async () => {
+    emit("state-change", await reducer(() => props.state));
+  };
+  const operation = updateQueue.then(run, run);
+  updateQueue = operation;
+  return operation;
+};
 
 function applyFacet(event) {
-  update((state) =>
-    filterWorkspace(
-      state,
-      event.currentTarget.dataset.facet,
-      event.currentTarget.value,
-    )
-  );
+  const { facet } = event.currentTarget.dataset;
+  const { value } = event.currentTarget;
+  void update((state) => filterWorkspace(state, facet, value));
+}
+
+function applySchedule(event) {
+  const { value } = event.currentTarget;
+  void update((state) => setWorkspaceSchedule(state, value));
+}
+
+function applySearch(event) {
+  const { value } = event.currentTarget;
+  void update((state) => searchWorkspace(state, value));
 }
 </script>
 
@@ -64,7 +78,7 @@ function applyFacet(event) {
             placeholder="Title, owner, tag, status…"
             type="search"
             :value="model.query"
-            @input="update((state) => searchWorkspace(state, $event.currentTarget.value))"
+            @input="applySearch"
           />
         </label>
         <label>
@@ -200,7 +214,7 @@ function applyFacet(event) {
       <footer class="workspace-intelligence__automation">
         <details>
           <summary>Automation schedule · {{ model.schedulePreview.label }}</summary>
-          <label><span>Digest cadence</span><select data-action="workspace-schedule" :value="model.schedule" @change="update((state) => setWorkspaceSchedule(state, $event.currentTarget.value))"><option v-for="option in model.scheduleOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select></label>
+          <label><span>Digest cadence</span><select data-action="workspace-schedule" :value="model.schedule" @change="applySchedule"><option v-for="option in model.scheduleOptions" :key="option.id" :value="option.id">{{ option.label }}</option></select></label>
           <p>Next run {{ model.schedulePreview.humanized }}</p>
           <ol><li v-for="date in model.schedulePreview.dates" :key="date.id">{{ date.label }}</li></ol>
         </details>

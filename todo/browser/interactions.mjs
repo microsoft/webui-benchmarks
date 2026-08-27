@@ -107,6 +107,12 @@ export async function executeTodoInteractionSequence({
       composed: true,
     }));
   };
+  const markJavascriptPhase = async (phase) => {
+    const publish = globalThis.__TODO_BENCH_JAVASCRIPT_PHASE__;
+    if (typeof publish === "function") {
+      await publish(phase);
+    }
+  };
   const timeInitialFilter = async (action, predicate) => {
     const startedAt = performance.now();
     action();
@@ -167,6 +173,7 @@ export async function executeTodoInteractionSequence({
         `[data-action="workspace-row-select"][data-todo-id="${sentinelId}"]`,
       ) instanceof HTMLInputElement,
   );
+  await markJavascriptPhase("search");
   const workspaceSentinel = query(
     `[data-workspace-row="${sentinelId}"]`,
   );
@@ -248,6 +255,7 @@ export async function executeTodoInteractionSequence({
     () => exportWorkspace.click(),
     () => workspaceHas("data-export-rows", 1),
   );
+  await markJavascriptPhase("export");
 
   const saveWorkspace = workspaceAction("workspace-save-view");
   assert(saveWorkspace instanceof HTMLButtonElement, "save view action is missing");
@@ -256,6 +264,7 @@ export async function executeTodoInteractionSequence({
     () => saveWorkspace.click(),
     () => workspaceHas("data-saved-view-count", 1),
   );
+  await markJavascriptPhase("saved-view");
 
   const archiveWorkspace = workspaceAction("workspace-archive");
   assert(
@@ -306,6 +315,7 @@ export async function executeTodoInteractionSequence({
     "insights",
     "workspace insights view",
   );
+  await markJavascriptPhase("insights");
 
   const schedule = query('[data-action="workspace-schedule"]');
   assert(schedule instanceof HTMLSelectElement, "workspace schedule is missing");
@@ -314,6 +324,7 @@ export async function executeTodoInteractionSequence({
     () => setControlValue(schedule, "weekly", "change"),
     () => workspaceHas("data-workspace-schedule", "weekly"),
   );
+  await markJavascriptPhase("schedule");
   durations.finalizeWorkspaceMs = await time(
     "final workspace reset",
     resetWorkspace,
@@ -435,6 +446,7 @@ export async function executeTodoInteractionSequence({
     "clear left a stale selection summary",
   );
   const remainingAfterClear = allItems().length;
+  await markJavascriptPhase("work-complete");
 
   const routeLink = (routeId) =>
     query(`[data-route-link="${routeId}"]`);

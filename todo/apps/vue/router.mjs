@@ -6,16 +6,20 @@ import {
   createRouter,
   createWebHistory,
 } from "vue-router";
-import ActivityPage from "./components/activity-page.vue";
-import SettingsPage from "./components/settings-page.vue";
 import TodoApp from "./components/todo-app.vue";
 
 const routes = [
   { component: TodoApp, path: "/" },
   { component: TodoApp, path: "/dynamic" },
   { component: TodoApp, path: "/cached" },
-  { component: ActivityPage, path: "/activity" },
-  { component: SettingsPage, path: "/settings" },
+  {
+    component: () => import("./components/activity-page.vue"),
+    path: "/activity",
+  },
+  {
+    component: () => import("./components/settings-page.vue"),
+    path: "/settings",
+  },
 ];
 
 export function createWorkspaceRouter({ server = false } = {}) {

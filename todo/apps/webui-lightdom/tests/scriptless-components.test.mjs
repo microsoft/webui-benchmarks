@@ -78,3 +78,25 @@ test("the app shell defers its authored graph until interaction", async () => {
   assert.match(entry, /import\("\.\/component-definitions\.js"\)/u);
   assert.doesNotMatch(entry, /^import \{ Router \}/mu);
 });
+
+test("workspace feature libraries load only for their interaction", async () => {
+  const source = await readFile(
+    resolve(
+      appRoot,
+      "src",
+      "workspace-intelligence",
+      "workspace-intelligence.ts",
+    ),
+    "utf8",
+  );
+  for (const feature of [
+    "workspace-search",
+    "workspace-csv",
+    "workspace-saved-view",
+    "workspace-analytics",
+    "workspace-schedule",
+  ]) {
+    assert.match(source, new RegExp(`import\\([^)]*${feature}`, "u"));
+  }
+  assert.doesNotMatch(source, /from .*workspace-intelligence\.mjs/u);
+});

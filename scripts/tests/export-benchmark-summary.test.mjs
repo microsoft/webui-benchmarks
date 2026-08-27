@@ -489,6 +489,7 @@ test("combines matching official browser outcomes", () => {
       "requestToFullHydrationMs",
       "initialJavascriptBytes",
       "hydrationJavascriptBytes",
+      "featureJavascriptBytes",
       "routeJavascriptBytes",
       "routeNavigationMs",
       "jsHeapUsedBytes",
@@ -498,7 +499,7 @@ test("combines matching official browser outcomes", () => {
   assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(
     summary.benchmarks.rows.every(
-      (row) => Object.keys(row.metrics).length === 10,
+      (row) => Object.keys(row.metrics).length === 11,
     ),
     true,
   );

@@ -15,7 +15,7 @@ import { createRouteController } from "./contract.mjs";
 import { runtimeVersion } from "./runtime.mjs";
 
 const protocolPath = fileURLToPath(
-  new URL("../../apps/webui/dist/protocol.bin", import.meta.url),
+  new URL("../../apps/webui-lightdom/dist/protocol.bin", import.meta.url),
 );
 function runtimeAvailable(runtimeId) {
   if (runtimeId === "bun") {

@@ -13,12 +13,34 @@
     selectWorkspaceView,
     setWorkspaceSchedule,
     toggleWorkspaceRow,
-  } from "../../../../../shared/workspace-intelligence.mjs";
+  } from "../../../../../shared/workspace-intelligence-client.mjs";
 
   export let state;
   export let onStateChange;
   $: model = state.intelligence;
-  const update = (reducer) => onStateChange(reducer(state));
+  let updateQueue = Promise.resolve();
+  const update = (reducer) => {
+    const run = async () => onStateChange(await reducer(() => state));
+    const operation = updateQueue.then(run, run);
+    updateQueue = operation;
+    return operation;
+  };
+
+  function applyFacet(event) {
+    const { facet } = event.currentTarget.dataset;
+    const { value } = event.currentTarget;
+    void update((current) => filterWorkspace(current, facet, value));
+  }
+
+  function applySchedule(event) {
+    const { value } = event.currentTarget;
+    void update((current) => setWorkspaceSchedule(current, value));
+  }
+
+  function applySearch(event) {
+    const { value } = event.currentTarget;
+    void update((current) => searchWorkspace(current, value));
+  }
 </script>
 
 <workspace-intelligence data-component="workspace-intelligence">
@@ -44,7 +66,7 @@
         <span>Search work</span>
         <input
           data-action="workspace-search"
-          on:input={(event) => update((value) => searchWorkspace(value, event.currentTarget.value))}
+          on:input={applySearch}
           placeholder="Title, owner, tag, status…"
           type="search"
           value={model.query}
@@ -61,7 +83,7 @@
           <select
             data-action="workspace-filter"
             data-facet={facet}
-            on:change={(event) => update((value) => filterWorkspace(value, facet, event.currentTarget.value))}
+            on:change={applyFacet}
             value={model[facet]}
           >
             {#each options as option (option.id)}
@@ -137,7 +159,7 @@
     <footer class="workspace-intelligence__automation">
       <details>
         <summary>Automation schedule · {model.schedulePreview.label}</summary>
-        <label><span>Digest cadence</span><select data-action="workspace-schedule" on:change={(event) => update((value) => setWorkspaceSchedule(value, event.currentTarget.value))} value={model.schedule}>{#each model.scheduleOptions as option (option.id)}<option value={option.id}>{option.label}</option>{/each}</select></label>
+        <label><span>Digest cadence</span><select data-action="workspace-schedule" on:change={applySchedule} value={model.schedule}>{#each model.scheduleOptions as option (option.id)}<option value={option.id}>{option.label}</option>{/each}</select></label>
         <p>Next run {model.schedulePreview.humanized}</p>
         <ol>{#each model.schedulePreview.dates as date (date.id)}<li>{date.label}</li>{/each}</ol>
       </details>

@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { build as buildLightFixture } from "../apps/webui/build.mjs";
+import { build as buildLightFixture } from "../apps/webui-lightdom/build.mjs";
 import { build as buildShadowFixture } from "../apps/webui-shadowdom/build.mjs";
 import { BENCHMARK_ROOT } from "../runner/lib/paths.mjs";
 import { writeStatePool } from "../servers/write-state-pool.mjs";
@@ -37,7 +37,7 @@ const lightProtocolPath = resolve(
   here,
   "..",
   "apps",
-  "webui",
+  "webui-lightdom",
   "dist",
   "protocol.bin",
 );

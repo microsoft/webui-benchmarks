@@ -13,11 +13,19 @@ import {
   selectWorkspaceView,
   setWorkspaceSchedule,
   toggleWorkspaceRow,
-} from "../../../shared/workspace-intelligence.mjs";
+} from "../../../shared/workspace-intelligence-client.mjs";
 
 export function WorkspaceIntelligence(props) {
   const model = () => props.state.intelligence;
-  const update = (reducer) => props.onStateChange(reducer(props.state));
+  let updateQueue = Promise.resolve();
+  const update = (reducer) => {
+    const run = async () => {
+      props.onStateChange(await reducer(() => props.state));
+    };
+    const operation = updateQueue.then(run, run);
+    updateQueue = operation;
+    return operation;
+  };
   return (
     <workspace-intelligence data-component="workspace-intelligence">
       <section
@@ -44,10 +52,10 @@ export function WorkspaceIntelligence(props) {
             <span>Search work</span>
             <input
               data-action="workspace-search"
-              onInput={(event) =>
-                update((state) =>
-                  searchWorkspace(state, event.currentTarget.value)
-                )}
+              onInput={(event) => {
+                const { value } = event.currentTarget;
+                void update((state) => searchWorkspace(state, value));
+              }}
               placeholder="Title, owner, tag, status…"
               type="search"
               value={model().query}
@@ -65,10 +73,12 @@ export function WorkspaceIntelligence(props) {
                 <select
                   data-action="workspace-filter"
                   data-facet={facet}
-                  onChange={(event) =>
-                    update((state) =>
-                      filterWorkspace(state, facet, event.currentTarget.value)
-                    )}
+                  onChange={(event) => {
+                    const { value } = event.currentTarget;
+                    void update((state) =>
+                      filterWorkspace(state, facet, value)
+                    );
+                  }}
                   value={model()[facet]}
                 >
                   <For each={options}>
@@ -156,7 +166,7 @@ export function WorkspaceIntelligence(props) {
         <footer class="workspace-intelligence__automation">
           <details>
             <summary>Automation schedule · {model().schedulePreview.label}</summary>
-            <label><span>Digest cadence</span><select data-action="workspace-schedule" onChange={(event) => update((state) => setWorkspaceSchedule(state, event.currentTarget.value))} value={model().schedule}><For each={model().scheduleOptions}>{(option) => <option value={option.id}>{option.label}</option>}</For></select></label>
+            <label><span>Digest cadence</span><select data-action="workspace-schedule" onChange={(event) => { const { value } = event.currentTarget; void update((state) => setWorkspaceSchedule(state, value)); }} value={model().schedule}><For each={model().scheduleOptions}>{(option) => <option value={option.id}>{option.label}</option>}</For></select></label>
             <p>Next run {model().schedulePreview.humanized}</p>
             <ol><For each={model().schedulePreview.dates}>{(date) => <li>{date.label}</li>}</For></ol>
           </details>
