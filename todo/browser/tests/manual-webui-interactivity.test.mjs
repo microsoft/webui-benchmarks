@@ -45,9 +45,14 @@ test(
                 ).count(),
                 1,
               );
-              await page.locator(
+              const search = page.locator(
                 '[data-action="workspace-search"]',
-              ).fill("Todo 0050");
+              );
+              await search.focus();
+              await page.waitForFunction(
+                () => globalThis.__TODO_BENCH_HYDRATED__?.status === "hydrated",
+              );
+              await search.fill("Todo 0050");
               await page.locator(
                 '.workspace-intelligence[data-result-count="1"]',
               ).waitFor();

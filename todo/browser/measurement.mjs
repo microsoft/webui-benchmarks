@@ -939,7 +939,9 @@ export async function measureBrowserRound({
       response.headers()["x-webui-browser-source-bytes"],
     );
     const readiness = await waitForReadiness(page, browserCase);
+    const initialJavascript = network.javascript();
     const fullHydration = await waitForFullHydration(page, browserCase);
+    const hydratedJavascript = network.javascript();
     const requestState = await page.evaluate(() => {
       const titles = Array.from(
         globalThis.__TODO_BENCH_QUERY_ALL__(".todo-item__title"),
@@ -1016,7 +1018,6 @@ export async function measureBrowserRound({
     );
     const rawMemory = await captureMemory(page, session, rendererSelection);
     const memory = memoryMetrics(rawMemory);
-    const initialJavascript = network.javascript();
     const interactions = await page.evaluate(
       executeTodoInteractionSequence,
       {
@@ -1075,20 +1076,31 @@ export async function measureBrowserRound({
             "external executable JavaScript plus executable inline script bytes; not total hydration payload",
           ),
           initialTransferBytes: availableMetric(
-          initialJavascript.externalTransferBytes + inlineJavascript.bytes,
-          "bytes",
-          "executable JavaScript transferred before the routed interaction journey",
+            initialJavascript.externalTransferBytes + inlineJavascript.bytes,
+            "bytes",
+            "executable JavaScript transferred before interaction-triggered hydration",
+          ),
+          hydrationRequestCount: availableMetric(
+            hydratedJavascript.requestCount - initialJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during interaction-triggered hydration",
+          ),
+          hydrationTransferBytes: availableMetric(
+            hydratedJavascript.externalTransferBytes
+              - initialJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during interaction-triggered hydration",
           ),
           routeRequestCount: availableMetric(
-          javascript.requestCount - initialJavascript.requestCount,
-          "count",
-          "additional executable JavaScript requests during client route transitions",
+            javascript.requestCount - hydratedJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during client route transitions",
           ),
           routeTransferBytes: availableMetric(
-          javascript.externalTransferBytes
-            - initialJavascript.externalTransferBytes,
-          "bytes",
-          "additional executable JavaScript transferred during client route transitions",
+            javascript.externalTransferBytes
+              - hydratedJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during client route transitions",
           ),
         }),
         longTasks: longTaskMetrics(rawTimings.longTasks),

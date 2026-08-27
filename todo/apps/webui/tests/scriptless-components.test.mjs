@@ -40,6 +40,7 @@ test("the browser component entry imports only authored behavior", async () => {
     "utf8",
   );
   assert.match(entry, /lazy-hydration\.js/u);
+  assert.match(entry, /app-shell\/app-shell\.js/u);
   assert.match(entry, /todo-app\/todo-app\.js/u);
   assert.match(entry, /workspace-intelligence\/workspace-intelligence\.js/u);
   assert.doesNotMatch(
@@ -56,4 +57,24 @@ test("todo rows use reserved viewport rendering and hydration", async () => {
   assert.match(template, /w-render="lazy"/u);
   assert.match(template, /w-reserve-block-size="18rem"/u);
   assert.doesNotMatch(template, /w-hydrate="lazy"/u);
+});
+
+test("the app shell defers its authored graph until interaction", async () => {
+  const [template, entry] = await Promise.all([
+    readFile(
+      resolve(appRoot, "src", "app-shell", "app-shell.html"),
+      "utf8",
+    ),
+    readFile(resolve(appRoot, "browser-entry.ts"), "utf8"),
+  ]);
+  assert.equal(
+    existsSync(resolve(appRoot, "src", "app-shell", "app-shell.ts")),
+    true,
+  );
+  assert.match(template, /w-hydrate="interaction"/u);
+  assert.match(entry, /installInteractionHydration/u);
+  assert.match(entry, /prepareRoutePreload/u);
+  assert.match(entry, /wakeInteractionHydration/u);
+  assert.match(entry, /import\("\.\/component-definitions\.js"\)/u);
+  assert.doesNotMatch(entry, /^import \{ Router \}/mu);
 });

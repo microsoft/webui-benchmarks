@@ -60,6 +60,8 @@ export const METRIC_PATHS = Object.freeze([
   "javascript.inlineBytes",
   "javascript.inlineCount",
   "javascript.initialTransferBytes",
+  "javascript.hydrationRequestCount",
+  "javascript.hydrationTransferBytes",
   "javascript.routeRequestCount",
   "javascript.routeTransferBytes",
   "javascript.transferBytes",

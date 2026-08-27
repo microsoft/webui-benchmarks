@@ -31,21 +31,23 @@ const HYDRATION_CLIENT_MODES = new Set([
 
 const CLIENT_METADATA = Object.freeze({
   webui: Object.freeze({
-    clientMode: "hydrate",
+    clientMode: "interaction-hydrate",
     directRustBrowserServer: true,
     hydration: Object.freeze({
-      framework: "@microsoft/webui-framework eager root hydration",
-      status: "supported",
+      framework:
+        "@microsoft/webui-framework interaction-triggered application hydration",
+      status: "deferred",
     }),
     initialStateSource: "ssr-document",
     label: "WebUI",
     lazyHydration: Object.freeze({
-      scope: "todo-item",
+      scope: "app-shell and todo-item",
       status: "supported",
-      strategy: 'w-render="lazy" w-reserve-block-size="18rem"',
+      strategy:
+        'w-hydrate="interaction" root; w-render="lazy" w-reserve-block-size="18rem" rows',
     }),
     readinessDefinition:
-      "The interactive root has hydrated, viewport-deferred rows are registered, and two animation frames have completed.",
+      "The SSR shell has painted, interaction hydration and route intent preloading are installed, and two animation frames have completed.",
     router: "@microsoft/webui-router",
   }),
   "webui-fast": Object.freeze({

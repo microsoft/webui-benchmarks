@@ -83,12 +83,23 @@ const metricDefinitions = Object.freeze([
   }),
   Object.freeze({
     description:
-      "Executable JavaScript transferred before the initial routed page becomes interactive.",
+      "Executable JavaScript transferred before interaction-triggered hydration begins.",
     direction: "lower",
     directionLabel: "lower is better",
     id: "initialJavascriptBytes",
     label: "Initial JavaScript",
     path: "javascript.initialTransferBytes",
+    sourceUnit: "bytes",
+    unit: "KiB",
+  }),
+  Object.freeze({
+    description:
+      "Additional executable JavaScript transferred while interaction-triggered hydration activates the application.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "hydrationJavascriptBytes",
+    label: "Hydration JavaScript",
+    path: "javascript.hydrationTransferBytes",
     sourceUnit: "bytes",
     unit: "KiB",
   }),

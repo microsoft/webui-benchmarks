@@ -99,8 +99,10 @@ Reports default to
   `requestToFullHydrationMs` starts at
   `PerformanceNavigationTiming.requestStart`, so it includes dynamic server
   response time, HTML transfer, external assets, execution, and startup
-  hydration. Viewport-deferred components follow their framework policy and do
-  not hold startup completion open while offscreen.
+  hydration. WebUI first publishes its painted SSR-shell readiness, then the
+  runner wakes interaction hydration and records that JavaScript separately.
+  Viewport-deferred components follow their framework policy and do not hold
+  startup completion open while offscreen.
 - Native viewport hydration is enabled only where the production framework
   supports it: WebUI uses `w-render="lazy"` with an `18rem` reservation on each
   todo row, Vue uses `hydrateOnVisible`, Nuxt uses `hydrate-on-visible`, and
@@ -108,10 +110,9 @@ Reports default to
   code splitting or selective scheduling but no built-in viewport hydration,
   so the benchmark records that capability as unavailable instead of adding a
   custom observer polyfill.
-- The WebUI entry ships one eager interactive-root bundle so full hydration has
-  no second-request or frame-delay waterfall. Viewport deferral remains active
-  for scriptless todo rows; interaction-only root hydration remains a separate
-  opt-in framework capability rather than this benchmark's startup policy.
+- WebUI Light and Shadow use `w-hydrate="interaction"` on the application shell
+  with router intent preloading. Their authored graph and router load only when
+  interaction begins; scriptless todo rows retain viewport rendering deferral.
 - After readiness, 29 browser-local timings first exercise the realistic
   workbench: exact search for `todo-0050`, three matching facets, sorting, row
   selection, CSV export, schema-validated saved views, archive/reset,
@@ -120,7 +121,8 @@ Reports default to
   Activity filtering/expansion/read state, Settings toggle/density/save, and
   return navigation. Every route waits for framework-authored interactive
   readiness and validates semantic DOM state.
-- JavaScript is split into initial and route-transition transfer bytes. WebUI
+- JavaScript is split into startup, interaction-hydration, and route-transition
+  transfer bytes. WebUI
   and FAST use `Router.start({ loaders })` so Activity and Settings are real
   dynamic imports. Framework-native route chunks are measured when their
   routers request them. Shared frozen server snapshots are hashed before and

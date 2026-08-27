@@ -210,9 +210,10 @@ keeps `benchmarksJson` synchronized with `benchmarks`.
 - Every response is a complete hydratable document. Publication evidence
   requires real hydration and the 29-step shared workbench/todo interaction
   sequence, followed by the canonical Activity and Settings route journey.
-- Browser evidence covers the full request-to-interactive lifecycle, initial
-  JavaScript transfer, lazy route JavaScript transfer, and interactive route
-  navigation—not only component render time.
+- Browser evidence covers the full request-to-interactive lifecycle, startup
+  JavaScript, interaction-hydration JavaScript, lazy route JavaScript, and
+  interactive route navigation—not only component render time. WebUI Light and
+  Shadow use `w-hydrate="interaction"` on the server-rendered application shell.
 - Every case uses one server process/worker pinned to one CPU, two load workers,
   two four-second saturation probes, a three-second warmup, and one twenty-second
   official measured round.
