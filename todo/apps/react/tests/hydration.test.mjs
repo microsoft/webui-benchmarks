@@ -54,10 +54,13 @@ test(
     try {
       const page = await browser.newPage();
       page.on("pageerror", (error) => pageErrors.push(String(error)));
-      await page.setContent(
-        `<!doctype html><html><head><meta charset="utf-8"><style>${renderer.css}</style></head><body><div id="todo-browser-root">${html}</div></body></html>`,
-        { waitUntil: "load" },
+      const document = `<!doctype html><html><head><meta charset="utf-8"><style>${renderer.css}</style></head><body><div id="todo-browser-root">${html}</div></body></html>`;
+      await page.route("http://todo-benchmark.test/dynamic", (route) =>
+        route.fulfill({ body: document, contentType: "text/html" })
       );
+      await page.goto("http://todo-benchmark.test/dynamic", {
+        waitUntil: "load",
+      });
 
       const countItems = () =>
         page.$$eval(`${ROOT_SELECTOR} ${ITEM_SELECTOR}`, (nodes) => nodes.length);

@@ -1,3 +1,320 @@
 {
-  "version": "5"
+  "version": "5",
+  "specifiers": {
+    "npm:d3-dsv@3.0.1": "3.0.1",
+    "npm:d3@7.9.0": "7.9.0",
+    "npm:date-fns@4.4.0": "4.4.0",
+    "npm:immer@11.1.18": "11.1.18",
+    "npm:minisearch@7.2.0": "7.2.0",
+    "npm:rrule@2.8.1": "2.8.1",
+    "npm:zod@4.4.3": "4.4.3"
+  },
+  "npm": {
+    "commander@7.2.0": {
+      "integrity": "a36cb57d0b501ce108e4d20559a150a391d97ab7",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/commander/-/commander-7.2.0.tgz"
+    },
+    "d3-array@3.2.4": {
+      "integrity": "15fec33b237f97ac5d7c986dc77da273a8ed0bb5",
+      "dependencies": [
+        "internmap"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-array/-/d3-array-3.2.4.tgz"
+    },
+    "d3-axis@3.0.0": {
+      "integrity": "c42a4a13e8131d637b745fc2973824cfeaf93322",
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-axis/-/d3-axis-3.0.0.tgz"
+    },
+    "d3-brush@3.0.0": {
+      "integrity": "6f767c4ed8dcb79de7ede3e1c0f89e63ef64d31c",
+      "dependencies": [
+        "d3-dispatch",
+        "d3-drag",
+        "d3-interpolate",
+        "d3-selection",
+        "d3-transition"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-brush/-/d3-brush-3.0.0.tgz"
+    },
+    "d3-chord@3.0.1": {
+      "integrity": "d156d61f485fce8327e6abf339cb41d8cbba6966",
+      "dependencies": [
+        "d3-path"
+      ],
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-chord/-/d3-chord-3.0.1.tgz"
+    },
+    "d3-color@3.1.0": {
+      "integrity": "395b2833dfac71507f12ac2f7af23bf819de24e2",
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-color/-/d3-color-3.1.0.tgz"
+    },
+    "d3-contour@4.0.2": {
+      "integrity": "bb92063bc8c5663acb2422f99c73cbb6c6ae3bcc",
+      "dependencies": [
+        "d3-array"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-contour/-/d3-contour-4.0.2.tgz"
+    },
+    "d3-delaunay@6.0.4": {
+      "integrity": "98169038733a0a5babbeda55054f795bb9e4a58b",
+      "dependencies": [
+        "delaunator"
+      ],
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-delaunay/-/d3-delaunay-6.0.4.tgz"
+    },
+    "d3-dispatch@3.0.1": {
+      "integrity": "5fc75284e9c2375c36c839411a0cf550cbfc4d5e",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-dispatch/-/d3-dispatch-3.0.1.tgz"
+    },
+    "d3-drag@3.0.0": {
+      "integrity": "994aae9cd23c719f53b5e10e3a0a6108c69607ba",
+      "dependencies": [
+        "d3-dispatch",
+        "d3-selection"
+      ],
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-drag/-/d3-drag-3.0.0.tgz"
+    },
+    "d3-dsv@3.0.1": {
+      "integrity": "c63af978f4d6a0d084a52a673922be2160789b73",
+      "dependencies": [
+        "commander",
+        "iconv-lite",
+        "rw"
+      ],
+      "bin": true,
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-dsv/-/d3-dsv-3.0.1.tgz"
+    },
+    "d3-ease@3.0.1": {
+      "integrity": "9658ac38a2140d59d346160f1f6c30fda0bd12f4",
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-ease/-/d3-ease-3.0.1.tgz"
+    },
+    "d3-fetch@3.0.1": {
+      "integrity": "83141bff9856a0edb5e38de89cdcfe63d0a60a22",
+      "dependencies": [
+        "d3-dsv"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-fetch/-/d3-fetch-3.0.1.tgz"
+    },
+    "d3-force@3.0.0": {
+      "integrity": "3e2ba1a61e70888fe3d9194e30d6d14eece155c4",
+      "dependencies": [
+        "d3-dispatch",
+        "d3-quadtree",
+        "d3-timer"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-force/-/d3-force-3.0.0.tgz"
+    },
+    "d3-format@3.1.2": {
+      "integrity": "01fdb46b58beb1f55b10b42ad70b6e344d5eb2ae",
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-format/-/d3-format-3.1.2.tgz"
+    },
+    "d3-geo@3.1.1": {
+      "integrity": "6027cf51246f9b2ebd64f99e01dc7c3364033a4d",
+      "dependencies": [
+        "d3-array"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-geo/-/d3-geo-3.1.1.tgz"
+    },
+    "d3-hierarchy@3.1.2": {
+      "integrity": "b01cd42c1eed3d46db77a5966cf726f8c09160c6",
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-hierarchy/-/d3-hierarchy-3.1.2.tgz"
+    },
+    "d3-interpolate@3.0.1": {
+      "integrity": "3c47aa5b32c5b3dfb56ef3fd4342078a632b400d",
+      "dependencies": [
+        "d3-color"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-interpolate/-/d3-interpolate-3.0.1.tgz"
+    },
+    "d3-path@3.1.0": {
+      "integrity": "22df939032fb5a71ae8b1800d61ddb7851c42526",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-path/-/d3-path-3.1.0.tgz"
+    },
+    "d3-polygon@3.0.1": {
+      "integrity": "0b45d3dd1c48a29c8e057e6135693ec80bf16398",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-polygon/-/d3-polygon-3.0.1.tgz"
+    },
+    "d3-quadtree@3.0.1": {
+      "integrity": "6dca3e8be2b393c9a9d514dabbd80a92deef1a4f",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-quadtree/-/d3-quadtree-3.0.1.tgz"
+    },
+    "d3-random@3.0.1": {
+      "integrity": "d4926378d333d9c0bfd1e6fa0194d30aebaa20f4",
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-random/-/d3-random-3.0.1.tgz"
+    },
+    "d3-scale-chromatic@3.1.0": {
+      "integrity": "34c39da298b23c20e02f1a4b239bd0f22e7f1314",
+      "dependencies": [
+        "d3-color",
+        "d3-interpolate"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-scale-chromatic/-/d3-scale-chromatic-3.1.0.tgz"
+    },
+    "d3-scale@4.0.2": {
+      "integrity": "82b38e8e8ff7080764f8dcec77bd4be393689396",
+      "dependencies": [
+        "d3-array",
+        "d3-format",
+        "d3-interpolate",
+        "d3-time",
+        "d3-time-format"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-scale/-/d3-scale-4.0.2.tgz"
+    },
+    "d3-selection@3.0.0": {
+      "integrity": "c25338207efa72cc5b9bd1458a1a41901f1e1b31",
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-selection/-/d3-selection-3.0.0.tgz"
+    },
+    "d3-shape@3.2.0": {
+      "integrity": "a1a839cbd9ba45f28674c69d7f855bcf91dfc6a5",
+      "dependencies": [
+        "d3-path"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-shape/-/d3-shape-3.2.0.tgz"
+    },
+    "d3-time-format@4.1.0": {
+      "integrity": "7ab5257a5041d11ecb4fe70a5c7d16a195bb408a",
+      "dependencies": [
+        "d3-time"
+      ],
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-time-format/-/d3-time-format-4.1.0.tgz"
+    },
+    "d3-time@3.1.0": {
+      "integrity": "9310db56e992e3c0175e1ef385e545e48a9bb5c7",
+      "dependencies": [
+        "d3-array"
+      ],
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-time/-/d3-time-3.1.0.tgz"
+    },
+    "d3-timer@3.0.1": {
+      "integrity": "6284d2a2708285b1abb7e201eda4380af35e63b0",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-timer/-/d3-timer-3.0.1.tgz"
+    },
+    "d3-transition@3.0.1_d3-selection@3.0.0": {
+      "integrity": "6869fdde1448868077fdd5989200cb61b2a1645f",
+      "dependencies": [
+        "d3-color",
+        "d3-dispatch",
+        "d3-ease",
+        "d3-interpolate",
+        "d3-selection",
+        "d3-timer"
+      ],
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-transition/-/d3-transition-3.0.1.tgz"
+    },
+    "d3-zoom@3.0.0": {
+      "integrity": "d13f4165c73217ffeaa54295cd6969b3e7aee8f3",
+      "dependencies": [
+        "d3-dispatch",
+        "d3-drag",
+        "d3-interpolate",
+        "d3-selection",
+        "d3-transition"
+      ],
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3-zoom/-/d3-zoom-3.0.0.tgz"
+    },
+    "d3@7.9.0": {
+      "integrity": "579e7acb3d749caf8860bd1741ae8d371070cd5d",
+      "dependencies": [
+        "d3-array",
+        "d3-axis",
+        "d3-brush",
+        "d3-chord",
+        "d3-color",
+        "d3-contour",
+        "d3-delaunay",
+        "d3-dispatch",
+        "d3-drag",
+        "d3-dsv",
+        "d3-ease",
+        "d3-fetch",
+        "d3-force",
+        "d3-format",
+        "d3-geo",
+        "d3-hierarchy",
+        "d3-interpolate",
+        "d3-path",
+        "d3-polygon",
+        "d3-quadtree",
+        "d3-random",
+        "d3-scale",
+        "d3-scale-chromatic",
+        "d3-selection",
+        "d3-shape",
+        "d3-time",
+        "d3-time-format",
+        "d3-timer",
+        "d3-transition",
+        "d3-zoom"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/d3/-/d3-7.9.0.tgz"
+    },
+    "date-fns@4.4.0": {
+      "integrity": "806539edf45c616b2b76b5f78b88c56ed3c7e036",
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/date-fns/-/date-fns-4.4.0.tgz"
+    },
+    "delaunator@5.1.0": {
+      "integrity": "d13271fbf3aff6753f9ea6e235557f20901046ea",
+      "dependencies": [
+        "robust-predicates"
+      ],
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/delaunator/-/delaunator-5.1.0.tgz"
+    },
+    "iconv-lite@0.6.3": {
+      "integrity": "a52f80bf38da1952eb5c681790719871a1a72501",
+      "dependencies": [
+        "safer-buffer"
+      ],
+      "tarball": "https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/iconv-lite/-/iconv-lite-0.6.3.tgz"
+    },
+    "immer@11.1.18": {
+      "integrity": "87d9bced1e25157dc23bced66811de89460ec8f3",
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/immer/-/immer-11.1.18.tgz"
+    },
+    "internmap@2.0.3": {
+      "integrity": "6685f23755e43c524e251d29cbc97248e3061009",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/internmap/-/internmap-2.0.3.tgz"
+    },
+    "minisearch@7.2.0": {
+      "integrity": "3dc30e41e9464b3836553b6d969b656614f8f359",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/minisearch/-/minisearch-7.2.0.tgz"
+    },
+    "robust-predicates@3.0.3": {
+      "integrity": "1099061b3349e2c5abec6c2ab0acd440d24d4062",
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/robust-predicates/-/robust-predicates-3.0.3.tgz"
+    },
+    "rrule@2.8.1": {
+      "integrity": "e8341a9ce3e68ce5b8da4d502e893cd9f286805e",
+      "dependencies": [
+        "tslib"
+      ],
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rrule/-/rrule-2.8.1.tgz"
+    },
+    "rw@1.3.3": {
+      "integrity": "3f862dfa91ab766b14885ef4d01124bfda074fb4",
+      "tarball": "https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rw/-/rw-1.3.3.tgz"
+    },
+    "safer-buffer@2.1.2": {
+      "integrity": "44fa161b0187b9549dd84bb91802f9bd8385cd6a",
+      "tarball": "https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/safer-buffer/-/safer-buffer-2.1.2.tgz"
+    },
+    "tslib@2.8.1": {
+      "integrity": "612efe4ed235d567e8aba5f2a5fab70280ade83f",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/tslib/-/tslib-2.8.1.tgz"
+    },
+    "zod@4.4.3": {
+      "integrity": "b680f172885d18bbebf21a834ea25e55a1bbf356",
+      "tarball": "https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.4.3.tgz"
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:d3-dsv@3.0.1",
+      "npm:d3@7.9.0",
+      "npm:date-fns@4.4.0",
+      "npm:immer@11.1.18",
+      "npm:minisearch@7.2.0",
+      "npm:rrule@2.8.1",
+      "npm:zod@4.4.3"
+    ]
+  }
 }

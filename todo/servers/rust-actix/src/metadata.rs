@@ -30,9 +30,11 @@ struct ResponseBytes {
 
 #[derive(Serialize)]
 struct Routes<'a> {
+    activity: &'a str,
     cached: &'a str,
     dynamic: &'a str,
     ready: &'a str,
+    settings: &'a str,
 }
 
 #[derive(Serialize)]
@@ -89,9 +91,11 @@ pub(crate) fn build_metadata(
             },
         },
         routes: Routes {
+            activity: "/activity",
             cached: "/cached",
             dynamic: "/dynamic",
             ready: "/__bench/ready",
+            settings: "/settings",
         },
         runtime_id: "rust",
         runtime_version: "native",

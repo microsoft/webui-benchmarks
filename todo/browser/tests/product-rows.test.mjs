@@ -7,6 +7,7 @@ import {
   PRODUCT_ORDER,
   createBrowserCases,
 } from "../apps.mjs";
+import { serveAllBrowserApps } from "../serve-all.mjs";
 import {
   enforceProductionMode,
   normalizeOptions,
@@ -26,17 +27,18 @@ const EXPECTED_PRODUCTS = Object.freeze([
   "vue",
   "preact",
   "react",
+  "react-tanstack",
   "solid",
 ]);
 
-test("browser suite contains the definitive 14 product rows", () => {
+test("browser suite contains the definitive 15 product rows", () => {
   const cases = createBrowserCases();
   assert.deepEqual(PRODUCT_ORDER, EXPECTED_PRODUCTS);
   assert.deepEqual(
     cases.map(({ productId }) => productId),
     EXPECTED_PRODUCTS,
   );
-  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 14);
+  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 15);
   assert.ok(
     cases.every(({ clientMode, hydration }) =>
       hydration.status !== "unsupported"
@@ -45,6 +47,20 @@ test("browser suite contains the definitive 14 product rows", () => {
     ),
     "every browser product must use a real framework hydration path",
   );
+  assert.ok(
+    cases.every(
+      ({ routing }) =>
+        routing.clientNavigation === "supported"
+        && routing.router.length > 0
+        && routing.journey.join(",")
+          === "/dynamic,/activity,/settings,/dynamic",
+    ),
+    "every browser product must use its production client router",
+  );
+});
+
+test("exports the all-product manual preview launcher", () => {
+  assert.equal(typeof serveAllBrowserApps, "function");
 });
 
 test("WebUI app filter selects the five base DOM/transport products", () => {
@@ -102,14 +118,14 @@ test("records only native viewport hydration capabilities", () => {
   ]);
 });
 
-test("official options require exactly seven rounds and the complete matrix", () => {
+test("official options require exactly ten rounds and the complete matrix", () => {
   assert.throws(
     () => normalizeOptions({ appFilters: ["react"], mode: "official" }),
     /complete product matrix/u,
   );
   assert.throws(
-    () => normalizeOptions({ mode: "official", rounds: 6 }),
-    /exactly 7 rounds/u,
+    () => normalizeOptions({ mode: "official", rounds: 9 }),
+    /exactly 10 rounds/u,
   );
   assert.equal(
     normalizeOptions({ appFilters: ["react"], mode: "quick" }).rounds,

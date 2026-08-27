@@ -34,8 +34,8 @@ export function createRenderer() {
       ...metadata,
       bootstrap: renderHydrationScript(),
       css,
-      render(state = defaultState) {
-        return renderTodo(state);
+      render(state = defaultState, requestPath = "/dynamic") {
+        return renderTodo(state, requestPath);
       },
     });
   });

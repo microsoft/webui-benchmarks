@@ -15,12 +15,13 @@ import { TodoHeader } from "./todo-header.jsx";
 import { TodoList } from "./todo-list.jsx";
 import { TodoSummary } from "./todo-summary.jsx";
 import { TodoToolbar } from "./todo-toolbar.jsx";
+import { WorkspaceIntelligence } from "./workspace-intelligence.jsx";
 
-export function TodoApp({ state }) {
+export function TodoApp({ hydrationId = "react", state }) {
   const [current, setCurrent] = useState(state);
   useEffect(() => {
-    publishHydrated("react");
-  }, []);
+    publishHydrated(hydrationId);
+  }, [hydrationId]);
 
   function handleFilter(filterId) {
     setCurrent((value) => filterTodos(value, filterId));
@@ -40,9 +41,17 @@ export function TodoApp({ state }) {
 
   return (
     <todo-app data-component="todo-app" data-variant-id={current.variantId}>
-      <main aria-labelledby="todo-app-title" className="todo-app">
+      <main
+        aria-labelledby="todo-app-title"
+        className="todo-app"
+        data-route-page="work"
+      >
         <TodoHeader app={current.app} variantLabel={current.variantLabel} />
         <TodoSummary summary={current.summary} />
+        <WorkspaceIntelligence
+          current={current}
+          onStateChange={setCurrent}
+        />
         <TodoToolbar
           onClear={handleClearCompleted}
           onFilter={handleFilter}

@@ -48,7 +48,7 @@ impl ServerConfig {
             host: "127.0.0.1".to_owned(),
             port: 3006,
             plugin: HydrationPlugin::WebUi,
-            protocol_path: manifest_dir.join("../../apps/webui/dist/protocol.bin"),
+            protocol_path: manifest_dir.join("../../apps/webui-lightdom/dist/protocol.bin"),
             states_path: manifest_dir.join("../generated/todo-states.json"),
             tls: false,
         };

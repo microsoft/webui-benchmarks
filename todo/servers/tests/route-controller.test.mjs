@@ -119,7 +119,10 @@ test("renderer route emits a hydratable document with request state", async () =
   const body = result.body.toString("utf8");
   assert.match(body, /^<!doctype html>/u);
   assert.match(body, /id="todo-browser-root"/u);
-  assert.match(body, /globalThis\.__TODO_BENCH_INITIAL_STATE__/u);
+  assert.match(
+    body,
+    /<script id="todo-bench-initial-state" type="application\/json">/u,
+  );
   assert.match(body, /"requestTimestamp":/u);
   assert.match(body, /<script type="module" src="\/__browser\/react\.js">/u);
 });

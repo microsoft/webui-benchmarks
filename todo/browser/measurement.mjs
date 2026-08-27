@@ -6,7 +6,10 @@ import {
   metricFromOptional,
   unavailableMetric,
 } from "./metrics.mjs";
-import { executeTodoInteractionSequence } from "./interactions.mjs";
+import {
+  CANONICAL_INTERACTION_STEP_IDS,
+  executeTodoInteractionSequence,
+} from "./interactions.mjs";
 import { sampleRendererProcessMemory } from "./process-memory.mjs";
 import {
   captureProcessInfo,
@@ -826,14 +829,18 @@ function interactionMetrics(result) {
     );
   return Object.freeze({
     evidence: Object.freeze(result.evidence),
-    steps: Object.freeze({
-      clearCompletedMs: step("clearCompletedMs"),
-      filterAllMs: step("filterAllMs"),
-      filterCompletedMs: step("filterCompletedMs"),
-      filterPendingMs: step("filterPendingMs"),
-      selectSentinelMs: step("selectSentinelMs"),
-      toggleCompletionMs: step("toggleCompletionMs"),
-    }),
+    routeNavigationTotalMs: availableMetric(
+      result.durations.navigateActivityMs
+        + result.durations.navigateSettingsMs
+        + result.durations.navigateWorkMs,
+      "milliseconds",
+      "sum of client route transition durations",
+    ),
+    steps: Object.freeze(
+      Object.fromEntries(
+        CANONICAL_INTERACTION_STEP_IDS.map((name) => [name, step(name)]),
+      ),
+    ),
     totalDurationMs: availableMetric(
       result.totalDurationMs,
       "milliseconds",
@@ -856,7 +863,18 @@ async function validateSolidSemanticDom(page, response, browserCase) {
   ) {
     throw new Error("Controlled browser response omitted its state variant");
   }
-  const html = await page.locator("#todo-browser-root").innerHTML();
+  const html = await page.locator("#todo-browser-root").evaluate((root) => {
+    const clone = root.cloneNode(true);
+    const liveCheckboxes = root.querySelectorAll('input[type="checkbox"]');
+    const clonedCheckboxes = clone.querySelectorAll('input[type="checkbox"]');
+    for (let index = 0; index < liveCheckboxes.length; index += 1) {
+      clonedCheckboxes[index]?.toggleAttribute(
+        "checked",
+        liveCheckboxes[index].checked,
+      );
+    }
+    return clone.innerHTML;
+  });
   const requestTimestamp = response.headers()["x-webui-bench-timestamp"];
   if (typeof requestTimestamp !== "string") {
     throw new Error("Controlled browser response omitted its request timestamp");
@@ -902,6 +920,13 @@ export async function measureBrowserRound({
   const session = await context.newCDPSession(page);
   const browserSession = await browser.newBrowserCDPSession();
   const network = new NetworkCollector(session);
+  const javascriptPhases = new Map();
+  await page.exposeFunction(
+    "__TODO_BENCH_JAVASCRIPT_PHASE__",
+    (phase) => {
+      javascriptPhases.set(phase, network.javascript());
+    },
+  );
   try {
     await session.send("Network.enable");
     await session.send("Performance.enable");
@@ -921,7 +946,9 @@ export async function measureBrowserRound({
       response.headers()["x-webui-browser-source-bytes"],
     );
     const readiness = await waitForReadiness(page, browserCase);
+    const initialJavascript = network.javascript();
     const fullHydration = await waitForFullHydration(page, browserCase);
+    const hydratedJavascript = network.javascript();
     const requestState = await page.evaluate(() => {
       const titles = Array.from(
         globalThis.__TODO_BENCH_QUERY_ALL__(".todo-item__title"),
@@ -1000,8 +1027,31 @@ export async function measureBrowserRound({
     const memory = memoryMetrics(rawMemory);
     const interactions = await page.evaluate(
       executeTodoInteractionSequence,
-      { sentinelId: "todo-0050", timeoutMs: 10_000 },
+      {
+        activitySentinelId: "activity-0026",
+        sentinelId: "todo-0050",
+        timeoutMs: 10_000,
+      },
     );
+    const requiredJavascriptPhases = [
+      "search",
+      "export",
+      "saved-view",
+      "insights",
+      "schedule",
+      "work-complete",
+    ];
+    for (const phase of requiredJavascriptPhases) {
+      if (!javascriptPhases.has(phase)) {
+        throw new Error(`Interaction journey omitted JavaScript phase '${phase}'`);
+      }
+    }
+    const searchJavascript = javascriptPhases.get("search");
+    const exportJavascript = javascriptPhases.get("export");
+    const savedViewJavascript = javascriptPhases.get("saved-view");
+    const insightsJavascript = javascriptPhases.get("insights");
+    const scheduleJavascript = javascriptPhases.get("schedule");
+    const workJavascript = javascriptPhases.get("work-complete");
     const javascript = network.javascript();
     return Object.freeze({
       diagnostics: Object.freeze(diagnostics),
@@ -1050,6 +1100,76 @@ export async function measureBrowserRound({
             javascript.externalTransferBytes + inlineJavascript.bytes,
             "bytes",
             "external executable JavaScript plus executable inline script bytes; not total hydration payload",
+          ),
+          initialTransferBytes: availableMetric(
+            initialJavascript.externalTransferBytes + inlineJavascript.bytes,
+            "bytes",
+            "executable JavaScript transferred before interaction-triggered hydration",
+          ),
+          hydrationRequestCount: availableMetric(
+            hydratedJavascript.requestCount - initialJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during interaction-triggered hydration",
+          ),
+          hydrationTransferBytes: availableMetric(
+            hydratedJavascript.externalTransferBytes
+              - initialJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during interaction-triggered hydration",
+          ),
+          featureRequestCount: availableMetric(
+            workJavascript.requestCount - hydratedJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during Work-route feature interactions",
+          ),
+          featureTransferBytes: availableMetric(
+            workJavascript.externalTransferBytes
+              - hydratedJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during Work-route feature interactions",
+          ),
+          features: Object.freeze({
+            searchTransferBytes: availableMetric(
+              searchJavascript.externalTransferBytes
+                - hydratedJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Search interaction",
+            ),
+            exportTransferBytes: availableMetric(
+              exportJavascript.externalTransferBytes
+                - searchJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Export interaction",
+            ),
+            savedViewTransferBytes: availableMetric(
+              savedViewJavascript.externalTransferBytes
+                - exportJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Save View interaction",
+            ),
+            insightsTransferBytes: availableMetric(
+              insightsJavascript.externalTransferBytes
+                - savedViewJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Insights interaction",
+            ),
+            scheduleTransferBytes: availableMetric(
+              scheduleJavascript.externalTransferBytes
+                - insightsJavascript.externalTransferBytes,
+              "bytes",
+              "JavaScript transferred by the Schedule interaction",
+            ),
+          }),
+          routeRequestCount: availableMetric(
+            javascript.requestCount - workJavascript.requestCount,
+            "count",
+            "additional executable JavaScript requests during client route transitions",
+          ),
+          routeTransferBytes: availableMetric(
+            javascript.externalTransferBytes
+              - workJavascript.externalTransferBytes,
+            "bytes",
+            "additional executable JavaScript transferred during client route transitions",
           ),
         }),
         longTasks: longTaskMetrics(rawTimings.longTasks),

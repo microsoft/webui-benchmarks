@@ -13,7 +13,7 @@ function writeResponse(response, result) {
 export async function startNodeHttp(controller, { host, port }) {
   const dispatch = createRequestDispatcher(controller);
   const server = createServer((request, response) => {
-    void dispatch(request.url ?? "/", request.method).then(
+    void dispatch(request.url ?? "/", request.method, request.headers).then(
       (result) => writeResponse(response, result),
       (error) => writeResponse(response, internalErrorResponse(error)),
     );

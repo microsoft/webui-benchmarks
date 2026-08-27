@@ -3,6 +3,7 @@
 // Licensed under the MIT license.
 
 import TodoApp from "../components/todo-app.astro";
+import WorkspaceLayout from "../layouts/workspace-layout.astro";
 import { nextDynamicTodoState } from "../lib/server-state.mjs";
 
 export const prerender = false;
@@ -14,17 +15,9 @@ Astro.response.headers.set(
 const initialState = nextDynamicTodoState();
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dynamic SSR · SSR Todo Benchmark</title>
-  </head>
-  <body>
-    <TodoApp
-      initialState={initialState}
-      renderMode="dynamic"
-    />
-  </body>
-</html>
+<WorkspaceLayout title="Dynamic SSR · SSR Todo Benchmark">
+  <TodoApp
+    initialState={initialState}
+    renderMode="dynamic"
+  />
+</WorkspaceLayout>

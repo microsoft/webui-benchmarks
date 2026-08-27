@@ -2,7 +2,11 @@
 // Licensed under the MIT license.
 
 export function initialState() {
-  const state = globalThis.__TODO_BENCH_INITIAL_STATE__;
+  const element = document.querySelector("#todo-bench-initial-state");
+  if (!(element instanceof HTMLScriptElement)) {
+    throw new Error("The browser benchmark did not provide initial state");
+  }
+  const state = JSON.parse(element.textContent ?? "");
   if (state === null || typeof state !== "object") {
     throw new Error("The browser benchmark did not provide initial state");
   }

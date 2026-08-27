@@ -29,7 +29,9 @@ export async function startDenoWebuiServer(options) {
     },
     async (request) => {
       try {
-        return toFetchResponse(await dispatch(request.url, request.method));
+        return toFetchResponse(
+          await dispatch(request.url, request.method, request.headers),
+        );
       } catch (error) {
         return toFetchResponse(internalErrorResponse(error));
       }

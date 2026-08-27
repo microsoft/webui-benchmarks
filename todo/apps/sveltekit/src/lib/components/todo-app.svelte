@@ -4,12 +4,14 @@
 <script>
   import { BRANCHES } from "../../../../../shared/contract.mjs";
   import { publishHydrated } from "../../../../../shared/hydration.mjs";
+  import { createClientWorkspaceIntelligence } from "../../../../../shared/workspace-intelligence-client.mjs";
   import { onMount } from "svelte";
   import TodoFooter from "./todo-footer.svelte";
   import TodoHeader from "./todo-header.svelte";
   import TodoList from "./todo-list.svelte";
   import TodoSummary from "./todo-summary.svelte";
   import TodoToolbar from "./todo-toolbar.svelte";
+  import WorkspaceIntelligence from "./workspace-intelligence.svelte";
 
   export let initialState;
   export let renderMode;
@@ -69,6 +71,7 @@
         ...current.footer,
         itemCountLabel: plural(totalCount, "item"),
       },
+      intelligence: createClientWorkspaceIntelligence(todos, current.intelligence),
       selection: {
         todoId: selectedTodo?.id ?? "",
         label: selectedTodo ? `Selected ${selectedTodo.id}` : "No todo selected",
@@ -171,11 +174,16 @@
 
 <main
   class="todo-app"
+  data-route-page="work"
   data-render-mode={renderMode}
   data-variant-id={state.variantId}
 >
   <TodoHeader app={state.app} variantLabel={state.variantLabel} />
   <TodoSummary summary={state.summary} />
+  <WorkspaceIntelligence
+    {state}
+    onStateChange={(next) => state = next}
+  />
   <TodoToolbar
     onClearCompleted={clearCompleted}
     onFilter={filterTodos}

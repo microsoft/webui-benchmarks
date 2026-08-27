@@ -21,7 +21,7 @@ rustls = "=0.23.41"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.150", features = ["raw_value"] }
 time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
-microsoft-webui-handler = "=0.0.25"
+microsoft-webui-handler = "=0.0.26"
 
 [workspace.lints.clippy]
 perf = { level = "deny", priority = -1 }

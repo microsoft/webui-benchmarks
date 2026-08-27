@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 import { summarizeSeries } from "../runner/lib/statistics.mjs";
+import { CANONICAL_INTERACTION_STEP_IDS } from "./interactions.mjs";
 
 export function availableMetric(value, unit, source) {
   if (!Number.isFinite(value)) {
@@ -58,6 +59,18 @@ export const METRIC_PATHS = Object.freeze([
   "javascript.externalTransferBytes",
   "javascript.inlineBytes",
   "javascript.inlineCount",
+  "javascript.initialTransferBytes",
+  "javascript.hydrationRequestCount",
+  "javascript.hydrationTransferBytes",
+  "javascript.featureRequestCount",
+  "javascript.featureTransferBytes",
+  "javascript.features.searchTransferBytes",
+  "javascript.features.exportTransferBytes",
+  "javascript.features.savedViewTransferBytes",
+  "javascript.features.insightsTransferBytes",
+  "javascript.features.scheduleTransferBytes",
+  "javascript.routeRequestCount",
+  "javascript.routeTransferBytes",
   "javascript.transferBytes",
   "javascript.requestCount",
   "timings.domContentLoadedMs",
@@ -90,12 +103,10 @@ export const METRIC_PATHS = Object.freeze([
   "memory.rendererPrivateBytes",
   "memory.rendererWorkingSetBytes",
   "interactions.totalDurationMs",
-  "interactions.steps.filterPendingMs",
-  "interactions.steps.filterCompletedMs",
-  "interactions.steps.filterAllMs",
-  "interactions.steps.selectSentinelMs",
-  "interactions.steps.toggleCompletionMs",
-  "interactions.steps.clearCompletedMs",
+  "interactions.routeNavigationTotalMs",
+  ...CANONICAL_INTERACTION_STEP_IDS.map(
+    (stepId) => `interactions.steps.${stepId}`,
+  ),
 ]);
 
 export function aggregateMetric(metrics) {

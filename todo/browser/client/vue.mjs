@@ -11,7 +11,7 @@ import {
 
 const startedAt = performance.now();
 try {
-  hydrateTodo(benchmarkTarget(), initialState());
+  await hydrateTodo(benchmarkTarget(), initialState());
   await publishReady({
     clientMode: "hydrate",
     hydrationStatus: "supported",

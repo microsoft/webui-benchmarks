@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { isMainModule } from "../todo/servers/lib/cli.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const primaryWebuiCaseId = "webui-rust-actix";
 const webuiCaseIdPattern = /^webui(?:-|$)/u;
 
 function objectAt(value, path) {
@@ -137,16 +138,16 @@ function webuiDescription(description, count) {
   if (typeof description === "string") {
     const filtered = description.replace(
       /^Compare \d+ product paths\b/u,
-      `Compare ${count} WebUI product paths`,
+      `Compare ${count} WebUI product ${count === 1 ? "path" : "paths"}`,
     );
     if (filtered !== description) {
       return filtered;
     }
   }
-  return `Compare ${count} WebUI product paths across the published benchmark metrics.`;
+  return `Compare ${count} WebUI product ${count === 1 ? "path" : "paths"} across the published benchmark metrics.`;
 }
 
-export function buildWebuiBenchmarkSummary(summary) {
+export function buildWebuiBenchmarkSummary(summary, { all = false } = {}) {
   const source = objectAt(summary, "summary");
   const benchmarks = objectAt(source.benchmarks, "summary.benchmarks");
   if (!Array.isArray(benchmarks.rows)) {
@@ -159,7 +160,7 @@ export function buildWebuiBenchmarkSummary(summary) {
     benchmarks.selectedMetric,
     "summary.benchmarks.selectedMetric",
   );
-  const rows = benchmarks.rows.filter((candidate, index) => {
+  const webuiRows = benchmarks.rows.filter((candidate, index) => {
     const row = objectAt(candidate, `summary.benchmarks.rows[${index}]`);
     const caseId = stringAt(
       row.caseId,
@@ -169,9 +170,27 @@ export function buildWebuiBenchmarkSummary(summary) {
     objectAt(row.metrics, `summary.benchmarks.rows[${index}].metrics`);
     return webuiCaseIdPattern.test(caseId);
   });
+  const rows = all
+    ? webuiRows
+    : webuiRows.filter(({ caseId }) => caseId === primaryWebuiCaseId);
   if (rows.length === 0) {
-    throw new Error("Benchmark summary contains no WebUI rows");
+    throw new Error(
+      all
+        ? "Benchmark summary contains no WebUI rows"
+        : `Benchmark summary contains no ${primaryWebuiCaseId} row`,
+    );
   }
+  const retainedCaseIds = new Set(rows.map(({ caseId }) => caseId));
+  const saturationWarnings = Array.isArray(benchmarks.saturationWarnings)
+    ? benchmarks.saturationWarnings.filter(
+      ({ caseId }) => retainedCaseIds.has(caseId),
+    )
+    : [];
+  const saturationCaveat = saturationWarnings.length === 0
+    ? ""
+    : ` Fixed-load results for ${
+      saturationWarnings.map(({ label }) => label).join(", ")
+    } remain lower bounds because their saturation probes were still rising.`;
 
   const metrics = benchmarks.metrics.map((candidate, index) => {
     const metric = objectAt(
@@ -198,7 +217,9 @@ export function buildWebuiBenchmarkSummary(summary) {
     };
     return {
       ...filteredMetric,
-      summary: metricSummary(rows, filteredMetric),
+      summary: `${
+        metricSummary(rows, filteredMetric)
+      }${id === "requestsPerSecond" ? saturationCaveat : ""}`,
     };
   });
   const selectedMetric = metrics.find(({ id }) => id === selectedMetricId);
@@ -216,6 +237,7 @@ export function buildWebuiBenchmarkSummary(summary) {
     metricSummary: selectedMetric.summary,
     metrics,
     rows: filteredRows,
+    saturationWarnings,
     selectedMetricDescription: selectedMetric.description,
     selectedMetricLabel: selectedMetric.label,
   };
@@ -225,9 +247,13 @@ export function buildWebuiBenchmarkSummary(summary) {
   };
 }
 
-export async function extractWebuiBenchmarks(inputPath, outputPath) {
+export async function extractWebuiBenchmarks(
+  inputPath,
+  outputPath,
+  options = {},
+) {
   const summary = JSON.parse(await readFile(inputPath, "utf8"));
-  const filtered = buildWebuiBenchmarkSummary(summary);
+  const filtered = buildWebuiBenchmarkSummary(summary, options);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(filtered, null, 2)}\n`, "utf8");
   return filtered;
@@ -248,7 +274,7 @@ function option(argv, name) {
 export async function main(argv = process.argv.slice(2)) {
   if (argv.includes("--help")) {
     process.stdout.write(
-      "Usage: node scripts/extract-webui-benchmarks.mjs --input <benchmark-summary.json> [--output <webui.json>]\n",
+      "Usage: node scripts/extract-webui-benchmarks.mjs --input <benchmark-summary.json> [--output <webui.json>] [--all]\n",
     );
     return null;
   }
@@ -261,7 +287,9 @@ export async function main(argv = process.argv.slice(2)) {
   const outputPath = output === undefined
     ? resolve(dirname(inputPath), "webui.json")
     : resolve(repositoryRoot, output);
-  await extractWebuiBenchmarks(inputPath, outputPath);
+  await extractWebuiBenchmarks(inputPath, outputPath, {
+    all: argv.includes("--all"),
+  });
   process.stdout.write(`${outputPath}\n`);
   return outputPath;
 }

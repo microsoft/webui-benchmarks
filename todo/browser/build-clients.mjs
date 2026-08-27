@@ -3,8 +3,8 @@
 
 import { build as buildBundle } from "esbuild";
 import { solidPlugin } from "esbuild-plugin-solid";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve } from "node:path";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -12,6 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ENTRY_EXTENSIONS = Object.freeze({
   preact: "mjs",
   react: "mjs",
+  "react-tanstack": "mjs",
   solid: "jsx",
   vue: "mjs",
   webui: "mjs",
@@ -20,6 +21,20 @@ const ENTRY_EXTENSIONS = Object.freeze({
 
 function isWebUiClient(appId) {
   return appId === "webui" || appId === "webui-fast";
+}
+
+function packageContributionBytes(metafile, packageName) {
+  const marker = `/node_modules/${packageName}/`;
+  let bytes = 0;
+  for (const output of Object.values(metafile.outputs)) {
+    for (const [inputPath, contribution] of Object.entries(output.inputs)) {
+      const normalizedPath = `/${inputPath.replaceAll("\\", "/")}`;
+      if (normalizedPath.includes(marker)) {
+        bytes += contribution.bytesInOutput;
+      }
+    }
+  }
+  return bytes;
 }
 
 function buildOptions(appId) {
@@ -38,16 +53,20 @@ function buildOptions(appId) {
       "process.env.NODE_ENV": '"production"',
     },
     entryPoints: [resolve(here, "client", `${appId}.${extension}`)],
-    external: isWebUiClient(appId)
-      ? ["/__browser/webui-components.js"]
-      : [],
+    external: [],
     format: "esm",
-    ...(appId === "react" || appId === "preact"
-      ? { jsx: "automatic", jsxImportSource: appId }
+    ...(appId === "react" || appId === "react-tanstack" || appId === "preact"
+      ? {
+          jsx: "automatic",
+          jsxImportSource: appId === "preact" ? "preact" : "react",
+        }
       : {}),
     legalComments: "none",
+    metafile: true,
     minify: true,
-    outfile: `${appId}.js`,
+    chunkNames: "chunks/[name]-[hash]",
+    entryNames: appId,
+    outdir: resolve(here, ".browser-build", appId),
     platform: "browser",
     plugins: [
       ...(appId === "solid"
@@ -55,6 +74,7 @@ function buildOptions(appId) {
         : []),
     ],
     sourcemap: false,
+    splitting: true,
     target: "chrome120",
     write: false,
   };
@@ -80,52 +100,140 @@ async function collectCssAssets(root) {
 }
 
 async function buildClient(appId) {
-  const result = await buildBundle(buildOptions(appId));
+  if (appId === "vue") {
+    const { build } = await import("../apps/vue/build.mjs");
+    await build();
+  }
+  const options = buildOptions(appId);
+  const result = await buildBundle(options);
   const javascript = result.outputFiles.find(
-    ({ path }) => [".js", ".mjs"].includes(extname(path)),
+    ({ path }) => basename(path) === `${appId}.js`,
   );
   if (javascript === undefined) {
     throw new Error(`${appId} browser build did not emit JavaScript`);
   }
   const bundle = Buffer.from(javascript.contents);
+  const outputRoot = options.outdir;
+  const chunkAssets = result.outputFiles
+    .filter(
+      ({ path }) =>
+        path !== javascript.path
+        && [".js", ".mjs"].includes(extname(path)),
+    )
+    .map(({ contents, path }) => [
+      `/__browser/${
+        relative(outputRoot, path).replaceAll("\\", "/")
+      }`,
+      Buffer.from(contents),
+    ]);
+  bundle.additionalAssets = new Map(chunkAssets);
+  bundle.totalJavaScriptBytes = result.outputFiles
+    .filter(({ path }) => [".js", ".mjs"].includes(extname(path)))
+    .reduce((total, { contents }) => total + contents.byteLength, 0);
+  bundle.featureAssets = Object.freeze(
+    Object.fromEntries(
+      [
+        "analytics",
+        "csv",
+        "saved-view",
+        "schedule",
+        "search",
+      ].map((feature) => {
+        const suffix = `/workspace-${feature}.mjs`;
+        const output = Object.entries(result.metafile.outputs).find(
+          ([, metadata]) =>
+            Object.keys(metadata.inputs).some((inputPath) =>
+              `/${inputPath.replaceAll("\\", "/")}`.endsWith(suffix)
+              || basename(inputPath).startsWith(`workspace-${feature}-`)
+            ),
+        );
+        bundle.routeAssets = Object.freeze(
+            Object.fromEntries(
+              ["activity-page", "settings-page"].map((route) => {
+                const output = Object.entries(result.metafile.outputs).find(
+                  ([, metadata]) =>
+                    Object.keys(metadata.inputs).some((inputPath) =>
+                      basename(inputPath).startsWith(`${route}-`)
+                      || [".js", ".jsx", ".mjs", ".ts"].some((extension) =>
+                        `/${inputPath.replaceAll("\\", "/")}`.endsWith(
+                          `/${route}${extension}`,
+                        )
+                      )
+                    ),
+                );
+                if (output === undefined) return [route, null];
+                return [
+                  route,
+                  `/__browser/${
+                    relative(outputRoot, resolve(output[0])).replaceAll("\\", "/")
+                  }`,
+                ];
+              }),
+            ),
+        );
+        if (output === undefined) return [feature, null];
+        return [
+          feature,
+          `/__browser/${
+            relative(outputRoot, resolve(output[0])).replaceAll("\\", "/")
+          }`,
+        ];
+      }),
+    ),
+  );
+  bundle.packageBytes = Object.freeze(
+    Object.fromEntries(
+      [
+        "@tanstack/react-router",
+        "@tanstack/table-core",
+        "preact",
+        "react",
+        "react-dom",
+        "solid-js",
+        "svelte",
+        "vue",
+        "zod",
+      ].map((packageName) => [
+        packageName,
+        packageContributionBytes(result.metafile, packageName),
+      ]),
+    ),
+  );
   if (isWebUiClient(appId)) {
-    const components = await buildBundle({
-      ...buildOptions(appId),
-      entryPoints: [
-        resolve(here, "..", "apps", appId, "component-definitions.ts"),
-      ],
-      external: [],
-      outfile: "webui-components.js",
-    });
-    const componentJavascript = components.outputFiles.find(
-      ({ path }) => [".js", ".mjs"].includes(extname(path)),
-    );
-    if (componentJavascript === undefined) {
-      throw new Error(`${appId} component build did not emit JavaScript`);
-    }
+    const appDirectory = appId === "webui" ? "webui-lightdom" : appId;
     const browserAssetDirectory = resolve(
       here,
       "..",
       "apps",
-      appId,
+      appDirectory,
       "dist",
       "browser",
     );
+    await mkdir(browserAssetDirectory, { recursive: true });
     const cssAssets = await collectCssAssets(browserAssetDirectory);
     bundle.additionalAssets = new Map([
-      [
-        "/__browser/webui-components.js",
-        Buffer.from(componentJavascript.contents),
-      ],
+      ...chunkAssets,
       ...cssAssets,
     ]);
-    await mkdir(browserAssetDirectory, { recursive: true });
+    await Promise.all([
+      rm(resolve(browserAssetDirectory, "chunks"), {
+        force: true,
+        recursive: true,
+      }),
+      rm(resolve(browserAssetDirectory, "webui-components.js"), {
+        force: true,
+      }),
+    ]);
     await Promise.all([
       writeFile(resolve(browserAssetDirectory, "webui.js"), bundle),
-      writeFile(
-        resolve(browserAssetDirectory, "webui-components.js"),
-        componentJavascript.contents,
-      ),
+      ...chunkAssets.map(async ([assetPath, contents]) => {
+        const destination = resolve(
+          browserAssetDirectory,
+          assetPath.replace(/^\/__browser\//u, ""),
+        );
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, contents);
+      }),
     ]);
     bundle.browserAssetDirectory = browserAssetDirectory;
   }
@@ -190,7 +298,13 @@ export async function buildControlledClients(browserCases) {
         ({ appId, browserOutcome, controlled }) =>
           controlled
           && browserOutcome.status === "supported"
-          && ["preact", "react", "solid", "vue"].includes(appId),
+          && [
+            "preact",
+            "react",
+            "react-tanstack",
+            "solid",
+            "vue",
+          ].includes(appId),
       )
       .map(({ appId }) => appId),
   );

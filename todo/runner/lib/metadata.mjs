@@ -241,13 +241,19 @@ export function collectFrameworkVersions() {
   const rootManifest = readJson(resolve(BENCHMARK_ROOT, "package.json"));
   const controlledPackages = [
     "@microsoft/fast-element",
+    "@microsoft/webui-router",
+    "@solidjs/router",
+    "@tanstack/react-router",
     "@vue/server-renderer",
     "preact",
+    "preact-iso",
     "preact-render-to-string",
     "react",
     "react-dom",
+    "react-router",
     "solid-js",
     "vue",
+    "vue-router",
   ];
   const controlled = Object.fromEntries(
     controlledPackages.map((name) => [
@@ -353,7 +359,13 @@ export async function assertBuildArtifacts(cases) {
   }
   const rendererArtifacts = {
     solid: resolve(TODO_ROOT, "apps", "solid", "dist", "server.mjs"),
-    webui: resolve(TODO_ROOT, "apps", "webui", "dist", "protocol.bin"),
+    webui: resolve(
+      TODO_ROOT,
+      "apps",
+      "webui-lightdom",
+      "dist",
+      "protocol.bin",
+    ),
   };
   for (const [appId, path] of Object.entries(rendererArtifacts)) {
     if (
@@ -374,7 +386,7 @@ export async function assertBuildArtifacts(cases) {
     const protocol = resolve(
       TODO_ROOT,
       "apps",
-      "webui",
+      "webui-lightdom",
       "dist",
       "protocol.bin",
     );

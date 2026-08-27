@@ -29,7 +29,7 @@ if (customElements.get("todo-badge") === undefined) {
 
 const startedAt = performance.now();
 try {
-  startTodoApp(benchmarkTarget(), initialState());
+  await startTodoApp(benchmarkTarget(), initialState());
   await publishReady({
     clientMode: "hydrate",
     hydrationStatus: "supported",

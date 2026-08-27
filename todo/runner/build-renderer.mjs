@@ -7,9 +7,10 @@ import { isMainModule } from "../servers/lib/cli.mjs";
 const builders = Object.freeze({
   preact: () => import("../apps/preact/build.mjs"),
   react: () => import("../apps/react/build.mjs"),
+  "react-tanstack": () => import("../apps/react-tanstack/build.mjs"),
   solid: () => import("../apps/solid/build.mjs"),
   vue: () => import("../apps/vue/build.mjs"),
-  webui: () => import("../apps/webui/build.mjs"),
+  webui: () => import("../apps/webui-lightdom/build.mjs"),
   "webui-fast": () => import("../apps/webui-fast/build.mjs"),
   "webui-shadowdom": () => import("../apps/webui-shadowdom/build.mjs"),
 });
@@ -32,7 +33,7 @@ if (isMainModule(import.meta.url)) {
   const appId = process.argv[2];
   if (appId === undefined || process.argv.length !== 3) {
     throw new Error(
-      "Usage: node build-renderer.mjs <preact|react|solid|vue|webui|webui-fast|webui-shadowdom>",
+      "Usage: node build-renderer.mjs <preact|react|react-tanstack|solid|vue|webui|webui-fast|webui-shadowdom>",
     );
   }
   await buildRenderer(appId);

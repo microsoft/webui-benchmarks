@@ -6,11 +6,13 @@
 import { useEffect, useState } from "react";
 import { BRANCHES } from "../../../shared/contract.mjs";
 import { publishHydrated } from "../../../shared/hydration.mjs";
+import { createClientWorkspaceIntelligence } from "../../../shared/workspace-intelligence-client.mjs";
 import TodoFooter from "./todo-footer.jsx";
 import TodoHeader from "./todo-header.jsx";
 import TodoList from "./todo-list.jsx";
 import TodoSummary from "./todo-summary.jsx";
 import TodoToolbar from "./todo-toolbar.jsx";
+import { WorkspaceIntelligence } from "../../react/components/workspace-intelligence.jsx";
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralForm}`;
@@ -67,6 +69,7 @@ function refreshDerivedState(current, todos) {
       ...current.footer,
       itemCountLabel: plural(totalCount, "item"),
     },
+    intelligence: createClientWorkspaceIntelligence(todos, current.intelligence),
     selection: {
       todoId: selectedTodo?.id ?? "",
       label: selectedTodo ? `Selected ${selectedTodo.id}` : "No todo selected",
@@ -176,11 +179,13 @@ export default function TodoApp({ initialState, renderMode }) {
   return (
     <main
       className="todo-app"
+      data-route-page="work"
       data-render-mode={renderMode}
       data-variant-id={state.variantId}
     >
       <TodoHeader app={state.app} variantLabel={state.variantLabel} />
       <TodoSummary summary={state.summary} />
+      <WorkspaceIntelligence current={state} onStateChange={setState} />
       <TodoToolbar
         onClearCompleted={clearCompleted}
         onFilter={filterTodos}

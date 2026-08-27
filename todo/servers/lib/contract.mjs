@@ -13,6 +13,8 @@ export { STATE_VARIANT_COUNT };
 export const SERVER_SCHEMA = "webui.ssr-todo-server/v1";
 export const READY_PATH = "/__bench/ready";
 export const DYNAMIC_PATH = "/dynamic";
+export const ACTIVITY_PATH = "/activity";
+export const SETTINGS_PATH = "/settings";
 export const CACHED_PATH = "/cached";
 export const CACHE_MODE = "dynamic-and-cached";
 export const INPUT_POLICY = "request-timestamped-input";
@@ -58,8 +60,8 @@ function validateStates(states) {
   }
 }
 
-async function renderResponse(render, state, documentOptions) {
-  const rendered = await render(state);
+async function renderResponse(render, state, documentOptions, requestPath) {
+  const rendered = await render(state, requestPath);
   if (documentOptions === null) {
     return rendered;
   }
@@ -81,6 +83,7 @@ export async function createRouteController(options) {
     appId,
     document: documentOptions = null,
     render,
+    renderPartial = null,
     runtimeId,
     runtimeVersion,
     serverId,
@@ -98,6 +101,7 @@ export async function createRouteController(options) {
         render,
         createRequestTodoState(states[index], PROFILE_TIMESTAMP),
         documentOptions,
+        DYNAMIC_PATH,
       ),
     );
     dynamicLengths[index] = body.byteLength;
@@ -108,6 +112,7 @@ export async function createRouteController(options) {
       render,
       createRequestTodoState(states[0], cachedTimestamp),
       documentOptions,
+      CACHED_PATH,
     ),
   );
   const responseBytes = Object.freeze({
@@ -125,7 +130,9 @@ export async function createRouteController(options) {
     routes: Object.freeze({
       cached: CACHED_PATH,
       dynamic: DYNAMIC_PATH,
+      activity: ACTIVITY_PATH,
       ready: READY_PATH,
+      settings: SETTINGS_PATH,
     }),
     runtimeId,
     runtimeVersion,
@@ -147,7 +154,7 @@ export async function createRouteController(options) {
       });
     },
     metadata,
-    async renderDynamic() {
+    async renderDynamic(requestPath = DYNAMIC_PATH) {
       const variantIndex = nextVariant;
       nextVariant = (nextVariant + 1) % states.length;
       const requestTimestamp = currentRequestTimestamp();
@@ -157,7 +164,28 @@ export async function createRouteController(options) {
             render,
             createRequestTodoState(states[variantIndex], requestTimestamp),
             documentOptions,
+            requestPath,
           ),
+        ),
+        cacheMode: "dynamic",
+        requestTimestamp,
+        variantIndex,
+      });
+    },
+    async renderPartial(requestPath, inventoryHex = "") {
+      if (typeof renderPartial !== "function") {
+        throw new TypeError(`${appId} does not support partial route rendering`);
+      }
+      const variantIndex = nextVariant;
+      nextVariant = (nextVariant + 1) % states.length;
+      const requestTimestamp = currentRequestTimestamp();
+      const requestState = createRequestTodoState(
+        states[variantIndex],
+        requestTimestamp,
+      );
+      return Object.freeze({
+        body: toResponseBytes(
+          await renderPartial(requestState, requestPath, inventoryHex),
         ),
         cacheMode: "dynamic",
         requestTimestamp,

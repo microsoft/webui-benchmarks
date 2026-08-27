@@ -49,13 +49,15 @@ export function webuiReleaseVersion() {
   const manifest = readJson(resolve(REPOSITORY_ROOT, "package.json"));
   const webui = manifest.dependencies?.["@microsoft/webui"];
   const framework = manifest.dependencies?.["@microsoft/webui-framework"];
+  const router = manifest.dependencies?.["@microsoft/webui-router"];
   if (
     typeof webui !== "string"
     || webui !== framework
+    || webui !== router
     || !/^\d+\.\d+\.\d+$/u.test(webui)
   ) {
     throw new Error(
-      "@microsoft/webui and @microsoft/webui-framework must use one exact version",
+      "WebUI, WebUI Framework, and WebUI Router must use one exact version",
     );
   }
   return webui;

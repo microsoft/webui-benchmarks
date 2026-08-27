@@ -272,6 +272,7 @@ function selectorCounts(elements, items, toolbar) {
     elementsByClass(elements, className).length;
   return {
     "todo-app": classCount("todo-app"),
+    "workspace-intelligence": classCount("workspace-intelligence"),
     "todo-header": classCount("todo-header"),
     "todo-summary": classCount("todo-summary"),
     "todo-toolbar": classCount("todo-toolbar"),

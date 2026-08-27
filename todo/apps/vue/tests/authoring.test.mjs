@@ -59,20 +59,30 @@ async function readAuthoredSources() {
 
 test("every contract component is authored as a single file component", async () => {
   const entries = await readdir(componentDirectory);
-  assert.deepEqual(
-    [...entries].sort(),
-    [...COMPONENTS].map((name) => `${name}.vue`).sort(),
-    "components/ must contain exactly one .vue file per contract component",
-  );
+  const authored = new Set(entries);
+  for (const component of COMPONENTS) {
+    assert.ok(
+      authored.has(`${component}.vue`),
+      `components/ must contain ${component}.vue`,
+    );
+  }
 });
 
 test("each single file component uses <template> and <script setup>", async () => {
-  for (const name of COMPONENTS) {
+  for (const name of [
+    ...COMPONENTS,
+    "activity-page",
+    "settings-page",
+    "workspace-app",
+  ]) {
     const source = await readComponent(name);
     assert.match(source, /<script setup>/, `${name}.vue needs <script setup>`);
     assert.match(source, /<\/script>/, `${name}.vue needs a closed script`);
     assert.match(source, /<template>/, `${name}.vue needs <template>`);
     assert.match(source, /<\/template>/, `${name}.vue needs a closed template`);
+    if (!COMPONENTS.includes(name)) {
+      continue;
+    }
     assert.match(
       source,
       new RegExp(`<${name}[\\s>]`),

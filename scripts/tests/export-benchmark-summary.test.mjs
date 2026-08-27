@@ -192,7 +192,7 @@ function report() {
       stateVariants: 32,
     },
     matrix: {
-      expectedCaseCount: 14,
+      expectedCaseCount: 15,
       id: "official-ssr-matrix",
       naturalResponseBytes: { policy: "natural" },
       summaries,
@@ -326,7 +326,7 @@ function browserMetrics(index, round) {
 function browserReport(ssrReport = report()) {
   const browserCases = createBrowserCases();
   const rawRounds = browserCases.flatMap((browserCase, index) =>
-    Array.from({ length: 7 }, (_, round) => ({
+    Array.from({ length: 10 }, (_, round) => ({
       appId: browserCase.appId,
       browserVersion: "151.0.0.0",
       fullHydration: {
@@ -384,6 +384,7 @@ function browserReport(ssrReport = report()) {
       primaryRoute: browserCase.primaryRoute,
       productId: browserCase.productId,
       readinessDefinition: browserCase.readinessDefinition,
+      routing: browserCase.routing,
       runtime: {
         id: browserCase.sourceCase.runtimeId,
         version: browserCase.sourceCase.runtimeId === "rust"
@@ -423,10 +424,10 @@ function browserReport(ssrReport = report()) {
     mode: "official",
     rawRounds,
     roundOrder: Array.from(
-      { length: 7 },
+      { length: 10 },
       () => browserCases.map(({ productId }) => productId),
     ),
-    roundsPerApp: 7,
+    roundsPerApp: 10,
     ...runtimeEvidence(),
     schema: BROWSER_REPORT_SCHEMA,
     snapshotIntegrity: {
@@ -460,7 +461,7 @@ function browserReport(ssrReport = report()) {
 test("exports only the compact homepage benchmark DTO", () => {
   const summary = buildBenchmarkSummary(report());
   assert.deepEqual(Object.keys(summary), ["benchmarks", "benchmarksJson"]);
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(summary.benchmarks.rows[0].rank, "1");
   assert.equal(
     summary.benchmarks.rows.filter(({ primary }) => primary).length,
@@ -472,8 +473,46 @@ test("exports only the compact homepage benchmark DTO", () => {
 
 test("accepts complete Windows reports with intentional process telemetry gaps", () => {
   const summary = buildBenchmarkSummary(windowsPartialReport());
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(summary.benchmarks.hasUnavailable, false);
+});
+
+test("publishes fixed-load saturation warnings without hiding them", () => {
+  const value = windowsPartialReport();
+  const [entry] = value.saturation;
+  entry.samples[1].requestsPerSecond =
+    entry.samples[0].requestsPerSecond * 1.2;
+  entry.analysis = analyzeSaturation(entry.samples);
+  const summary = buildBenchmarkSummary(value);
+  assert.equal(entry.analysis.status, "server-unsaturated");
+  assert.equal(summary.benchmarks.saturationWarnings.length, 1);
+  assert.equal(
+    summary.benchmarks.saturationWarnings[0].caseId,
+    entry.caseId,
+  );
+  assert.match(summary.benchmarks.metricSummary, /lower bounds/u);
+  assert.match(
+    summary.benchmarks.rows.find(({ caseId }) => caseId === entry.caseId)
+      .activeDetail,
+    /saturation warning/u,
+  );
+  assert.equal(summary.benchmarks.selectedMetricLabel, "64-connection RPS");
+});
+
+test("publishes disclosed fixed-load warnings on non-Windows hosts", () => {
+  const value = report();
+  value.status = "partial";
+  value.machine = {
+    osPlatform: "linux",
+    processPlatform: "linux",
+  };
+  const [entry] = value.saturation;
+  entry.samples[1].requestsPerSecond =
+    entry.samples[0].requestsPerSecond * 1.2;
+  entry.analysis = analyzeSaturation(entry.samples);
+  const summary = buildBenchmarkSummary(value);
+  assert.equal(entry.analysis.status, "server-unsaturated");
+  assert.equal(summary.benchmarks.saturationWarnings.length, 1);
 });
 
 test("combines matching official browser outcomes", () => {
@@ -485,14 +524,20 @@ test("combines matching official browser outcomes", () => {
       "requestsPerSecond",
       "firstContentfulPaintMs",
       "largestContentfulPaintMs",
+      "requestToFullHydrationMs",
+      "initialJavascriptBytes",
+      "hydrationJavascriptBytes",
+      "featureJavascriptBytes",
+      "routeJavascriptBytes",
+      "routeNavigationMs",
       "jsHeapUsedBytes",
       "rendererPrivateBytes",
     ],
   );
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(
     summary.benchmarks.rows.every(
-      (row) => Object.keys(row.metrics).length === 5,
+      (row) => Object.keys(row.metrics).length === 11,
     ),
     true,
   );
@@ -688,7 +733,7 @@ test("rejects partial reports with any non-Windows-sampler cause", async (t) => 
     ["mixed saturation reasons", (value) => {
       value.saturation[0].samples[0].serverMetrics.reason = "A different failure";
     }],
-    ["additional saturation failure", (value) => {
+    ["stale saturation failure", (value) => {
       value.saturation[0].analysis = {
         ...value.saturation[0].analysis,
         status: "server-unsaturated",
@@ -701,7 +746,7 @@ test("rejects partial reports with any non-Windows-sampler cause", async (t) => 
       mutate(value);
       assert.throws(
         () => buildBenchmarkSummary(value),
-        /partial reports are allowed only for documented Windows process telemetry unavailability/u,
+        /partial reports are allowed only for documented process telemetry or disclosed fixed-load saturation warnings/u,
       );
     });
   }

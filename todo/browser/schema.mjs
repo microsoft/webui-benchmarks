@@ -8,6 +8,7 @@ import {
   PRIMARY_ROUTE,
   PRODUCT_ORDER,
   QUICK_ROUNDS,
+  ROUTE_JOURNEY,
 } from "./apps.mjs";
 import { METRIC_PATHS, metricAt } from "./metrics.mjs";
 import { summarizeSeries } from "../runner/lib/statistics.mjs";
@@ -86,6 +87,18 @@ function validateApps(report, errors) {
       || app.readinessDefinition.length === 0
     ) {
       errors.push(`${app.appId} must define its readiness signal`);
+    }
+    if (
+      app.routing?.clientNavigation !== "supported"
+      || typeof app.routing?.router !== "string"
+      || app.routing.router.length === 0
+      || !Array.isArray(app.routing?.journey)
+      || app.routing.journey.length !== ROUTE_JOURNEY.length
+      || app.routing.journey.some(
+        (path, index) => path !== ROUTE_JOURNEY[index],
+      )
+    ) {
+      errors.push(`${app.appId} must define the canonical routed journey`);
     }
     if (app.lazyHydration?.status === "supported") {
       if (

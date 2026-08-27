@@ -17,8 +17,8 @@ test("the client entry activates the server markup with createSSRApp", async () 
   const source = await readFile(resolve(appDirectory, "client.mjs"), "utf8");
   assert.match(
     source,
-    /createSSRApp\([\s\S]*?\)\.mount\(/,
-    "client.mjs must hydrate with createSSRApp(...).mount(...)",
+    /createSSRApp\(WorkspaceApp,[\s\S]*?app\.mount\(/,
+    "client.mjs must hydrate the routed workspace with createSSRApp",
   );
   assert.match(
     source,
@@ -27,8 +27,8 @@ test("the client entry activates the server markup with createSSRApp", async () 
   );
   assert.match(
     source,
-    /from "\.\/components\/todo-app\.vue"/,
-    "client.mjs must mount the same single file component the server renders",
+    /from "\.\/components\/workspace-app\.vue"/,
+    "client.mjs must mount the same routed component the server renders",
   );
   assert.doesNotMatch(
     source,
@@ -43,8 +43,8 @@ test("the adapter points the browser runner at the client entry", async () => {
   const server = await readFile(resolve(appDirectory, "server.mjs"), "utf8");
   assert.match(
     server,
-    /from "\.\/components\/todo-app\.vue"/,
-    "server.mjs must render the same single file component",
+    /from "\.\/components\/workspace-app\.vue"/,
+    "server.mjs must render the same routed single file component",
   );
   assert.match(server, /@vue\/server-renderer/);
 });
@@ -65,7 +65,7 @@ test("the browser bundle is free of server-only code", async () => {
   assert.match(bundle, /Hydration|hydrate/);
   assert.doesNotMatch(
     bundle,
-    /\bfrom\s*"[^"]+"/,
+    /^import\s.+\sfrom\s*"[^"]+"/mu,
     "the browser bundle must be self contained",
   );
   for (const forbidden of [
@@ -90,4 +90,5 @@ test("the component artifact keeps vue external for host bundlers", async () => 
   );
   assert.match(components, /from "vue"/);
   assert.match(components, /export \{[\s\S]*TodoApp/);
+  assert.match(components, /export \{[\s\S]*WorkspaceApp/);
 });

@@ -4,7 +4,71 @@
 export const TODO_ITEM_COUNT = 100;
 export const STATE_VARIANT_COUNT = 32;
 export const TODO_BUTTON_COUNT = TODO_ITEM_COUNT + 1;
-export const ARIA_PRESSED_COUNT = TODO_ITEM_COUNT + 3;
+export const ARIA_PRESSED_COUNT = TODO_ITEM_COUNT + 6;
+export const ACTIVITY_EVENT_COUNT = 48;
+export const ACTIVITY_SENTINEL_ID = "activity-0026";
+export const SETTING_CONTROL_COUNT = 8;
+
+export const APP_ROUTES = Object.freeze([
+  Object.freeze({
+    id: "work",
+    label: "Work queue",
+    path: "/dynamic",
+  }),
+  Object.freeze({
+    id: "activity",
+    label: "Activity",
+    path: "/activity",
+  }),
+  Object.freeze({
+    id: "settings",
+    label: "Settings",
+    path: "/settings",
+  }),
+]);
+
+export const ROUTE_INTERACTIONS = Object.freeze([
+  Object.freeze({
+    id: "navigate-activity",
+    path: "/activity",
+    selector: '[data-route-link="activity"]',
+  }),
+  Object.freeze({
+    id: "filter-activity",
+    selector: '[data-action="activity-filter"][data-filter="deployment"]',
+  }),
+  Object.freeze({
+    id: "expand-activity",
+    selector:
+      `[data-action="activity-expand"][data-event-id="${ACTIVITY_SENTINEL_ID}"]`,
+  }),
+  Object.freeze({
+    id: "mark-activity-read",
+    selector: '[data-action="activity-mark-read"]',
+  }),
+  Object.freeze({
+    id: "navigate-settings",
+    path: "/settings",
+    selector: '[data-route-link="settings"]',
+  }),
+  Object.freeze({
+    id: "toggle-setting",
+    selector: '[data-action="setting-toggle"][data-setting-id="daily-digest"]',
+  }),
+  Object.freeze({
+    id: "select-density",
+    selector: '[data-action="setting-density"][data-density="compact"]',
+  }),
+  Object.freeze({
+    id: "save-settings",
+    selector: '[data-action="settings-save"]',
+  }),
+  Object.freeze({
+    id: "navigate-work",
+    path: "/dynamic",
+    selector: '[data-route-link="work"]',
+  }),
+]);
 
 export const CACHE_POLICY_NAMES = Object.freeze({
   REQUEST_TIMESTAMPED_INPUT: "request-timestamped-input",
@@ -31,6 +95,7 @@ export const HEADLINE_CACHE_POLICY =
 
 export const COMPONENTS = Object.freeze([
   "todo-app",
+  "workspace-intelligence",
   "todo-header",
   "todo-summary",
   "todo-toolbar",
@@ -46,12 +111,14 @@ export const COMPONENTS = Object.freeze([
 
 export const COMPONENT_GRAPH = Object.freeze({
   "todo-app": Object.freeze([
+    "workspace-intelligence",
     "todo-header",
     "todo-summary",
     "todo-toolbar",
     "todo-list",
     "todo-footer",
   ]),
+  "workspace-intelligence": Object.freeze([]),
   "todo-header": Object.freeze([]),
   "todo-summary": Object.freeze([]),
   "todo-toolbar": Object.freeze(["todo-filter", "todo-button"]),
@@ -200,8 +267,66 @@ export const INTERACTIONS = Object.freeze([
   }),
 ]);
 
+export const WORKSPACE_INTERACTIONS = Object.freeze([
+  Object.freeze({
+    id: "workspace-search",
+    event: "input",
+    selector: '[data-action="workspace-search"]',
+  }),
+  Object.freeze({
+    id: "workspace-filter",
+    event: "change",
+    selector: '[data-action="workspace-filter"]',
+  }),
+  Object.freeze({
+    id: "workspace-view",
+    event: "click",
+    selector: '[data-action="workspace-view"]',
+  }),
+  Object.freeze({
+    id: "workspace-select-all",
+    event: "click",
+    selector: '[data-action="workspace-select-all"]',
+  }),
+  Object.freeze({
+    id: "workspace-row-select",
+    event: "change",
+    selector: '[data-action="workspace-row-select"][data-todo-id]',
+  }),
+  Object.freeze({
+    id: "workspace-save-view",
+    event: "click",
+    selector: '[data-action="workspace-save-view"]',
+  }),
+  Object.freeze({
+    id: "workspace-export",
+    event: "click",
+    selector: '[data-action="workspace-export"]',
+  }),
+  Object.freeze({
+    id: "workspace-archive",
+    event: "click",
+    selector: '[data-action="workspace-archive"]',
+  }),
+  Object.freeze({
+    id: "workspace-schedule",
+    event: "change",
+    selector: '[data-action="workspace-schedule"]',
+  }),
+  Object.freeze({
+    id: "workspace-reset",
+    event: "click",
+    selector: '[data-action="workspace-reset"]',
+  }),
+]);
+
 export const SELECTORS = Object.freeze([
   Object.freeze({ id: "todo-app", selector: ".todo-app", count: count("exact", 1) }),
+  Object.freeze({
+    id: "workspace-intelligence",
+    selector: ".workspace-intelligence",
+    count: count("exact", 1),
+  }),
   Object.freeze({ id: "todo-header", selector: ".todo-header", count: count("exact", 1) }),
   Object.freeze({ id: "todo-summary", selector: ".todo-summary", count: count("exact", 1) }),
   Object.freeze({ id: "todo-toolbar", selector: ".todo-toolbar", count: count("exact", 1) }),
@@ -292,6 +417,10 @@ export function countTodoBranches(todos) {
 
 export const TODO_BENCH_CONTRACT = Object.freeze({
   schema: "webui.ssr-todo-bench/v1",
+  routes: APP_ROUTES,
+  routeInteractions: ROUTE_INTERACTIONS,
+  activityEventCount: ACTIVITY_EVENT_COUNT,
+  settingControlCount: SETTING_CONTROL_COUNT,
   itemCount: TODO_ITEM_COUNT,
   variantCount: STATE_VARIANT_COUNT,
   buttonCount: TODO_BUTTON_COUNT,
@@ -306,6 +435,7 @@ export const TODO_BENCH_CONTRACT = Object.freeze({
   branches: BRANCHES,
   loops: LOOPS,
   interactions: INTERACTIONS,
+  workspaceInteractions: WORKSPACE_INTERACTIONS,
   selectors: SELECTORS,
   requiredText: REQUIRED_TEXT,
   sentinelIds: SENTINEL_IDS,

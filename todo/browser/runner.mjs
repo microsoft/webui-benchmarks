@@ -321,6 +321,7 @@ function appMetadata(browserCase, frameworkVersions, rawRounds) {
     primaryRoute: browserCase.primaryRoute,
     productId: browserCase.productId,
     readinessDefinition: browserCase.readinessDefinition,
+    routing: browserCase.routing,
     runtime: Object.freeze({
       id: browserCase.sourceCase.runtimeId,
       version: runtimeVersion,

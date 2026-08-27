@@ -6,6 +6,7 @@ import process from "node:process";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TODO_STATE_VARIANTS } from "../../shared/state.mjs";
+import { createWebuiRenderState } from "../../shared/webui-state.mjs";
 import {
   REPOSITORY_ROOT,
   configuredWebuiCheckout,
@@ -15,7 +16,7 @@ import { createRouteController } from "./contract.mjs";
 import { runtimeVersion } from "./runtime.mjs";
 
 const protocolPath = fileURLToPath(
-  new URL("../../apps/webui/dist/protocol.bin", import.meta.url),
+  new URL("../../apps/webui-lightdom/dist/protocol.bin", import.meta.url),
 );
 function runtimeAvailable(runtimeId) {
   if (runtimeId === "bun") {
@@ -180,8 +181,16 @@ export async function createWebuiRouteController({
       supported: true,
     },
     appId: "webui",
-    render(state) {
-      return protocol.render(state);
+    render(state, requestPath) {
+      return protocol.render(createWebuiRenderState(state), { requestPath });
+    },
+    renderPartial(state, requestPath, inventoryHex) {
+      return protocol.renderPartial(
+        createWebuiRenderState(state),
+        "index.html",
+        requestPath,
+        inventoryHex,
+      );
     },
     runtimeId,
     runtimeVersion: runtimeVersion(runtimeId),

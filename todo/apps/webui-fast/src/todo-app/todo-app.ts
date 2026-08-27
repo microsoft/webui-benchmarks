@@ -4,13 +4,14 @@
 import { FASTElement, observable } from "@microsoft/fast-element";
 import { declarativeTemplate } from "@microsoft/fast-element/declarative.js";
 import { observerMap } from "@microsoft/fast-element/observer-map.js";
+import type { RouteLoaderContext } from "@microsoft/webui-router";
 
 import {
   clearCompletedTodos,
   filterTodos,
   selectTodo,
   toggleTodoCompletion,
-} from "../../interactions.mjs";
+} from "../../client-interactions.mjs";
 
 interface TodoItem {
   id: string;
@@ -63,6 +64,14 @@ interface TodoState {
   selection: SelectionState;
   todos: TodoItem[];
   footer: Record<string, unknown>;
+  intelligence: Record<string, unknown>;
+}
+
+interface WorkspaceIntelligenceElement extends HTMLElement {
+  setWorkspaceState(
+    todos: TodoItem[],
+    intelligence: Record<string, unknown>,
+  ): void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -95,10 +104,10 @@ function isTodoState(value: unknown): value is TodoState {
     && typeof value.variantLabel === "string";
 }
 
-function readInitialState(): TodoState {
+function readInitialState(): TodoState | null {
   const data = document.querySelector("#webui-data");
   if (!(data instanceof HTMLScriptElement)) {
-    throw new Error("The FAST todo application hydration state is missing");
+    return null;
   }
   const payload: unknown = JSON.parse(data.textContent ?? "");
   if (!isRecord(payload) || !isTodoState(payload.state)) {
@@ -129,10 +138,39 @@ export class TodoApp extends FASTElement {
   };
   @observable todos: TodoItem[] = [];
   @observable footer: Record<string, unknown> = {};
+  @observable intelligence: Record<string, unknown> = {};
+  workspaceIntelligence!: WorkspaceIntelligenceElement;
+  private workspaceModel: Record<string, unknown> = {};
+
+  static async loader({ signal }: RouteLoaderContext): Promise<TodoState> {
+    const response = await fetch("/__bench/route-state", { signal });
+    if (!response.ok) {
+      throw new Error(`Route state returned HTTP ${response.status}`);
+    }
+    const state: unknown = await response.json();
+    if (
+      state === null
+      || typeof state !== "object"
+      || !("work" in state)
+      || !isTodoState(state.work)
+    ) {
+      throw new TypeError("Route state is missing work");
+    }
+    return state.work;
+  }
 
   connectedCallback(): void {
-    this.applyState(readInitialState());
+    const initialState = readInitialState();
+    if (initialState !== null) {
+      this.applyState(initialState);
+    }
     super.connectedCallback();
+  }
+
+  setState(state: Record<string, unknown>): void {
+    if (isTodoState(state)) {
+      this.applyState(state);
+    }
   }
 
   onClick(event: MouseEvent): void {
@@ -165,6 +203,12 @@ export class TodoApp extends FASTElement {
     }
   }
 
+  onWorkspaceChange(
+    event: CustomEvent<{ intelligence: Record<string, unknown> }>,
+  ): void {
+    this.workspaceModel = event.detail.intelligence;
+  }
+
   private state(): TodoState {
     return {
       app: this.app,
@@ -174,6 +218,7 @@ export class TodoApp extends FASTElement {
       selection: this.selection,
       todos: this.todos,
       footer: this.footer,
+      intelligence: this.workspaceModel,
     };
   }
 
@@ -185,6 +230,15 @@ export class TodoApp extends FASTElement {
     this.selection = state.selection;
     this.todos = state.todos;
     this.footer = state.footer;
+    this.workspaceModel = state.intelligence;
+    if (this.workspaceIntelligence === undefined) {
+      this.intelligence = state.intelligence;
+    } else {
+      this.workspaceIntelligence.setWorkspaceState(
+        state.todos,
+        state.intelligence,
+      );
+    }
   }
 }
 

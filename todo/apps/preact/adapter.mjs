@@ -31,8 +31,8 @@ export function createRenderer() {
     return Object.freeze({
       ...metadata,
       css,
-      render(state = defaultState) {
-        return renderTodo(state);
+      render(state = defaultState, requestPath = "/dynamic") {
+        return renderTodo(state, requestPath);
       },
     });
   });

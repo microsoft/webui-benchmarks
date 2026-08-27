@@ -1,0 +1,193 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<section
+  class="workspace-intelligence"
+  data-archived-count="{{intelligence.archivedCount}}"
+  data-export-rows="{{intelligence.exportRows}}"
+  data-result-count="{{intelligence.resultCount}}"
+  data-saved-view-count="{{intelligence.savedViewCount}}"
+  data-selected-count="{{intelligence.selectedCount}}"
+  data-workspace-schedule="{{intelligence.schedule}}"
+  data-workspace-view="{{intelligence.view}}"
+  @click="{onClick($e)}"
+>
+  <header class="workspace-intelligence__header">
+    <div>
+      <h2>Workspace intelligence</h2>
+      <p>Search, segment, compare, and automate the complete work queue.</p>
+    </div>
+    <output class="workspace-intelligence__result">
+      {{intelligence.resultLabel}}
+    </output>
+  </header>
+  <div class="workspace-intelligence__filters">
+    <label class="workspace-search">
+      <span>Search work</span>
+      <input
+        data-action="workspace-search"
+        placeholder="Title, owner, tag, status…"
+        type="search"
+        value="{{intelligence.query}}"
+        @input="{onSearch($e)}"
+      />
+    </label>
+    <label>
+      <span>Status</span>
+      <select data-action="workspace-filter" data-facet="status" @change="{onFilter($e)}">
+        <for each="option in intelligence.statusOptions">
+          <option ?selected="{{option.active}}" value="{{option.id}}">{{option.label}}</option>
+        </for>
+      </select>
+    </label>
+    <label>
+      <span>Priority</span>
+      <select data-action="workspace-filter" data-facet="priority" @change="{onFilter($e)}">
+        <for each="option in intelligence.priorityOptions">
+          <option ?selected="{{option.active}}" value="{{option.id}}">{{option.label}}</option>
+        </for>
+      </select>
+    </label>
+    <label>
+      <span>Assignment</span>
+      <select data-action="workspace-filter" data-facet="assignment" @change="{onFilter($e)}">
+        <for each="option in intelligence.assignmentOptions">
+          <option ?selected="{{option.active}}" value="{{option.id}}">{{option.label}}</option>
+        </for>
+      </select>
+    </label>
+    <label>
+      <span>Sort by</span>
+      <select data-action="workspace-filter" data-facet="sort" @change="{onFilter($e)}">
+        <for each="option in intelligence.sortOptions">
+          <option ?selected="{{option.active}}" value="{{option.id}}">{{option.label}}</option>
+        </for>
+      </select>
+    </label>
+  </div>
+  <div class="workspace-intelligence__commandbar">
+    <div class="workspace-view-switch" role="group" aria-label="Work view">
+      <for each="option in intelligence.viewOptions">
+        <button
+          aria-pressed="{{option.active}}"
+          data-action="workspace-view"
+          data-view="{{option.id}}"
+          type="button"
+        >{{option.label}}</button>
+      </for>
+    </div>
+    <div class="workspace-intelligence__actions">
+      <button data-action="workspace-select-all" type="button">Select preview</button>
+      <button data-action="workspace-archive" ?disabled="{{intelligence.selectedCount == 0}}" type="button">Archive selected</button>
+      <button data-action="workspace-save-view" type="button">Save view</button>
+      <button data-action="workspace-export" type="button">Export CSV</button>
+      <button data-action="workspace-reset" type="button">Reset</button>
+    </div>
+  </div>
+  <div class="workspace-intelligence__status" aria-live="polite">
+    <span>{{intelligence.selectedLabel}}</span>
+    <span>{{intelligence.savedViewCount}} saved views</span>
+    <span>{{intelligence.archivedCount}} archived</span>
+    <span>{{intelligence.exportGeneratedLabel}}</span>
+    <span>{{intelligence.validationMessage}}</span>
+  </div>
+  <if condition="intelligence.view == 'table'">
+    <div class="workspace-table-wrap" data-workspace-panel="table">
+      <div class="workspace-table" role="table">
+        <div class="workspace-table__head" role="rowgroup">
+          <div class="workspace-table__row" role="row">
+            <span class="workspace-table__cell" role="columnheader">Select</span>
+            <span class="workspace-table__cell" role="columnheader">Item</span>
+            <span class="workspace-table__cell" role="columnheader">Status</span>
+            <span class="workspace-table__cell" role="columnheader">Priority</span>
+            <span class="workspace-table__cell" role="columnheader">Owner</span>
+            <span class="workspace-table__cell" role="columnheader">Due</span>
+            <span class="workspace-table__cell" role="columnheader">Tags</span>
+          </div>
+        </div>
+        <div class="workspace-table__body" role="rowgroup">
+          <for each="row in intelligence.previewRows">
+            <div
+              class="workspace-table__row"
+              data-assignment="{{row.assignment}}"
+              data-priority="{{row.priority}}"
+              data-status="{{row.status}}"
+              data-workspace-row="{{row.id}}"
+              key="{{row.id}}"
+              role="row"
+            >
+              <span class="workspace-table__cell" role="cell"><input aria-label="Select {{row.id}}" ?checked="{{row.bulkSelected}}" data-action="workspace-row-select" data-todo-id="{{row.id}}" type="checkbox" /></span>
+              <span class="workspace-table__cell workspace-table__item" role="rowheader"><span>{{row.id}}</span><strong>{{row.title}}</strong></span>
+              <span class="workspace-table__cell" role="cell">{{row.statusLabel}}</span>
+              <span class="workspace-table__cell" role="cell">{{row.priorityLabel}}</span>
+              <span class="workspace-table__cell" role="cell">{{row.owner}}</span>
+              <span class="workspace-table__cell" role="cell">{{row.dueLabel}}</span>
+              <span class="workspace-table__cell" role="cell">{{row.tagLabel}}</span>
+            </div>
+          </for>
+        </div>
+      </div>
+    </div>
+  </if>
+  <if condition="intelligence.view == 'board'">
+    <div class="workspace-board" data-workspace-panel="board">
+      <for each="column in intelligence.boardColumns">
+        <section data-priority="{{column.id}}" key="{{column.id}}">
+          <header><h3>{{column.label}}</h3><span>{{column.count}}</span></header>
+          <ol>
+            <for each="row in column.items">
+              <li key="{{row.id}}"><strong>{{row.title}}</strong><span>{{row.owner}}</span><small>{{row.statusLabel}} · {{row.dueLabel}}</small></li>
+            </for>
+          </ol>
+        </section>
+      </for>
+    </div>
+  </if>
+  <if condition="intelligence.view == 'insights'">
+    <div class="workspace-insights" data-workspace-panel="insights">
+      <section class="workspace-chart">
+        <h3>Queue momentum</h3>
+        <svg aria-label="Work queue trend" role="img" viewBox="0 0 300 120">
+          <path class="workspace-chart__area" d="{{intelligence.analytics.areaPath}}"></path>
+          <path class="workspace-chart__line" d="{{intelligence.analytics.trendPath}}"></path>
+        </svg>
+      </section>
+      <section class="workspace-priority-bars">
+        <h3>Priority distribution</h3>
+        <for each="bar in intelligence.analytics.priorityBars">
+          <label key="{{bar.id}}"><span>{{bar.label}}</span><progress max="100" value="{{bar.percent}}"></progress><strong>{{bar.count}}</strong></label>
+        </for>
+      </section>
+      <section class="workspace-donut">
+        <h3>Status mix</h3>
+        <svg aria-label="Pending and completed work" role="img" viewBox="0 0 144 124">
+          <g transform="translate(72 62)">
+            <for each="segment in intelligence.analytics.donutSegments">
+              <path class="workspace-donut__{{segment.id}}" d="{{segment.path}}" key="{{segment.id}}"></path>
+            </for>
+          </g>
+        </svg>
+        <p>{{intelligence.analytics.averageTagsDisplay}} average tags per item</p>
+      </section>
+    </div>
+  </if>
+  <footer class="workspace-intelligence__automation">
+    <details>
+      <summary>Automation schedule · {{intelligence.schedulePreview.label}}</summary>
+      <label>
+        <span>Digest cadence</span>
+        <select data-action="workspace-schedule" @change="{onSchedule($e)}">
+          <for each="option in intelligence.scheduleOptions">
+            <option ?selected="{{option.active}}" value="{{option.id}}">{{option.label}}</option>
+          </for>
+        </select>
+      </label>
+      <p>Next run {{intelligence.schedulePreview.humanized}}</p>
+      <ol>
+        <for each="date in intelligence.schedulePreview.dates">
+          <li key="{{date.id}}">{{date.label}}</li>
+        </for>
+      </ol>
+    </details>
+  </footer>
+</section>

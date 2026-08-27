@@ -29,13 +29,14 @@ const EXPECTED_ROWS = Object.freeze([
   "vue",
   "preact",
   "react",
+  "react-tanstack",
   "solid",
 ]);
 
-test("official matrix publishes exactly the 14 approved rows in order", () => {
+test("official matrix publishes exactly the 15 approved rows in order", () => {
   const matrix = createCaseMatrix();
   assert.equal(matrix.length, OFFICIAL_CASE_COUNT);
-  assert.equal(matrix.length, 14);
+  assert.equal(matrix.length, 15);
   assert.deepEqual(
     matrix.map((benchmarkCase) => benchmarkCase.id),
     EXPECTED_ROWS,
@@ -121,7 +122,7 @@ test("metadata separates the product SSR renderer from its transport", () => {
   );
   assert.deepEqual(
     renderers.map((benchmarkCase) => benchmarkCase.id),
-    ["vue", "preact", "react", "solid"],
+    ["vue", "preact", "react", "react-tanstack", "solid"],
   );
   assert.ok(
     renderers.every(
@@ -137,6 +138,7 @@ test("metadata separates the product SSR renderer from its transport", () => {
       "@vue/server-renderer renderToString",
       "preact-render-to-string renderToString",
       "react-dom/server renderToString",
+      "react-dom/server renderToString + @tanstack/react-router",
       "solid-js/web renderToString",
     ],
   );
@@ -182,7 +184,7 @@ test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
 
 test("assertCaseMatrix rejects any deviation from the official contract", () => {
   const matrix = createCaseMatrix();
-  assert.throws(() => assertCaseMatrix(matrix.slice(1)), /exactly 14 rows/u);
+  assert.throws(() => assertCaseMatrix(matrix.slice(1)), /exactly 15 rows/u);
   assert.throws(
     () =>
       assertCaseMatrix([
@@ -212,11 +214,12 @@ test("assertCaseMatrix rejects any deviation from the official contract", () => 
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {
   const matrix = createCaseMatrix();
   assert.equal(filterCases(matrix, ["react"]).length, 1);
-  assert.equal(filterCases(matrix, ["renderer"]).length, 4);
+  assert.equal(filterCases(matrix, ["react-tanstack"]).length, 1);
+  assert.equal(filterCases(matrix, ["renderer"]).length, 5);
   assert.equal(filterCases(matrix, ["framework"]).length, 4);
   assert.equal(filterCases(matrix, ["runtime"]).length, 6);
   assert.equal(filterCases(matrix, ["webui-*"]).length, 6);
-  assert.equal(filterCases(matrix, []).length, 14);
+  assert.equal(filterCases(matrix, []).length, 15);
   assert.throws(() => filterCases(matrix, ["does-not-exist"]), /No benchmark/u);
 });
 

@@ -9,6 +9,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import test from "node:test";
+import { CANONICAL_INTERACTION_STEP_IDS } from "../interactions.mjs";
 import { runBrowserBenchmark } from "../runner.mjs";
 import { validateBrowserReport } from "../schema.mjs";
 
@@ -28,6 +29,7 @@ test(
           "webui-shadowdom-rust-actix",
           "webui-fast-rust-actix",
           "react",
+          "react-tanstack",
           "solid",
           "astro",
         ],
@@ -50,6 +52,9 @@ test(
       const astro = report.apps.find(({ appId }) => appId === "astro");
       const reactRound = report.rawRounds.find(
         ({ appId }) => appId === "react",
+      );
+      const tanstackRound = report.rawRounds.find(
+        ({ appId }) => appId === "react-tanstack",
       );
       const webuiRound = report.rawRounds.find(
         ({ productId }) => productId === "webui-rust-actix",
@@ -90,7 +95,7 @@ test(
         Object.values(shadowRound.metrics.interactions.steps).map(
           ({ status }) => status,
         ),
-        Array(6).fill("available"),
+        Array(CANONICAL_INTERACTION_STEP_IDS.length).fill("available"),
       );
       assert.equal(
         shadowRound.metrics.interactions.totalDurationMs.status,
@@ -104,7 +109,7 @@ test(
         Object.values(fastRound.metrics.interactions.steps).map(
           ({ status }) => status,
         ),
-        Array(6).fill("available"),
+        Array(CANONICAL_INTERACTION_STEP_IDS.length).fill("available"),
       );
       assert.equal(
         fastRound.metrics.interactions.totalDurationMs.status,
@@ -162,6 +167,11 @@ test(
         reactRound.metrics.interactions.steps.clearCompletedMs.status,
         "available",
       );
+      assert.equal(tanstackRound.status, "ok", tanstackRound.reason);
+      assert.equal(
+        tanstackRound.metrics.interactions.routeNavigationTotalMs.status,
+        "available",
+      );
       assert.equal(solid.browserOutcome.status, "supported");
       assert.equal(solid.browserTierSsr.generate, "ssr");
       assert.equal(solid.browserTierSsr.hydratable, true);
@@ -181,7 +191,7 @@ test(
         Object.values(solidRound.metrics.interactions.steps).map(
           ({ status }) => status,
         ),
-        Array(6).fill("available"),
+        Array(CANONICAL_INTERACTION_STEP_IDS.length).fill("available"),
       );
       assert.equal(
         solidRound.metrics.interactions.evidence.selectedSentinel,
@@ -196,7 +206,7 @@ test(
         Object.values(astroRound.metrics.interactions.steps).map(
           ({ status }) => status,
         ),
-        Array(6).fill("available"),
+        Array(CANONICAL_INTERACTION_STEP_IDS.length).fill("available"),
       );
       assert.equal(
         astroRound.metrics.javascript.externalTransferBytes.status,

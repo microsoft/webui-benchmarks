@@ -5,14 +5,14 @@ import { build as buildProtocol } from "@microsoft/webui";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { build as buildLightDom } from "../webui/build.mjs";
+import { build as buildLightDom } from "../webui-lightdom/build.mjs";
 import { isMainModule } from "../../servers/lib/cli.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outputPath = resolve(here, "dist");
 const generatedSourcePath = resolve(outputPath, "src");
 const protocolPath = resolve(outputPath, "protocol.bin");
-const lightAppPath = resolve(here, "..", "webui");
+const lightAppPath = resolve(here, "..", "webui-lightdom");
 const linkedStylesPath = resolve(
   lightAppPath,
   "dist",

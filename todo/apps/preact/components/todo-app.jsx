@@ -15,6 +15,7 @@ import { TodoHeader } from "./todo-header.jsx";
 import { TodoList } from "./todo-list.jsx";
 import { TodoSummary } from "./todo-summary.jsx";
 import { TodoToolbar } from "./todo-toolbar.jsx";
+import { WorkspaceIntelligence } from "./workspace-intelligence.jsx";
 
 export function TodoApp({ hydrationId = "preact", renderMode, state }) {
   const [current, setCurrent] = useState(state);
@@ -43,10 +44,12 @@ export function TodoApp({ hydrationId = "preact", renderMode, state }) {
       <main
         aria-labelledby="todo-app-title"
         class="todo-app"
+        data-route-page="work"
         data-render-mode={renderMode}
       >
         <TodoHeader app={current.app} variantLabel={current.variantLabel} />
         <TodoSummary summary={current.summary} />
+        <WorkspaceIntelligence current={current} onStateChange={setCurrent} />
         <TodoToolbar
           onClear={handleClearCompleted}
           onFilter={handleFilter}

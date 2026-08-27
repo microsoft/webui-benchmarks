@@ -10,8 +10,14 @@ import {
 export const BROWSER_REPORT_SCHEMA = "webui.ssr-todo-browser-outcomes/v2";
 export const BROWSER_TIER = "browser-secondary";
 export const PRIMARY_ROUTE = "dynamic";
-export const OFFICIAL_MINIMUM_ROUNDS = 7;
+export const OFFICIAL_MINIMUM_ROUNDS = 10;
 export const QUICK_ROUNDS = 1;
+export const ROUTE_JOURNEY = Object.freeze([
+  "/dynamic",
+  "/activity",
+  "/settings",
+  "/dynamic",
+]);
 
 const PRODUCT_ORDER = Object.freeze(
   createCaseMatrix().map(({ id }) => id),
@@ -25,21 +31,24 @@ const HYDRATION_CLIENT_MODES = new Set([
 
 const CLIENT_METADATA = Object.freeze({
   webui: Object.freeze({
-    clientMode: "hydrate",
+    clientMode: "interaction-hydrate",
     directRustBrowserServer: true,
     hydration: Object.freeze({
-      framework: "@microsoft/webui-framework eager root hydration",
-      status: "supported",
+      framework:
+        "@microsoft/webui-framework interaction-triggered application hydration",
+      status: "deferred",
     }),
     initialStateSource: "ssr-document",
     label: "WebUI",
     lazyHydration: Object.freeze({
-      scope: "todo-item",
+      scope: "app-shell and todo-item",
       status: "supported",
-      strategy: 'w-render="lazy" w-reserve-block-size="18rem"',
+      strategy:
+        'w-hydrate="interaction" root; w-render="lazy" w-reserve-block-size="18rem" rows',
     }),
     readinessDefinition:
-      "The interactive root has hydrated, viewport-deferred rows are registered, and two animation frames have completed.",
+      "The SSR shell has painted, interaction hydration and route intent preloading are installed, and two animation frames have completed.",
+    router: "@microsoft/webui-router",
   }),
   "webui-fast": Object.freeze({
     clientMode: "hydrate",
@@ -56,6 +65,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "FAST has hydrated the declarative component tree and two animation frames have completed.",
+    router: "@microsoft/webui-router",
   }),
   react: Object.freeze({
     clientMode: "hydrate",
@@ -70,6 +80,22 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "hydrateRoot has attached to the controlled SSR root and two animation frames have completed.",
+    router: "react-router",
+  }),
+  "react-tanstack": Object.freeze({
+    clientMode: "hydrate",
+    hydration: Object.freeze({
+      framework: "React hydrateRoot + @tanstack/react-router",
+      status: "supported",
+    }),
+    label: "React + TanStack Router",
+    lazyHydration: Object.freeze({
+      reason: "React has no built-in viewport hydration strategy.",
+      status: "unavailable",
+    }),
+    readinessDefinition:
+      "TanStack Router has loaded the current route, hydrateRoot has attached, and two animation frames have completed.",
+    router: "@tanstack/react-router",
   }),
   vue: Object.freeze({
     clientMode: "hydrate",
@@ -85,6 +111,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "Vue createSSRApp has mounted on the controlled SSR root and two animation frames have completed.",
+    router: "vue-router",
   }),
   solid: Object.freeze({
     browserTierSsr: Object.freeze({
@@ -104,6 +131,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "Solid hydrate has attached to the authored hydratable SSR root and two animation frames have completed.",
+    router: "@solidjs/router",
   }),
   preact: Object.freeze({
     clientMode: "hydrate",
@@ -118,6 +146,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "Preact hydrate has attached to the controlled SSR root and two animation frames have completed.",
+    router: "preact-iso",
   }),
   next: Object.freeze({
     clientMode: "framework-hydrate",
@@ -132,6 +161,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "The production load event, the complete 100-item semantic DOM, and two animation frames have completed.",
+    router: "Next.js App Router",
   }),
   nuxt: Object.freeze({
     clientMode: "framework-hydrate",
@@ -147,6 +177,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "The production load event, the complete 100-item semantic DOM, and two animation frames have completed.",
+    router: "Nuxt pages router",
   }),
   sveltekit: Object.freeze({
     clientMode: "framework-hydrate",
@@ -161,6 +192,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "The production load event, the complete 100-item semantic DOM, and two animation frames have completed.",
+    router: "SvelteKit client router",
   }),
   astro: Object.freeze({
     clientMode: "framework-island-hydrate",
@@ -176,6 +208,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "The visible @astrojs/preact island, complete semantic DOM, and two animation frames have hydrated.",
+    router: "Astro ClientRouter",
   }),
 });
 
@@ -217,6 +250,11 @@ function freezeBrowserCase(sourceCase) {
     primaryRoute: PRIMARY_ROUTE,
     productId: sourceCase.id,
     readinessDefinition: client.readinessDefinition,
+    routing: Object.freeze({
+      clientNavigation: "supported",
+      journey: ROUTE_JOURNEY,
+      router: client.router,
+    }),
     sourceCase,
     sourceSsrCaseId: sourceCase.id,
     tier: BROWSER_TIER,
@@ -234,19 +272,30 @@ export function frameworkVersionsForApp(appId, versions) {
     return versions.fullStack[appId];
   }
   const names = {
-    preact: ["preact", "preact-render-to-string"],
-    react: ["react", "react-dom"],
-    solid: ["solid-js"],
-    vue: ["vue", "@vue/server-renderer"],
+    preact: ["preact", "preact-iso", "preact-render-to-string"],
+    react: ["react", "react-dom", "react-router"],
+    "react-tanstack": [
+      "react",
+      "react-dom",
+      "@tanstack/react-router",
+    ],
+    solid: ["solid-js", "@solidjs/router"],
+    vue: ["vue", "vue-router", "@vue/server-renderer"],
   }[appId];
   if (appId === "webui") {
-    return Object.freeze({ "@microsoft/webui": versions.webui });
+    return Object.freeze({
+      "@microsoft/webui": versions.webui,
+      "@microsoft/webui-router":
+        versions.controlled["@microsoft/webui-router"],
+    });
   }
   if (appId === "webui-fast") {
     return Object.freeze({
       "@microsoft/fast-element":
         versions.controlled["@microsoft/fast-element"],
       "@microsoft/webui": versions.webui,
+      "@microsoft/webui-router":
+        versions.controlled["@microsoft/webui-router"],
     });
   }
   return Object.freeze(

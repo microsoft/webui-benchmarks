@@ -1,7 +1,14 @@
 {
   "imports": {
     "@microsoft/webui": "../../node_modules/@microsoft/webui/dist/index.js",
-    "@microsoft/webui/platform.js": "../../node_modules/@microsoft/webui/dist/platform.js"
+    "@microsoft/webui/platform.js": "../../node_modules/@microsoft/webui/dist/platform.js",
+    "d3": "npm:d3@7.9.0",
+    "d3-dsv": "npm:d3-dsv@3.0.1",
+    "date-fns": "npm:date-fns@4.4.0",
+    "immer": "npm:immer@11.1.18",
+    "minisearch": "npm:minisearch@7.2.0",
+    "rrule/dist/es5/rrule.js": "npm:rrule@2.8.1/dist/es5/rrule.js",
+    "zod": "npm:zod@4.4.3"
   },
   "nodeModulesDir": "none"
 }

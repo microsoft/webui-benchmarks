@@ -10,9 +10,10 @@ import { createWebuiRouteController } from "./webui-engine.mjs";
 const adapterLoaders = Object.freeze({
   preact: () => import("../../apps/preact/adapter.mjs"),
   react: () => import("../../apps/react/adapter.mjs"),
+  "react-tanstack": () => import("../../apps/react-tanstack/adapter.mjs"),
   solid: () => import("../../apps/solid/adapter.mjs"),
   vue: () => import("../../apps/vue/adapter.mjs"),
-  webui: () => import("../../apps/webui/adapter.mjs"),
+  webui: () => import("../../apps/webui-lightdom/adapter.mjs"),
 });
 
 export const RENDERER_IDS = Object.freeze(
@@ -61,8 +62,8 @@ export async function createAdapterRouteController({
       clientPath: `/__browser/${appId}.js`,
       initialStateSource: "browser-wrapper",
     },
-    render(state) {
-      return renderer.render(state);
+    render(state, requestPath) {
+      return renderer.render(state, requestPath);
     },
     runtimeId: "node",
     runtimeVersion: runtimeVersion("node"),

@@ -147,6 +147,17 @@ const definitions = Object.freeze({
     display: "node todo/runner/build-renderer.mjs react",
     id: "react",
   }),
+  "react-tanstack": Object.freeze({
+    args: [
+      join("todo", "runner", "build-renderer.mjs"),
+      "react-tanstack",
+    ],
+    command: process.execPath,
+    cwd: BENCHMARK_ROOT,
+    dependsOn: Object.freeze([]),
+    display: "node todo/runner/build-renderer.mjs react-tanstack",
+    id: "react-tanstack",
+  }),
   solid: Object.freeze({
     args: [join("todo", "runner", "build-renderer.mjs"), "solid"],
     command: process.execPath,
@@ -243,6 +254,7 @@ const BUILD_ORDER = Object.freeze([
   "webui-fast",
   "preact",
   "react",
+  "react-tanstack",
   "solid",
   "vue",
   "state-pool",

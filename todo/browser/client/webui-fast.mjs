@@ -16,10 +16,6 @@ function afterInitialPaint() {
 }
 
 const startedAt = performance.now();
-const root = document.querySelector("todo-app");
-if (!(root instanceof HTMLElement)) {
-  throw new Error("The FAST todo application root is missing");
-}
 const componentHydration = (async () => {
   await import("../../apps/webui-fast/browser-entry.js");
   await customElements.whenDefined("todo-app");

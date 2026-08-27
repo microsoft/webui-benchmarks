@@ -4,7 +4,7 @@
 # WebUI benchmarks
 
 This repository is the canonical home of the WebUI SSR framework benchmark
-suite. It compares fourteen equivalent 100-item todo applications in one
+suite. It compares fifteen equivalent routed workspace applications in one
 official dynamic SSR matrix and keeps the browser hydration, interaction, raw
 capture, profiling, and correctness evidence beside the runner that produced
 it.
@@ -24,12 +24,35 @@ it.
 | 11 | `vue` | `@vue/server-renderer` `renderToString` | `node:http` |
 | 12 | `preact` | `preact-render-to-string` `renderToString` | `node:http` |
 | 13 | `react` | `react-dom/server` `renderToString` | `node:http` |
-| 14 | `solid` | `solid-js/web` `renderToString` | `node:http` |
+| 14 | `react-tanstack` | React SSR + TanStack Router | `node:http` |
+| 15 | `solid` | `solid-js/web` `renderToString` | `node:http` |
 
 The WebUI rows isolate Light DOM, Shadow DOM, FAST V3 hydration, and four
 runtime hosts. The production framework rows use their real production build
 and server adapters. Product renderers without a canonical server share the
 same minimal `node:http` transport.
+
+Every browser product exposes the same three-page workspace:
+
+| Page | Path | Canonical interactions |
+| --- | --- | --- |
+| Work queue | `/dynamic` | exact/fuzzy search, status/priority/assignment facets, sorting, table/board/insights views, row and bulk selection, archive, saved views, CSV export, recurrence scheduling, plus todo filter/select/toggle/clear |
+| Activity | `/activity` | filter deployments, expand an event, mark all read |
+| Settings | `/settings` | toggle a preference, select density, save |
+
+WebUI and FAST use `@microsoft/webui-router` with dynamically imported route
+components. React uses React Router, the separate `react-tanstack` row uses
+TanStack Router's SSR pipeline, Preact uses `preact-iso`, Vue uses Vue Router,
+and Solid uses Solid Router. Next, Nuxt, SvelteKit, and Astro use their native
+production routers. All rows render the same state, markup semantics, controls,
+and shared stylesheet.
+
+The Work queue intentionally carries a realistic client workload rather than a
+small demo. Every product provides the same MiniSearch index, deterministic
+table model, D3 analytics, Zod saved-view validation, Immer reducers, date-fns
+formatting, and RRule schedule previews. The production Preact browser bundle
+is required by test to emit at least 200 KiB, preventing accidental regression
+to a toy comparison.
 
 ## Reproducible setup
 
@@ -52,7 +75,7 @@ and `node_modules` trees are intentionally untracked.
 
 ## WebUI dependency strategy
 
-The canonical manifests benchmark the released WebUI `0.0.25` npm packages
+The canonical manifests benchmark the released WebUI `0.0.26` npm packages
 and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
@@ -68,7 +91,7 @@ To benchmark a tag, branch, or commit, let the configuration script create an
 untracked shallow checkout:
 
 ```bash
-pnpm run webui:configure -- --ref v0.0.25
+pnpm run webui:configure -- --ref v0.0.26
 pnpm install --force --no-frozen-lockfile --lockfile=false
 pnpm run build
 ```
@@ -89,6 +112,19 @@ pnpm install --force --frozen-lockfile
 
 ## Run the benchmark
 
+Run the complete publication workflow from a clean commit:
+
+```bash
+pnpm run bench:official
+```
+
+This runs the official SSR matrix and ten-round headed browser matrix from the
+same source snapshot, then writes:
+
+- `results/ssr-todo-official.json` - complete raw SSR/RPS evidence
+- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence
+- `results/benchmark-summary.json` - copy-ready WebUI homepage state
+
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
 wildcard:
 
@@ -98,9 +134,9 @@ pnpm run bench:quick -- --case react
 pnpm run bench:quick -- --case webui-*
 ```
 
-Run and save the official timeboxed SSR matrix under a stable, descriptive
-name. Each product gets two four-second saturation probes, a three-second
-warmup, and one twenty-second measured round:
+Run only the official timeboxed SSR matrix when investigating server results.
+Each product gets two four-second saturation probes, a three-second warmup, and
+one twenty-second measured round:
 
 ```bash
 pnpm run bench:ssr:save -- \
@@ -115,15 +151,23 @@ pnpm run bench:browser:official -- \
 pnpm run bench:hydration-gate
 ```
 
+Launch every built production browser product concurrently for manual testing:
+
+```bash
+pnpm run preview:all
+```
+
+The command prints each HTTPS URL and keeps every server alive until Ctrl+C.
+
 Browser outcomes are never folded into headline SSR scoring. Every official
 browser row uses HTTPS/HTTP2, real framework hydration, a fresh Chromium
 process/context/page, and the shared interaction sequence.
 
 ## Result ownership and publishing
 
-Full raw reports and named baselines belong in [`results/`](./results/).
-CI runs may retain them as workflow artifacts. The WebUI documentation
-repository does not need to check in a duplicate full `latest.json`.
+Full raw reports and named baselines belong in [`results/`](./results/). CI runs
+may retain them as workflow artifacts. Copy `results/benchmark-summary.json`
+into the WebUI documentation state; do not copy either raw report.
 
 Export only the compact homepage DTO from a clean, unfiltered, complete
 canonical official SSR report. Add the matching headed browser report when
@@ -143,7 +187,7 @@ here. On Windows, an otherwise complete official report is intentionally marked
 The exporter accepts that status only when every case and round is complete and
 all unavailable telemetry has the runner's documented Windows sampler reason.
 When `--browser-input` is present, the exporter also requires matching source
-and fixture digests, the canonical 1,440×900 headed Chromium methodology, seven
+and fixture digests, the canonical 1,440×900 headed Chromium methodology, ten
 successful rounds for every product, and verified pinned runtimes. It adds FCP,
 LCP, JavaScript heap, and renderer-private-memory metrics without retaining
 stale browser data. Without that option, the DTO contains SSR throughput only.
@@ -155,9 +199,18 @@ pnpm run export:webui -- --input results/benchmark-summary.json
 ```
 
 The extractor writes `webui.json` beside the input by default. Pass
-`--output <path>` to choose another location. It keeps only `webui-*` rows,
-rebuilds each metric summary, re-ranks the filtered rows, and keeps
-`benchmarksJson` synchronized with `benchmarks`.
+`--output <path>` to choose another location. By default it keeps only the
+canonical `webui-rust-actix` row. Pass `--all` to retain the Shadow DOM, FAST,
+Bun, Deno, and Node WebUI variants too:
+
+```bash
+pnpm run export:webui -- \
+  --input results/benchmark-summary.json \
+  --all
+```
+
+The extractor rebuilds each metric summary, re-ranks the filtered rows, and
+keeps `benchmarksJson` synchronized with `benchmarks`.
 
 ## Measurement contract
 
@@ -168,12 +221,18 @@ rebuilds each metric summary, re-ranks the filtered rows, and keeps
   items before rendering.
 - Natural production bytes are measured without equal-byte padding.
 - Every response is a complete hydratable document. Publication evidence
-  requires real hydration and the shared filter, selection, toggle, and clear
-  interactions.
+  requires real hydration and the 29-step shared workbench/todo interaction
+  sequence, followed by the canonical Activity and Settings route journey.
+- Browser evidence covers the full request-to-interactive lifecycle, startup
+  JavaScript, interaction-hydration JavaScript, on-demand feature JavaScript,
+  lazy route JavaScript, and interactive route navigation—not only component
+  render time. WebUI Light and Shadow use `w-hydrate="interaction"` on the
+  server-rendered application shell; Search, Export, Save View, Insights, and
+  Schedule load separate feature chunks on first use.
 - Every case uses one server process/worker pinned to one CPU, two load workers,
   two four-second saturation probes, a three-second warmup, and one twenty-second
   official measured round.
-- All apps retain the same 100-todo state, 12-component semantic graph,
+- All apps retain the same 100-todo state, 13-component semantic graph,
   branches, loops, selectors, sentinels, route headers, and exact validation
   over all 32 variants.
 
