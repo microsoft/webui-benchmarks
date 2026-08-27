@@ -28,8 +28,7 @@ impl Config {
         let mut config = Self {
             host: "127.0.0.1".to_owned(),
             port: 0,
-            protocol_path: manifest_dir
-                .join("../../apps/webui-lightdom/dist/protocol.bin"),
+            protocol_path: manifest_dir.join("../../apps/webui-lightdom/dist/protocol.bin"),
             states_path: manifest_dir.join("../generated/todo-states.json"),
         };
         let mut args = std::env::args().skip(1);

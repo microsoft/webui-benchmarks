@@ -55,8 +55,6 @@ interface SelectionState {
 }
 
 interface TodoState {
-  app: Record<string, unknown>;
-  variantLabel: string;
   summary: SummaryState;
   toolbar: ToolbarState;
   selection: SelectionState;
@@ -66,8 +64,6 @@ interface TodoState {
 }
 
 export class TodoApp extends WebUIElement {
-  @observable app: Record<string, unknown> = {};
-  @observable variantLabel = "";
   @observable summary: SummaryState = {
     totalCount: 0,
     completedCount: 0,
@@ -131,8 +127,6 @@ export class TodoApp extends WebUIElement {
 
   private state(): TodoState {
     return {
-      app: this.app,
-      variantLabel: this.variantLabel,
       summary: this.summary,
       toolbar: this.toolbar,
       selection: this.selection,
@@ -143,8 +137,6 @@ export class TodoApp extends WebUIElement {
   }
 
   private applyState(state: TodoState): void {
-    this.app = state.app;
-    this.variantLabel = state.variantLabel;
     this.summary = state.summary;
     this.toolbar = state.toolbar;
     this.selection = state.selection;

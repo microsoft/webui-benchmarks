@@ -213,6 +213,74 @@ fn materialize_request_state(base: &Value, request_timestamp: &str) -> Result<Va
     Ok(state)
 }
 
+const WEBUI_TODO_FIELDS: &[&str] = &[
+    "assigned",
+    "assigneeLabel",
+    "blocked",
+    "blockedLabel",
+    "completed",
+    "description",
+    "dueLabel",
+    "dueToday",
+    "hasSubtasks",
+    "hasTags",
+    "id",
+    "isHighPriority",
+    "isMediumPriority",
+    "overdue",
+    "pending",
+    "priority",
+    "priorityLabel",
+    "recurring",
+    "recurringLabel",
+    "selected",
+    "selectionLabel",
+    "statusLabel",
+    "subtaskCountLabel",
+    "subtaskProgressLabel",
+    "tagCountLabel",
+    "tags",
+    "title",
+    "visible",
+];
+
+fn webui_render_state(state: &Value) -> Result<Value> {
+    let mut state = state.clone();
+    let root = state
+        .as_object_mut()
+        .context("Prepared WebUI state must be an object")?;
+    let todos = root
+        .get("todos")
+        .and_then(Value::as_array)
+        .context("Prepared WebUI state must contain todos")?;
+    let projected_todos = todos
+        .iter()
+        .map(|todo| {
+            let todo = todo
+                .as_object()
+                .context("Every WebUI todo must be an object")?;
+            WEBUI_TODO_FIELDS
+                .iter()
+                .map(|field| {
+                    todo.get(*field)
+                        .cloned()
+                        .map(|value| ((*field).to_owned(), value))
+                        .with_context(|| format!("WebUI todo is missing {field}"))
+                })
+                .collect::<Result<Map<String, Value>>>()
+                .map(Value::Object)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    root.insert("todos".to_owned(), Value::Array(projected_todos));
+    let intelligence = root
+        .get_mut("intelligence")
+        .and_then(Value::as_object_mut)
+        .context("Prepared WebUI state must contain workspace intelligence")?;
+    intelligence.remove("analytics");
+    intelligence.remove("boardColumns");
+    Ok(state)
+}
+
 fn fast_route_state(state: &Value, request_path: &str) -> Result<Option<Value>> {
     let key = match request_path {
         "/activity" => "activity",
@@ -359,11 +427,17 @@ fn response_sizes(
     handler: &WebUIHandler,
     protocol: &Protocol,
     states: &[Value],
+    project_webui: bool,
 ) -> Result<(Vec<usize>, usize)> {
     let mut lengths = Vec::with_capacity(states.len());
     let mut capacity = INITIAL_CAPACITY;
     for state in states {
         let request_state = materialize_request_state(state, PROFILE_TIMESTAMP)?;
+        let request_state = if project_webui {
+            webui_render_state(&request_state)?
+        } else {
+            request_state
+        };
         let output = render_html(
             handler,
             protocol,
@@ -398,9 +472,16 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
         .with_context(|| format!("Failed to read {}", config.states_path.display()))?;
     let states = parse_states(&state_bytes)?;
     let handler = create_handler(config.plugin);
-    let (lengths, dynamic_capacity) = response_sizes(&handler, &protocol, &states.variants)?;
+    let project_webui = config.plugin == HydrationPlugin::WebUi;
+    let (lengths, dynamic_capacity) =
+        response_sizes(&handler, &protocol, &states.variants, project_webui)?;
     let cached_timestamp = current_request_timestamp(&AtomicI64::new(0))?;
     let cached_state = materialize_request_state(&states.variants[0], &cached_timestamp)?;
+    let cached_state = if project_webui {
+        webui_render_state(&cached_state)?
+    } else {
+        cached_state
+    };
     let cached_body = web::Bytes::from(render_html(
         &handler,
         &protocol,
@@ -621,7 +702,26 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
     } else {
         None
     };
-    let render_state = scoped_state.as_ref().unwrap_or(request_state);
+    let projected_state = if state.fast_routes {
+        None
+    } else {
+        match webui_render_state(request_state) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "state-projection-failed",
+                        message: error.to_string(),
+                    });
+            }
+        }
+    };
+    let render_state = scoped_state
+        .as_ref()
+        .or(projected_state.as_ref())
+        .unwrap_or(request_state);
     let accepts_partial = request
         .headers()
         .get("accept")
@@ -826,6 +926,22 @@ async fn route_state(state: web::Data<AppState>) -> HttpResponse {
                 message: error.to_string(),
             });
     }
+    let work_state = if state.fast_routes {
+        request_state.clone()
+    } else {
+        match webui_render_state(request_state) {
+            Ok(value) => value,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "state-projection-failed",
+                        message: error.to_string(),
+                    });
+            }
+        }
+    };
     HttpResponse::Ok()
         .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
         .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
@@ -837,7 +953,7 @@ async fn route_state(state: web::Data<AppState>) -> HttpResponse {
         .json(serde_json::json!({
             "activity": request_state.get("activity"),
             "settings": request_state.get("settings"),
-            "work": request_state,
+            "work": work_state,
         }))
 }
 
@@ -909,13 +1025,14 @@ mod tests {
     use super::{
         current_request_timestamp, html_response, load_browser_route_assets,
         materialize_request_state, parse_states, rewrite_request_state, timing_header,
-        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE, STATE_VARIANT_COUNT,
+        webui_render_state, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
+        STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
     use actix_web::web;
     use serde::Serialize;
-    use serde_json::json;
+    use serde_json::{json, Map, Value};
     use std::sync::atomic::AtomicI64;
 
     #[derive(Serialize)]
@@ -1018,6 +1135,39 @@ mod tests {
         assert!(result
             .err()
             .is_some_and(|error| error.to_string().contains("variant 1")));
+    }
+
+    #[test]
+    fn webui_state_keeps_only_rendered_interactive_todo_fields() {
+        let todo = WEBUI_TODO_FIELDS
+            .iter()
+            .map(|field| ((*field).to_owned(), json!(field)))
+            .chain([
+                ("assignee".to_owned(), json!({ "name": "Ada" })),
+                ("subtasks".to_owned(), json!([{ "id": "subtask-1" }])),
+                ("timestamp".to_owned(), json!("2026-08-27T00:00:00.000Z")),
+            ])
+            .collect::<Map<String, Value>>();
+        let state = json!({
+            "intelligence": {
+                "analytics": { "average": 1 },
+                "boardColumns": [],
+                "previewRows": []
+            },
+            "todos": [Value::Object(todo)]
+        });
+        let projected = webui_render_state(&state)
+            .unwrap_or_else(|error| panic!("WebUI state should project: {error}"));
+        let todo = projected["todos"][0]
+            .as_object()
+            .unwrap_or_else(|| panic!("projected todo should be an object"));
+        assert_eq!(todo.len(), WEBUI_TODO_FIELDS.len());
+        assert!(!todo.contains_key("assignee"));
+        assert!(!todo.contains_key("subtasks"));
+        assert!(!todo.contains_key("timestamp"));
+        assert!(projected["intelligence"].get("analytics").is_none());
+        assert!(projected["intelligence"].get("boardColumns").is_none());
+        assert!(projected["intelligence"].get("previewRows").is_some());
     }
 
     #[test]

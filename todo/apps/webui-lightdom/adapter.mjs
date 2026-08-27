@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMPONENTS } from "../../shared/contract.mjs";
 import { createTodoState } from "../../shared/state.mjs";
+import { createWebuiRenderState } from "../../shared/webui-state.mjs";
 import { build as buildApp } from "./build.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,7 @@ export function createRenderer() {
       protocolPath,
       render(state = defaultState, requestPath = "/dynamic") {
         return runtimeProtocol.render(
-          state,
+          createWebuiRenderState(state),
           { requestPath },
         ).toString("utf8");
       },

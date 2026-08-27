@@ -6,6 +6,7 @@ import process from "node:process";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TODO_STATE_VARIANTS } from "../../shared/state.mjs";
+import { createWebuiRenderState } from "../../shared/webui-state.mjs";
 import {
   REPOSITORY_ROOT,
   configuredWebuiCheckout,
@@ -181,11 +182,11 @@ export async function createWebuiRouteController({
     },
     appId: "webui",
     render(state, requestPath) {
-      return protocol.render(state, { requestPath });
+      return protocol.render(createWebuiRenderState(state), { requestPath });
     },
     renderPartial(state, requestPath, inventoryHex) {
       return protocol.renderPartial(
-        state,
+        createWebuiRenderState(state),
         "index.html",
         requestPath,
         inventoryHex,
