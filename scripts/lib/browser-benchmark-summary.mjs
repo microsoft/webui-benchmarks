@@ -10,7 +10,8 @@ import { TODO_STATE_VARIANTS } from "../../todo/shared/state.mjs";
 import { loadRuntimePins } from "../../todo/servers/verify-runtimes.mjs";
 
 const MEBIBYTE = 1024 * 1024;
-const OFFICIAL_ROUNDS = 7;
+const KIBIBYTE = 1024;
+const OFFICIAL_ROUNDS = 10;
 const VIEWPORT = Object.freeze({ height: 900, width: 1_440 });
 const browserLaunchArguments = Object.freeze([
   "--disable-backgrounding-occluded-windows",
@@ -49,7 +50,7 @@ const sharedStateDigest = createHash("sha256")
 const metricDefinitions = Object.freeze([
   Object.freeze({
     description:
-      "First contentful paint from navigation start across seven isolated Chromium runs.",
+      "First contentful paint from navigation start across ten isolated Chromium runs.",
     direction: "lower",
     directionLabel: "lower is better",
     id: "firstContentfulPaintMs",
@@ -60,12 +61,56 @@ const metricDefinitions = Object.freeze([
   }),
   Object.freeze({
     description:
-      "Pre-interaction largest contentful paint from navigation start across seven isolated Chromium runs.",
+      "Pre-interaction largest contentful paint from navigation start across ten isolated Chromium runs.",
     direction: "lower",
     directionLabel: "lower is better",
     id: "largestContentfulPaintMs",
     label: "LCP",
     path: "timings.largestContentfulPaintMs",
+    sourceUnit: "milliseconds",
+    unit: "ms",
+  }),
+  Object.freeze({
+    description:
+      "Dynamic request start through framework-authored full hydration across ten isolated Chromium runs.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "requestToFullHydrationMs",
+    label: "Request to interactive",
+    path: "timings.requestToFullHydrationMs",
+    sourceUnit: "milliseconds",
+    unit: "ms",
+  }),
+  Object.freeze({
+    description:
+      "Executable JavaScript transferred before the initial routed page becomes interactive.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "initialJavascriptBytes",
+    label: "Initial JavaScript",
+    path: "javascript.initialTransferBytes",
+    sourceUnit: "bytes",
+    unit: "KiB",
+  }),
+  Object.freeze({
+    description:
+      "Additional executable JavaScript transferred while visiting Activity and Settings.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "routeJavascriptBytes",
+    label: "Route JavaScript",
+    path: "javascript.routeTransferBytes",
+    sourceUnit: "bytes",
+    unit: "KiB",
+  }),
+  Object.freeze({
+    description:
+      "Combined client-navigation time for Activity, Settings, and the return to Work queue.",
+    direction: "lower",
+    directionLabel: "lower is better",
+    id: "routeNavigationMs",
+    label: "Route navigation",
+    path: "interactions.routeNavigationTotalMs",
     sourceUnit: "milliseconds",
     unit: "ms",
   }),
@@ -104,7 +149,11 @@ function formatNumber(value) {
 }
 
 function formatMetricValue(value, definition) {
-  const normalized = definition.unit === "MiB" ? value / MEBIBYTE : value;
+  const normalized = definition.unit === "MiB"
+    ? value / MEBIBYTE
+    : definition.unit === "KiB"
+      ? value / KIBIBYTE
+      : value;
   if (normalized > 0 && normalized < 0.01) {
     return "<0.01";
   }
@@ -345,7 +394,7 @@ export function createBrowserSummaryEvidence(ssrReport, browserReport) {
   assertBrowserReport(browserReport);
   if (!hasMatchingEvidence(ssrReport, browserReport)) {
     throw new Error(
-      "Browser summary export requires a clean, complete, matching seven-round headed official report with canonical methodology",
+      "Browser summary export requires a clean, complete, matching ten-round headed official report with canonical methodology",
     );
   }
   const method = methodology(browserReport);

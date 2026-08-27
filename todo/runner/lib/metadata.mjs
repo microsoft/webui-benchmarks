@@ -241,13 +241,19 @@ export function collectFrameworkVersions() {
   const rootManifest = readJson(resolve(BENCHMARK_ROOT, "package.json"));
   const controlledPackages = [
     "@microsoft/fast-element",
+    "@microsoft/webui-router",
+    "@solidjs/router",
+    "@tanstack/react-router",
     "@vue/server-renderer",
     "preact",
+    "preact-iso",
     "preact-render-to-string",
     "react",
     "react-dom",
+    "react-router",
     "solid-js",
     "vue",
+    "vue-router",
   ];
   const controlled = Object.fromEntries(
     controlledPackages.map((name) => [

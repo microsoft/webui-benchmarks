@@ -192,7 +192,7 @@ function report() {
       stateVariants: 32,
     },
     matrix: {
-      expectedCaseCount: 14,
+      expectedCaseCount: 15,
       id: "official-ssr-matrix",
       naturalResponseBytes: { policy: "natural" },
       summaries,
@@ -326,7 +326,7 @@ function browserMetrics(index, round) {
 function browserReport(ssrReport = report()) {
   const browserCases = createBrowserCases();
   const rawRounds = browserCases.flatMap((browserCase, index) =>
-    Array.from({ length: 7 }, (_, round) => ({
+    Array.from({ length: 10 }, (_, round) => ({
       appId: browserCase.appId,
       browserVersion: "151.0.0.0",
       fullHydration: {
@@ -384,6 +384,7 @@ function browserReport(ssrReport = report()) {
       primaryRoute: browserCase.primaryRoute,
       productId: browserCase.productId,
       readinessDefinition: browserCase.readinessDefinition,
+      routing: browserCase.routing,
       runtime: {
         id: browserCase.sourceCase.runtimeId,
         version: browserCase.sourceCase.runtimeId === "rust"
@@ -423,10 +424,10 @@ function browserReport(ssrReport = report()) {
     mode: "official",
     rawRounds,
     roundOrder: Array.from(
-      { length: 7 },
+      { length: 10 },
       () => browserCases.map(({ productId }) => productId),
     ),
-    roundsPerApp: 7,
+    roundsPerApp: 10,
     ...runtimeEvidence(),
     schema: BROWSER_REPORT_SCHEMA,
     snapshotIntegrity: {
@@ -460,7 +461,7 @@ function browserReport(ssrReport = report()) {
 test("exports only the compact homepage benchmark DTO", () => {
   const summary = buildBenchmarkSummary(report());
   assert.deepEqual(Object.keys(summary), ["benchmarks", "benchmarksJson"]);
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(summary.benchmarks.rows[0].rank, "1");
   assert.equal(
     summary.benchmarks.rows.filter(({ primary }) => primary).length,
@@ -472,7 +473,7 @@ test("exports only the compact homepage benchmark DTO", () => {
 
 test("accepts complete Windows reports with intentional process telemetry gaps", () => {
   const summary = buildBenchmarkSummary(windowsPartialReport());
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(summary.benchmarks.hasUnavailable, false);
 });
 
@@ -485,14 +486,18 @@ test("combines matching official browser outcomes", () => {
       "requestsPerSecond",
       "firstContentfulPaintMs",
       "largestContentfulPaintMs",
+      "requestToFullHydrationMs",
+      "initialJavascriptBytes",
+      "routeJavascriptBytes",
+      "routeNavigationMs",
       "jsHeapUsedBytes",
       "rendererPrivateBytes",
     ],
   );
-  assert.equal(summary.benchmarks.rows.length, 14);
+  assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(
     summary.benchmarks.rows.every(
-      (row) => Object.keys(row.metrics).length === 5,
+      (row) => Object.keys(row.metrics).length === 9,
     ),
     true,
   );

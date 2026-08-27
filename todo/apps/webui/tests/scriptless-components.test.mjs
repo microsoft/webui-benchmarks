@@ -11,19 +11,24 @@ import { COMPONENTS } from "../../../shared/contract.mjs";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("only the interaction-owning root has authored TypeScript", async () => {
+test("only interaction-owning components have authored TypeScript", async () => {
+  const interactiveComponents = new Set([
+    "todo-app",
+    "workspace-intelligence",
+  ]);
   for (const tagName of COMPONENTS) {
     const sourceRoot = resolve(appRoot, "src", tagName, tagName);
     const hasBehavior = existsSync(`${sourceRoot}.ts`);
+    const ownsInteractions = interactiveComponents.has(tagName);
     assert.equal(
       hasBehavior,
-      tagName === "todo-app",
-      `${tagName} should ${tagName === "todo-app" ? "" : "not "}have authored behavior`,
+      ownsInteractions,
+      `${tagName} should ${ownsInteractions ? "" : "not "}have authored behavior`,
     );
     const template = await readFile(`${sourceRoot}.html`, "utf8");
     assert.equal(
       /@[a-z-]+=/u.test(template),
-      tagName === "todo-app",
+      ownsInteractions,
       `${tagName} event ownership must match its authored behavior module`,
     );
   }
@@ -36,6 +41,7 @@ test("the browser component entry imports only authored behavior", async () => {
   );
   assert.match(entry, /lazy-hydration\.js/u);
   assert.match(entry, /todo-app\/todo-app\.js/u);
+  assert.match(entry, /workspace-intelligence\/workspace-intelligence\.js/u);
   assert.doesNotMatch(
     entry,
     /todo-(?:button|checkbox|filter|footer|header|item|list|summary|tag-list|toolbar)\//u,

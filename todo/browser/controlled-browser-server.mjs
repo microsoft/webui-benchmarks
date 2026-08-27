@@ -59,6 +59,7 @@ export async function startControlledBrowserServer({
   const tls = await browserTlsMaterial();
   const clientPath = `/__browser/${browserCase.appId}.js`;
   const localSourcePath = "/__browser/source/dynamic";
+  const applicationPaths = new Set(["/dynamic", "/activity", "/settings"]);
   let nextVariant = 0;
   let serverUrl;
   const server = createSecureServer(
@@ -121,6 +122,7 @@ export async function startControlledBrowserServer({
               TODO_STATE_VARIANTS[variantIndex],
               requestTimestamp,
             ),
+            "/dynamic",
           ),
         );
         send(response, 200, "text/html; charset=utf-8", fragment, {
@@ -130,10 +132,16 @@ export async function startControlledBrowserServer({
         );
         return;
       }
-      if (url.pathname !== "/dynamic") {
+      if (!applicationPaths.has(url.pathname)) {
         send(response, 404, "text/plain; charset=utf-8", "Not found");
         return;
       }
+      const acceptsPartial = (request.headers.accept ?? "")
+        .split(",")
+        .some((value) =>
+          value.trim().startsWith("application/json")
+          || value.trim().startsWith("application/x-ndjson")
+        );
       const adapterStartedAt = performance.now();
       const backendStartedAt = performance.now();
       let backendBodyAt;
@@ -152,16 +160,23 @@ export async function startControlledBrowserServer({
               TODO_STATE_VARIANTS[variantIndex],
               requestTimestamp,
             ),
+            url.pathname,
           ),
         );
         backendHeadersAt = performance.now();
         backendBodyAt = backendHeadersAt;
       } else {
-        const sourceUrl =
-          `${backend.announcement.url}${backend.announcement.routes.dynamic}`;
+        const sourceUrl = `${backend.announcement.url}${url.pathname}`;
         const source = await fetch(sourceUrl, {
           headers: {
             "accept-encoding": "identity",
+            ...(acceptsPartial
+              ? {
+                  accept: "application/json",
+                  "x-webui-inventory":
+                    request.headers["x-webui-inventory"] ?? "",
+                }
+              : {}),
             "x-webui-browser-profile": "1",
           },
           signal: AbortSignal.timeout(30_000),
@@ -180,6 +195,13 @@ export async function startControlledBrowserServer({
           source.headers.get("x-webui-bench-variant"),
         );
         backendServerTiming = source.headers.get("server-timing");
+        if (acceptsPartial) {
+          send(response, 200, "application/json; charset=utf-8", fragment, {
+            "x-webui-bench-timestamp": requestTimestamp,
+            "x-webui-bench-variant": String(variantIndex),
+          });
+          return;
+        }
       }
       if (
         !Number.isInteger(variantIndex)

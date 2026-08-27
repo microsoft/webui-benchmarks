@@ -19,6 +19,20 @@ export default defineNuxtConfig({
       },
       swr: false,
     },
+    "/activity": {
+      cache: false,
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate",
+      },
+      swr: false,
+    },
+    "/settings": {
+      cache: false,
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate",
+      },
+      swr: false,
+    },
     "/cached": {
       headers: {
         "cache-control": "public, max-age=31536000, immutable",
@@ -27,4 +41,10 @@ export default defineNuxtConfig({
     },
   },
   ssr: true,
+  vue: {
+    compilerOptions: {
+      isCustomElement: (tag) =>
+        tag.startsWith("todo-") || tag === "workspace-intelligence",
+    },
+  },
 });

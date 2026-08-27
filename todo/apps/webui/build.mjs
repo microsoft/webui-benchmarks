@@ -43,6 +43,23 @@ export function build() {
       css,
       "utf8",
     );
+    await Promise.all(
+      [
+        "app-shell",
+        "activity-page",
+        "settings-page",
+        "workspace-intelligence",
+      ].map(async (component) => {
+        await mkdir(resolve(generatedSourcePath, component), {
+          recursive: true,
+        });
+        await writeFile(
+          resolve(generatedSourcePath, component, `${component}.css`),
+          css,
+          "utf8",
+        );
+      }),
+    );
     await buildBundle({
       absWorkingDir: here,
       banner: {
@@ -52,7 +69,7 @@ export function build() {
       define: {
         __WEBUI_DEV__: "false",
       },
-      entryPoints: ["component-definitions.ts"],
+      entryPoints: ["projection-components.ts"],
       format: "esm",
       legalComments: "none",
       minify: true,

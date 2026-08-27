@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 import { hydrate } from "solid-js/web";
-import { TodoApp } from "./components/todo-app.jsx";
+import { WorkspaceApp } from "./components/workspace-app.jsx";
 
 class TodoBadgeElement extends HTMLElement {
   get dataBranch() {
@@ -27,13 +27,13 @@ function readInitialState() {
 }
 
 export function startTodoApp(
-  target = document.querySelector(".todo-app")?.parentElement ?? document.body,
+  target = document.querySelector("#todo-browser-root") ?? document.body,
   state = readInitialState(),
 ) {
   if (customElements.get("todo-badge") === undefined) {
     customElements.define("todo-badge", TodoBadgeElement);
   }
-  return hydrate(() => <TodoApp state={state} />, target);
+  return hydrate(() => <WorkspaceApp state={state} />, target);
 }
 
 if (document.querySelector("script[data-todo-app-state]") !== null) {

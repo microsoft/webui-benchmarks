@@ -17,11 +17,14 @@ product must be converted to real framework hydration or removed.
 Run from the repository root:
 
 ```powershell
-# Official: build production outputs, then run exactly seven randomized rounds.
+# Official: build production outputs, then run exactly ten randomized rounds.
 node todo\browser\cli.mjs --official --build
 
 # One smoke round, optionally narrowed to apps.
 node todo\browser\cli.mjs --quick --apps vue,react,next
+
+# Launch all built production apps for manual testing; Ctrl+C stops all.
+pnpm run preview:all
 
 # Focused tests, including real Chromium interaction and React/Solid smoke coverage.
 $tests = Get-ChildItem todo\browser\tests\*.test.mjs
@@ -105,27 +108,25 @@ Reports default to
   code splitting or selective scheduling but no built-in viewport hydration,
   so the benchmark records that capability as unavailable instead of adding a
   custom observer polyfill.
-- Every app also publishes a framework-authored hydration-complete timestamp.
-  `requestToFullHydrationMs` starts at
-  `PerformanceNavigationTiming.requestStart`, so it includes dynamic server
-  response time, HTML transfer, external assets, execution, and startup
-  hydration. Viewport-deferred components follow their framework policy and do
-  not hold startup completion open while offscreen.
-- Native viewport hydration is enabled only where the production framework
-  supports it: WebUI uses `w-render="lazy"` with an `18rem` reservation on each
-  todo row, Vue uses `hydrateOnVisible`, Nuxt uses `hydrate-on-visible`, and
-  Astro uses `client:visible`. React, Preact, Solid, SvelteKit, and Next expose
-  code splitting or selective scheduling but no built-in viewport hydration,
-  so the benchmark records that capability as unavailable instead of adding a
-  custom observer polyfill.
 - The WebUI entry ships one eager interactive-root bundle so full hydration has
   no second-request or frame-delay waterfall. Viewport deferral remains active
   for scriptless todo rows; interaction-only root hydration remains a separate
   opt-in framework capability rather than this benchmark's startup policy.
-- After readiness, browser-local timings exercise pending, completed, and all
-  filters; selection of `todo-0050`; completion toggle; and clear completed.
-  Every step waits for and validates semantic DOM state. Shared frozen server
-  snapshots are hashed before and after the run.
+- After readiness, 29 browser-local timings first exercise the realistic
+  workbench: exact search for `todo-0050`, three matching facets, sorting, row
+  selection, CSV export, schema-validated saved views, archive/reset,
+  board/insights views, and recurrence scheduling. The journey then exercises
+  pending/completed/all todo filters, selection, completion, clear completed,
+  Activity filtering/expansion/read state, Settings toggle/density/save, and
+  return navigation. Every route waits for framework-authored interactive
+  readiness and validates semantic DOM state.
+- JavaScript is split into initial and route-transition transfer bytes. WebUI
+  and FAST use `Router.start({ loaders })` so Activity and Settings are real
+  dynamic imports. Framework-native route chunks are measured when their
+  routers request them. Shared frozen server snapshots are hashed before and
+  after the run.
+- The production Preact client must emit at least 200 KiB. This floor is tested
+  against the actual esbuild output, not source size or installed dependencies.
 
 Summaries retain every raw round and report median, nearest-rank p95, and MAD
 for each available numeric metric. Failures and unsupported measurements remain

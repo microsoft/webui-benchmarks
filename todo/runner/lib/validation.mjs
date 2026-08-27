@@ -86,16 +86,13 @@ function validateHydratableRendererDocument(benchmarkCase, response, state) {
     return;
   }
   const html = response.body.toString("utf8");
-  const statePrefix = "globalThis.__TODO_BENCH_INITIAL_STATE__=";
-  const stateStart = html.indexOf(statePrefix);
-  const stateEnd = stateStart === -1
-    ? -1
-    : html.indexOf(";</script>", stateStart + statePrefix.length);
+  const stateMatch =
+    /<script id="todo-bench-initial-state" type="application\/json">([\s\S]*?)<\/script>/u
+      .exec(html);
   if (
     !html.trimStart().toLowerCase().startsWith("<!doctype html>")
     || !html.includes('id="todo-browser-root"')
-    || stateStart === -1
-    || stateEnd === -1
+    || stateMatch === null
     || !html.includes(
       `<script type="module" src="/__browser/${benchmarkCase.appId}.js">`,
     )
@@ -104,9 +101,7 @@ function validateHydratableRendererDocument(benchmarkCase, response, state) {
       `${benchmarkCase.id} must return a complete hydratable SSR document`,
     );
   }
-  const serializedState = JSON.parse(
-    html.slice(stateStart + statePrefix.length, stateEnd),
-  );
+  const serializedState = JSON.parse(stateMatch[1]);
   const validation = validateTodoState(serializedState);
   if (
     !validation.valid

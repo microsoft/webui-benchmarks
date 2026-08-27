@@ -8,6 +8,7 @@ import {
   assertHydrationGate,
   hydrationGateFailures,
 } from "../hydration-gate.mjs";
+import { CANONICAL_INTERACTION_STEP_IDS } from "../interactions.mjs";
 
 function successfulRound(productId) {
   const available = { status: "available", unit: "milliseconds", value: 1 };
@@ -21,21 +22,34 @@ function successfulRound(productId) {
       interactions: {
         evidence: {
           completedBeforeClear: 26,
+          activityEvents: 48,
+          activitySentinel: "activity-0026",
+          activityVisibleAfterFilter: 16,
           initialCompleted: 25,
           initialPending: 75,
           remainingAfterClear: 74,
           selectedSentinel: "todo-0050",
+          settingsDensity: "compact",
+          settingsSaved: true,
+          workItemsAfterReturn: 100,
           totalBeforeClear: 100,
+          workspaceArchived: 1,
+          workspaceAfterClear: 74,
+          workspaceExportRows: 1,
+          workspaceFacets: {
+            assignment: "unassigned",
+            priority: "low",
+            status: "pending",
+          },
+          workspaceFinalResults: 100,
+          workspaceSavedViews: 1,
+          workspaceSchedule: "weekly",
+          workspaceSearchResult: 1,
+          workspaceSelectedSentinel: "todo-0050",
+          workspaceViews: ["board", "insights"],
         },
         steps: Object.fromEntries(
-          [
-            "clearCompletedMs",
-            "filterAllMs",
-            "filterCompletedMs",
-            "filterPendingMs",
-            "selectSentinelMs",
-            "toggleCompletionMs",
-          ].map((name) => [name, available]),
+          CANONICAL_INTERACTION_STEP_IDS.map((name) => [name, available]),
         ),
         totalDurationMs: available,
       },

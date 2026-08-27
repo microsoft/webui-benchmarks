@@ -5,11 +5,13 @@
 import { onMounted, ref } from "vue";
 import { BRANCHES } from "../../../shared/contract.mjs";
 import { publishHydrated } from "../../../shared/hydration.mjs";
+import { createWorkspaceIntelligence } from "../../../shared/workspace-intelligence.mjs";
 import TodoFooter from "./todo-footer.vue";
 import TodoHeader from "./todo-header.vue";
 import TodoList from "./todo-list.vue";
 import TodoSummary from "./todo-summary.vue";
 import TodoToolbar from "./todo-toolbar.vue";
+import WorkspaceIntelligence from "../../vue/components/workspace-intelligence.vue";
 
 defineOptions({ name: "todo-app" });
 const props = defineProps({
@@ -72,6 +74,7 @@ function refreshDerivedState(current, todos) {
       ...current.footer,
       itemCountLabel: plural(totalCount, "item"),
     },
+    intelligence: createWorkspaceIntelligence(todos, current.intelligence),
     selection: {
       todoId: selectedTodo?.id ?? "",
       label: selectedTodo ? `Selected ${selectedTodo.id}` : "No todo selected",
@@ -175,11 +178,16 @@ function clearCompleted() {
 <template>
   <main
     class="todo-app"
+    data-route-page="work"
     :data-render-mode="renderMode"
     :data-variant-id="state.variantId"
   >
     <TodoHeader :app="state.app" :variant-label="state.variantLabel" />
     <TodoSummary :summary="state.summary" />
+    <WorkspaceIntelligence
+      :state="state"
+      @state-change="state = $event"
+    />
     <TodoToolbar
       :selection="state.selection"
       :toolbar="state.toolbar"

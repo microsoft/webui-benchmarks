@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 import { build as buildProtocol } from "@microsoft/webui";
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainModule } from "../../servers/lib/cli.mjs";
@@ -13,6 +13,7 @@ const outputPath = resolve(here, "dist");
 const generatedSourcePath = resolve(outputPath, "src");
 const protocolPath = resolve(outputPath, "protocol.bin");
 const linkedStylesPath = resolve(outputPath, "browser", "fast");
+const stylesPath = resolve(here, "..", "..", "shared", "styles.css");
 
 let buildPromise;
 
@@ -30,10 +31,28 @@ async function writeCssFiles(cssFiles) {
 
 export function build() {
   buildPromise ??= Promise.all([
+    readFile(stylesPath, "utf8"),
     rm(generatedSourcePath, { force: true, recursive: true }),
     mkdir(outputPath, { recursive: true }),
-  ]).then(async () => {
+  ]).then(async ([css]) => {
     await cp(sourcePath, generatedSourcePath, { recursive: true });
+    await Promise.all(
+      [
+        "app-shell",
+        "activity-page",
+        "settings-page",
+        "workspace-intelligence",
+      ].map(async (component) => {
+        await mkdir(resolve(generatedSourcePath, component), {
+          recursive: true,
+        });
+        await writeFile(
+          resolve(generatedSourcePath, component, `${component}.css`),
+          css,
+          "utf8",
+        );
+      }),
+    );
     const result = buildProtocol({
       appDir: generatedSourcePath,
       css: "link",

@@ -27,7 +27,12 @@ export function build() {
       banner,
       bundle: true,
       entryPoints: [resolve(here, "server.jsx")],
-      external: ["solid-js", "solid-js/web"],
+      external: [
+        "@solidjs/router",
+        "@solidjs/router/*",
+        "solid-js",
+        "solid-js/web",
+      ],
       format: "esm",
       legalComments: "none",
       minify: true,

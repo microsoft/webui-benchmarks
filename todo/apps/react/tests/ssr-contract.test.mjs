@@ -60,7 +60,7 @@ test(`${APP_ID}: render is synchronous and returns markup`, () => {
   const html = renderer.render(variants[0]);
   assert.equal(typeof html, "string");
   assert.ok(!(html instanceof Promise));
-  assert.ok(html.startsWith("<todo-app"));
+  assert.ok(html.startsWith('<div class="workspace-shell">'));
   assert.ok(!html.includes("<!--"), "SSR output must not carry HTML comments");
 });
 

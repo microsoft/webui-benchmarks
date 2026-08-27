@@ -2,11 +2,17 @@
 // Licensed under the MIT license.
 
 import {
+  ACTIVITY_EVENT_COUNT,
+  APP_ROUTES,
   FILTER_IDS,
+  SETTING_CONTROL_COUNT,
   STATE_VARIANT_COUNT,
   TODO_ITEM_COUNT,
   countTodoBranches,
 } from "./contract.mjs";
+import {
+  createWorkspaceIntelligence,
+} from "./workspace-intelligence.mjs";
 
 const TAGS = Object.freeze([
   Object.freeze({ key: "planning", label: "Planning", tone: "blue" }),
@@ -16,6 +22,61 @@ const TAGS = Object.freeze([
   Object.freeze({ key: "security", label: "Security", tone: "red" }),
 ]);
 const TIMESTAMP_EPOCH_MS = Date.UTC(2026, 0, 1);
+const ACTIVITY_TYPES = Object.freeze([
+  Object.freeze({ id: "review", label: "Reviews" }),
+  Object.freeze({ id: "deployment", label: "Deployments" }),
+  Object.freeze({ id: "automation", label: "Automation" }),
+]);
+const SETTING_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    description: "Receive one summary of assignment and status changes.",
+    enabled: true,
+    id: "daily-digest",
+    label: "Daily digest",
+  }),
+  Object.freeze({
+    description: "Notify when a high-priority item becomes overdue.",
+    enabled: true,
+    id: "priority-alerts",
+    label: "Priority alerts",
+  }),
+  Object.freeze({
+    description: "Include automated workflow events in the activity stream.",
+    enabled: true,
+    id: "automation-events",
+    label: "Automation events",
+  }),
+  Object.freeze({
+    description: "Show completed work in weekly progress summaries.",
+    enabled: false,
+    id: "completed-summary",
+    label: "Completed work summary",
+  }),
+  Object.freeze({
+    description: "Display assignment changes from every workspace.",
+    enabled: true,
+    id: "cross-workspace",
+    label: "Cross-workspace updates",
+  }),
+  Object.freeze({
+    description: "Require confirmation before clearing completed work.",
+    enabled: false,
+    id: "confirm-clear",
+    label: "Confirm destructive actions",
+  }),
+  Object.freeze({
+    description: "Keep the work queue synchronized while this tab is active.",
+    enabled: true,
+    id: "live-refresh",
+    label: "Live refresh",
+  }),
+  Object.freeze({
+    description: "Reduce nonessential motion throughout the workspace.",
+    enabled: false,
+    id: "reduced-motion",
+    label: "Reduced motion",
+  }),
+]);
 let lastRequestTimestampMicros = 0n;
 
 function pad(value, width) {
@@ -83,6 +144,94 @@ function createSubtasks(id, itemNumber, pattern) {
       statusLabel: completed ? "Completed" : "Pending",
     };
   });
+}
+
+function createActivity(variantIndex) {
+  const events = Array.from({ length: ACTIVITY_EVENT_COUNT }, (_, index) => {
+    const number = index + 1;
+    const type = ACTIVITY_TYPES[index % ACTIVITY_TYPES.length];
+    const itemNumber = ((index * 7 + variantIndex) % TODO_ITEM_COUNT) + 1;
+    const id = `activity-${pad(number, 4)}`;
+    return {
+      id,
+      type: type.id,
+      typeLabel: type.label.slice(0, -1),
+      actor: `Owner ${pad((index % 8) + 1, 2)}`,
+      action: {
+        review: "reviewed",
+        deployment: "deployed",
+        automation: "updated",
+      }[type.id],
+      target: `Todo ${pad(itemNumber, 4)}`,
+      detail:
+        `Activity ${pad(number, 4)} records deterministic ${type.label.toLowerCase()} work for snapshot ${pad(variantIndex + 1, 2)}.`,
+      timeLabel: `${number * 3} minutes ago`,
+      expanded: false,
+      unread: (index + variantIndex) % 4 !== 0,
+      visible: true,
+    };
+  });
+  const unreadCount = events.reduce(
+    (total, event) => total + Number(event.unread),
+    0,
+  );
+  return {
+    title: "Workspace activity",
+    description:
+      "Review deployment, automation, and collaboration events across the same benchmark dataset.",
+    activeFilter: "all",
+    unreadCount,
+    unreadLabel: plural(unreadCount, "unread event"),
+    filters: [
+      {
+        active: true,
+        count: ACTIVITY_EVENT_COUNT,
+        countLabel: String(ACTIVITY_EVENT_COUNT),
+        id: "all",
+        label: "All activity",
+      },
+      ...ACTIVITY_TYPES.map((type) => {
+        const count = events.filter((event) => event.type === type.id).length;
+        return {
+          active: false,
+          count,
+          countLabel: String(count),
+          id: type.id,
+          label: type.label,
+        };
+      }),
+    ],
+    events,
+  };
+}
+
+function createSettings() {
+  return {
+    title: "Workspace settings",
+    description:
+      "Tune notification, refresh, density, and safety preferences for the benchmark workspace.",
+    density: "comfortable",
+    densityOptions: [
+      { id: "comfortable", label: "Comfortable", selected: true },
+      { id: "compact", label: "Compact", selected: false },
+      { id: "spacious", label: "Spacious", selected: false },
+    ],
+    dirty: false,
+    saved: false,
+    statusLabel: "No unsaved changes",
+    toggles: SETTING_DEFINITIONS.map((setting) => ({ ...setting })),
+  };
+}
+
+function createNavigation() {
+  return APP_ROUTES.map((route) => ({
+    ...route,
+    description: {
+      work: `${TODO_ITEM_COUNT} active work items`,
+      activity: `${ACTIVITY_EVENT_COUNT} workspace events`,
+      settings: `${SETTING_CONTROL_COUNT} preference controls`,
+    }[route.id],
+  }));
 }
 
 function createTodo(index, variantIndex, selectedIndex) {
@@ -179,6 +328,9 @@ function createVariant(variantIndex) {
       subtitle: "100 timestamped dynamic items",
       description: "Equivalent component, branch, loop, and interaction work.",
     },
+    navigation: createNavigation(),
+    activity: createActivity(variantIndex),
+    settings: createSettings(),
     summary: {
       totalCount: TODO_ITEM_COUNT,
       completedCount: branchCounts.completed,
@@ -232,6 +384,7 @@ function createVariant(variantIndex) {
     },
     branchCounts,
     todos,
+    intelligence: createWorkspaceIntelligence(todos),
     footer: {
       label: "Reproducible dynamic todo contract",
       itemCountLabel: plural(TODO_ITEM_COUNT, "item"),
@@ -289,6 +442,10 @@ export function createRequestTodoState(
   });
   return {
     ...state,
+    intelligence: createWorkspaceIntelligence(
+      todos,
+      state.intelligence,
+    ),
     requestTimestamp,
     todos,
     footer: {

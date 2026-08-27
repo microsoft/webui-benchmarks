@@ -6,7 +6,10 @@ import {
   metricFromOptional,
   unavailableMetric,
 } from "./metrics.mjs";
-import { executeTodoInteractionSequence } from "./interactions.mjs";
+import {
+  CANONICAL_INTERACTION_STEP_IDS,
+  executeTodoInteractionSequence,
+} from "./interactions.mjs";
 import { sampleRendererProcessMemory } from "./process-memory.mjs";
 import {
   captureProcessInfo,
@@ -826,14 +829,18 @@ function interactionMetrics(result) {
     );
   return Object.freeze({
     evidence: Object.freeze(result.evidence),
-    steps: Object.freeze({
-      clearCompletedMs: step("clearCompletedMs"),
-      filterAllMs: step("filterAllMs"),
-      filterCompletedMs: step("filterCompletedMs"),
-      filterPendingMs: step("filterPendingMs"),
-      selectSentinelMs: step("selectSentinelMs"),
-      toggleCompletionMs: step("toggleCompletionMs"),
-    }),
+    routeNavigationTotalMs: availableMetric(
+      result.durations.navigateActivityMs
+        + result.durations.navigateSettingsMs
+        + result.durations.navigateWorkMs,
+      "milliseconds",
+      "sum of client route transition durations",
+    ),
+    steps: Object.freeze(
+      Object.fromEntries(
+        CANONICAL_INTERACTION_STEP_IDS.map((name) => [name, step(name)]),
+      ),
+    ),
     totalDurationMs: availableMetric(
       result.totalDurationMs,
       "milliseconds",
@@ -856,7 +863,18 @@ async function validateSolidSemanticDom(page, response, browserCase) {
   ) {
     throw new Error("Controlled browser response omitted its state variant");
   }
-  const html = await page.locator("#todo-browser-root").innerHTML();
+  const html = await page.locator("#todo-browser-root").evaluate((root) => {
+    const clone = root.cloneNode(true);
+    const liveCheckboxes = root.querySelectorAll('input[type="checkbox"]');
+    const clonedCheckboxes = clone.querySelectorAll('input[type="checkbox"]');
+    for (let index = 0; index < liveCheckboxes.length; index += 1) {
+      clonedCheckboxes[index]?.toggleAttribute(
+        "checked",
+        liveCheckboxes[index].checked,
+      );
+    }
+    return clone.innerHTML;
+  });
   const requestTimestamp = response.headers()["x-webui-bench-timestamp"];
   if (typeof requestTimestamp !== "string") {
     throw new Error("Controlled browser response omitted its request timestamp");
@@ -998,9 +1016,14 @@ export async function measureBrowserRound({
     );
     const rawMemory = await captureMemory(page, session, rendererSelection);
     const memory = memoryMetrics(rawMemory);
+    const initialJavascript = network.javascript();
     const interactions = await page.evaluate(
       executeTodoInteractionSequence,
-      { sentinelId: "todo-0050", timeoutMs: 10_000 },
+      {
+        activitySentinelId: "activity-0026",
+        sentinelId: "todo-0050",
+        timeoutMs: 10_000,
+      },
     );
     const javascript = network.javascript();
     return Object.freeze({
@@ -1050,6 +1073,22 @@ export async function measureBrowserRound({
             javascript.externalTransferBytes + inlineJavascript.bytes,
             "bytes",
             "external executable JavaScript plus executable inline script bytes; not total hydration payload",
+          ),
+          initialTransferBytes: availableMetric(
+          initialJavascript.externalTransferBytes + inlineJavascript.bytes,
+          "bytes",
+          "executable JavaScript transferred before the routed interaction journey",
+          ),
+          routeRequestCount: availableMetric(
+          javascript.requestCount - initialJavascript.requestCount,
+          "count",
+          "additional executable JavaScript requests during client route transitions",
+          ),
+          routeTransferBytes: availableMetric(
+          javascript.externalTransferBytes
+            - initialJavascript.externalTransferBytes,
+          "bytes",
+          "additional executable JavaScript transferred during client route transitions",
           ),
         }),
         longTasks: longTaskMetrics(rawTimings.longTasks),

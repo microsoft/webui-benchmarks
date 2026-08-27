@@ -1,0 +1,67 @@
+<!-- Copyright (c) Microsoft Corporation. -->
+<!-- Licensed under the MIT license. -->
+
+<main
+  class="workspace-page settings-page"
+  data-density="{{density}}"
+  data-route-page="settings"
+  ?data-route-ready="{{routeReady}}"
+  @click="{onClick($e)}"
+>
+  <header class="workspace-page__header">
+    <div>
+      <h1>{{title}}</h1>
+      <p>{{description}}</p>
+    </div>
+    <span class="settings-status" role="status">
+      {{statusLabel}}
+    </span>
+  </header>
+  <section class="settings-section">
+    <h2>Interface density</h2>
+    <div
+      class="settings-density"
+      role="group"
+      aria-label="Interface density"
+    >
+      <for each="option in densityOptions">
+        <button
+          aria-pressed="{{option.selected}}"
+          data-action="setting-density"
+          data-density="{{option.id}}"
+          key="{{option.id}}"
+          type="button"
+        >
+          {{option.label}}
+        </button>
+      </for>
+    </div>
+  </section>
+  <section class="settings-section">
+    <h2>Workspace behavior</h2>
+    <div class="settings-grid">
+      <for each="setting in toggles">
+        <label class="setting-control" key="{{setting.id}}">
+          <span>
+            <strong>{{setting.label}}</strong>
+            <small>{{setting.description}}</small>
+          </span>
+          <setting-toggle
+            :enabled="{{setting.enabled}}"
+            :settingid="{{setting.id}}"
+          ></setting-toggle>
+        </label>
+      </for>
+    </div>
+  </section>
+  <footer class="settings-actions">
+    <button
+      class="workspace-action"
+      data-action="settings-save"
+      ?disabled="{{!dirty}}"
+      type="button"
+    >
+      Save preferences
+    </button>
+  </footer>
+</main>

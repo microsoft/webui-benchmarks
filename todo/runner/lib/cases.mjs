@@ -4,7 +4,7 @@
 export const OFFICIAL_MATRIX_ID = "official-ssr-matrix";
 export const HEADLINE_INPUT_POLICY = "request-timestamped-input";
 export const NATURAL_PAYLOAD_POLICY = "natural";
-export const OFFICIAL_CASE_COUNT = 14;
+export const OFFICIAL_CASE_COUNT = 15;
 
 export const PRODUCT_KINDS = Object.freeze({
   framework: "framework-server",
@@ -211,6 +211,13 @@ function officialCases() {
       buildIds: ["react"],
       label: "React",
       renderer: "react-dom/server renderToString",
+    }),
+    rendererCase({
+      appId: "react-tanstack",
+      buildIds: ["react-tanstack"],
+      label: "React + TanStack Router",
+      renderer:
+        "react-dom/server renderToString + @tanstack/react-router",
     }),
     rendererCase({
       appId: "solid",

@@ -5,4 +5,20 @@
   import "../../../../shared/styles.css";
 </script>
 
-<slot />
+<div class="workspace-shell">
+  <header class="workspace-nav">
+    <a class="workspace-brand" href="/dynamic">
+      <span class="workspace-brand__mark" aria-hidden="true">W</span>
+      <span>
+        <strong>Workstream</strong>
+        <small>Migration benchmark</small>
+      </span>
+    </a>
+    <nav aria-label="Workspace">
+      <a data-route-link="work" href="/dynamic">Work queue</a>
+      <a data-route-link="activity" href="/activity">Activity</a>
+      <a data-route-link="settings" href="/settings">Settings</a>
+    </nav>
+  </header>
+  <slot />
+</div>

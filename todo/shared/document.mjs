@@ -33,7 +33,7 @@ export function controlledDocument({
   const scripts = [
     bootstrap,
     initialStateSource === "browser-wrapper"
-      ? `<script>globalThis.__TODO_BENCH_INITIAL_STATE__=${safeJson(state)};</script>`
+      ? `<script id="todo-bench-initial-state" type="application/json">${safeJson(state)}</script>`
       : "",
     `<script type="module" src="${clientPath}"></script>`,
   ].join("");

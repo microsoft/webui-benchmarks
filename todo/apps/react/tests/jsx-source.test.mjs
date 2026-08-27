@@ -157,8 +157,8 @@ test(`${APP_ID}: server and client entries use the framework SSR and hydration A
     `server.jsx must call ${RUNTIME.serverSymbol}`,
   );
   assert.ok(
-    server.includes("<TodoApp state={state} />"),
-    "server.jsx must render the JSX root component",
+    server.includes("<WorkspaceApp state={state} />"),
+    "server.jsx must render the routed JSX root component",
   );
 
   const client = sources.get(resolve(APP_ROOT, "client.jsx"));

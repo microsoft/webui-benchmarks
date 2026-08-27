@@ -28,7 +28,8 @@ pub use config::ServerConfig;
 
 const STATE_VARIANT_COUNT: usize = 32;
 const ENTRY_ID: &str = "index.html";
-const REQUEST_PATH: &str = "/";
+const DYNAMIC_PATH: &str = "/dynamic";
+const CACHED_PATH: &str = "/cached";
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const DYNAMIC_CACHE_CONTROL: &str = "no-store";
@@ -141,6 +142,7 @@ struct AppState {
     browser_assets: Option<BrowserAssets>,
     cached_body: web::Bytes,
     dynamic_capacity: usize,
+    fast_routes: bool,
     handler: WebUIHandler,
     metadata_body: web::Bytes,
     protocol: Protocol,
@@ -152,7 +154,6 @@ struct AppState {
 
 struct BrowserAssets {
     bootstrap: web::Bytes,
-    components: web::Bytes,
     body_inject: String,
     styles: HashMap<String, web::Bytes>,
 }
@@ -168,10 +169,11 @@ fn render_html(
     protocol: &Protocol,
     state: &Value,
     capacity: usize,
+    request_path: &str,
     body_inject: Option<&str>,
 ) -> Result<String> {
     let mut writer = MemoryWriter::with_capacity(capacity);
-    let mut options = RenderOptions::new(ENTRY_ID, REQUEST_PATH);
+    let mut options = RenderOptions::new(ENTRY_ID, request_path);
     if let Some(content) = body_inject {
         options = options.with_body_inject(content);
     }
@@ -211,6 +213,19 @@ fn materialize_request_state(base: &Value, request_timestamp: &str) -> Result<Va
     Ok(state)
 }
 
+fn fast_route_state(state: &Value, request_path: &str) -> Result<Option<Value>> {
+    let key = match request_path {
+        "/activity" => "activity",
+        "/settings" => "settings",
+        _ => return Ok(None),
+    };
+    state
+        .get(key)
+        .cloned()
+        .map(Some)
+        .with_context(|| format!("Prepared state is missing {key}"))
+}
+
 fn rewrite_request_state(state: &mut Value, request_timestamp: &str) -> Result<()> {
     let variant_index = state
         .get("variantIndex")
@@ -229,6 +244,7 @@ fn rewrite_request_state(state: &mut Value, request_timestamp: &str) -> Result<(
     for (index, todo) in todos.iter_mut().enumerate() {
         rewrite_todo_timestamp(todo, index, variant_index, request_timestamp)?;
     }
+    rewrite_workspace_titles(root, request_timestamp)?;
     let footer = root
         .get_mut("footer")
         .and_then(Value::as_object_mut)
@@ -237,6 +253,54 @@ fn rewrite_request_state(state: &mut Value, request_timestamp: &str) -> Result<(
     label.clear();
     label.push_str("Rendered ");
     label.push_str(request_timestamp);
+    Ok(())
+}
+
+fn rewrite_workspace_titles(root: &mut Map<String, Value>, request_timestamp: &str) -> Result<()> {
+    let intelligence = root
+        .get_mut("intelligence")
+        .and_then(Value::as_object_mut)
+        .context("Prepared request state must contain workspace intelligence")?;
+    let preview_rows = intelligence
+        .get_mut("previewRows")
+        .and_then(Value::as_array_mut)
+        .context("Workspace intelligence must contain previewRows")?;
+    for row in preview_rows {
+        rewrite_workspace_row_title(row, request_timestamp)?;
+    }
+    let board_columns = intelligence
+        .get_mut("boardColumns")
+        .and_then(Value::as_array_mut)
+        .context("Workspace intelligence must contain boardColumns")?;
+    for column in board_columns {
+        let items = column
+            .get_mut("items")
+            .and_then(Value::as_array_mut)
+            .context("Every workspace board column must contain items")?;
+        for row in items {
+            rewrite_workspace_row_title(row, request_timestamp)?;
+        }
+    }
+    Ok(())
+}
+
+fn rewrite_workspace_row_title(row: &mut Value, request_timestamp: &str) -> Result<()> {
+    let row = row
+        .as_object_mut()
+        .context("Every workspace row must be an object")?;
+    let id = row
+        .get("id")
+        .and_then(Value::as_str)
+        .context("Every workspace row must contain an id")?;
+    let item_number = id
+        .strip_prefix("todo-")
+        .filter(|value| value.len() == 4 && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .context("Workspace row ids must use the todo-0000 format")?
+        .to_owned();
+    let title = string_field_mut(row, "title")?;
+    title.clear();
+    write!(title, "Todo {item_number} · ")?;
+    title.push_str(request_timestamp);
     Ok(())
 }
 
@@ -300,7 +364,14 @@ fn response_sizes(
     let mut capacity = INITIAL_CAPACITY;
     for state in states {
         let request_state = materialize_request_state(state, PROFILE_TIMESTAMP)?;
-        let output = render_html(handler, protocol, &request_state, capacity, None)?;
+        let output = render_html(
+            handler,
+            protocol,
+            &request_state,
+            capacity,
+            DYNAMIC_PATH,
+            None,
+        )?;
         capacity = capacity.max(output.len());
         lengths.push(output.len());
     }
@@ -335,6 +406,7 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
         &protocol,
         &cached_state,
         dynamic_capacity,
+        CACHED_PATH,
         None,
     )?);
     let browser_assets = load_browser_assets()?;
@@ -349,6 +421,7 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
             browser_assets,
             cached_body,
             dynamic_capacity,
+            fast_routes: config.plugin == HydrationPlugin::FastV3,
             handler,
             metadata_body,
             protocol,
@@ -367,21 +440,17 @@ fn load_browser_assets() -> Result<Option<BrowserAssets>> {
     };
     let directory = std::path::PathBuf::from(directory);
     let bootstrap_path = directory.join("webui.js");
-    let components_path = directory.join("webui-components.js");
     let bootstrap = std::fs::read(&bootstrap_path)
         .with_context(|| format!("Failed to read {}", bootstrap_path.display()))?;
-    let components = std::fs::read(&components_path)
-        .with_context(|| format!("Failed to read {}", components_path.display()))?;
-    let styles = load_browser_styles(&directory)?;
+    let styles = load_browser_route_assets(&directory)?;
     Ok(Some(BrowserAssets {
         bootstrap: web::Bytes::from(bootstrap),
-        components: web::Bytes::from(components),
         body_inject: r#"<script type="module" src="/__browser/webui.js"></script>"#.to_owned(),
         styles,
     }))
 }
 
-fn load_browser_styles(directory: &Path) -> Result<HashMap<String, web::Bytes>> {
+fn load_browser_route_assets(directory: &Path) -> Result<HashMap<String, web::Bytes>> {
     let mut styles = HashMap::new();
     let mut pending = vec![directory.to_path_buf()];
     while let Some(current) = pending.pop() {
@@ -394,7 +463,8 @@ fn load_browser_styles(directory: &Path) -> Result<HashMap<String, web::Bytes>> 
                 pending.push(path);
                 continue;
             }
-            if path.extension().and_then(|value| value.to_str()) != Some("css") {
+            let extension = path.extension().and_then(|value| value.to_str());
+            if extension != Some("css") && extension != Some("js") {
                 continue;
             }
             let relative = path
@@ -530,24 +600,89 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
             });
     }
     let render_started = profile.then(Instant::now);
-    let body_inject = if profile {
-        state
-            .browser_assets
-            .as_ref()
-            .map(|assets| assets.body_inject.as_str())
+    let body_inject = state
+        .browser_assets
+        .as_ref()
+        .map(|assets| assets.body_inject.as_str());
+    let request_path = request.path();
+    let scoped_state = if state.fast_routes {
+        match fast_route_state(request_state, request_path) {
+            Ok(value) => value,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "route-state-failed",
+                        message: error.to_string(),
+                    });
+            }
+        }
     } else {
         None
     };
+    let render_state = scoped_state.as_ref().unwrap_or(request_state);
+    let accepts_partial = request
+        .headers()
+        .get("accept")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value.contains("application/json") || value.contains("application/x-ndjson")
+        });
+    if accepts_partial {
+        let inventory = request
+            .headers()
+            .get("x-webui-inventory")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let state_json = match serde_json::to_string(render_state) {
+            Ok(value) => value,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "state-serialization-failed",
+                        message: error.to_string(),
+                    });
+            }
+        };
+        return match state
+            .protocol
+            .render_partial(&state_json, ENTRY_ID, request_path, inventory)
+        {
+            Ok(output) => HttpResponse::Ok()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .insert_header(("x-webui-bench-timestamp", request_timestamp))
+                .insert_header((
+                    "x-webui-bench-variant",
+                    state.variant_headers[index].clone(),
+                ))
+                .body(output),
+            Err(error) => HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "partial-render-failed",
+                    message: error.to_string(),
+                }),
+        };
+    }
     match render_html(
         &state.handler,
         &state.protocol,
-        request_state,
+        render_state,
         state.dynamic_capacity,
+        request_path,
         body_inject,
     ) {
         Ok(output) => {
-            let source_bytes =
-                body_inject.map(|content| output.len().saturating_sub(content.len()));
+            let source_bytes = profile.then(|| {
+                body_inject
+                    .map(|content| output.len().saturating_sub(content.len()))
+                    .unwrap_or(output.len())
+            });
             let server_timing = match (started, render_started) {
                 (Some(started), Some(render_started)) => {
                     match timing_header(
@@ -634,23 +769,18 @@ async fn browser_bootstrap(state: web::Data<AppState>) -> HttpResponse {
     )
 }
 
-async fn browser_components(state: web::Data<AppState>) -> HttpResponse {
-    browser_asset_response(
-        state
-            .browser_assets
-            .as_ref()
-            .map(|assets| &assets.components),
-        "text/javascript; charset=utf-8",
-    )
-}
-
 async fn browser_style(request: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
+    let content_type = if request.path().ends_with(".js") {
+        "text/javascript; charset=utf-8"
+    } else {
+        "text/css; charset=utf-8"
+    };
     browser_asset_response(
         state
             .browser_assets
             .as_ref()
             .and_then(|assets| assets.styles.get(request.path())),
-        "text/css; charset=utf-8",
+        content_type,
     )
 }
 
@@ -659,6 +789,56 @@ async fn ready(state: web::Data<AppState>) -> HttpResponse {
         .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
         .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
         .body(state.metadata_body.clone())
+}
+
+async fn route_state(state: web::Data<AppState>) -> HttpResponse {
+    let request_timestamp = match current_request_timestamp(&state.last_timestamp_micros) {
+        Ok(timestamp) => timestamp,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "timestamp-failed",
+                    message: error.to_string(),
+                });
+        }
+    };
+    let mut states = match state.states.lock() {
+        Ok(states) => states,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "state-pool-unavailable",
+                    message: error.to_string(),
+                });
+        }
+    };
+    let (index, request_state) = states.next_mut();
+    if let Err(error) = rewrite_request_state(request_state, &request_timestamp) {
+        return HttpResponse::InternalServerError()
+            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+            .json(ErrorBody {
+                code: "state-materialization-failed",
+                message: error.to_string(),
+            });
+    }
+    HttpResponse::Ok()
+        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+        .insert_header(("x-webui-bench-timestamp", request_timestamp))
+        .insert_header((
+            "x-webui-bench-variant",
+            state.variant_headers[index].clone(),
+        ))
+        .json(serde_json::json!({
+            "activity": request_state.get("activity"),
+            "settings": request_state.get("settings"),
+            "work": request_state,
+        }))
 }
 
 async fn favicon() -> HttpResponse {
@@ -673,7 +853,7 @@ async fn not_found() -> HttpResponse {
         .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
         .json(ErrorBody {
             code: "route-not-found",
-            message: "Use /dynamic, /cached, or /__bench/ready.".to_owned(),
+            message: "Use /dynamic, /activity, /settings, /cached, or /__bench/ready.".to_owned(),
         })
 }
 
@@ -685,14 +865,13 @@ pub async fn run(config: ServerConfig) -> Result<()> {
         App::new()
             .app_data(state.clone())
             .route("/dynamic", web::get().to(dynamic))
+            .route("/activity", web::get().to(dynamic))
+            .route("/settings", web::get().to(dynamic))
             .route("/cached", web::get().to(cached))
             .route("/__browser/webui.js", web::get().to(browser_bootstrap))
-            .route(
-                "/__browser/webui-components.js",
-                web::get().to(browser_components),
-            )
             .route("/__browser/{asset:.*}", web::get().to(browser_style))
             .route("/__bench/ready", web::get().to(ready))
+            .route("/__bench/route-state", web::get().to(route_state))
             .route("/ready", web::get().to(ready))
             .route("/favicon.ico", web::get().to(favicon))
             .default_service(web::to(not_found))
@@ -728,9 +907,9 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_request_timestamp, html_response, load_browser_styles, materialize_request_state,
-        parse_states, rewrite_request_state, timing_header, CACHED_CACHE_CONTROL,
-        DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE, STATE_VARIANT_COUNT,
+        current_request_timestamp, html_response, load_browser_route_assets,
+        materialize_request_state, parse_states, rewrite_request_state, timing_header,
+        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE, STATE_VARIANT_COUNT,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
@@ -765,7 +944,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_styles_preserve_light_and_shadow_asset_paths() {
+    fn browser_assets_preserve_style_and_script_paths() {
         let root =
             std::env::temp_dir().join(format!("webui-todo-browser-styles-{}", std::process::id()));
         let light = root.join("light");
@@ -778,12 +957,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("light style should write: {error}"));
         std::fs::write(shadow.join("todo-app.css"), b":host{}")
             .unwrap_or_else(|error| panic!("shadow style should write: {error}"));
-        std::fs::write(root.join("ignored.js"), b"export{}")
-            .unwrap_or_else(|error| panic!("non-style asset should write: {error}"));
+        std::fs::write(root.join("route.js"), b"export{}")
+            .unwrap_or_else(|error| panic!("route script should write: {error}"));
 
-        let styles = load_browser_styles(&root)
-            .unwrap_or_else(|error| panic!("browser styles should load: {error}"));
-        assert_eq!(styles.len(), 2);
+        let styles = load_browser_route_assets(&root)
+            .unwrap_or_else(|error| panic!("browser assets should load: {error}"));
+        assert_eq!(styles.len(), 3);
         assert_eq!(
             styles.get("/__browser/light/todo-app.css"),
             Some(&web::Bytes::from_static(b"main{}"))
@@ -791,6 +970,10 @@ mod tests {
         assert_eq!(
             styles.get("/__browser/shadow/todo-app.css"),
             Some(&web::Bytes::from_static(b":host{}"))
+        );
+        assert_eq!(
+            styles.get("/__browser/route.js"),
+            Some(&web::Bytes::from_static(b"export{}"))
         );
         std::fs::remove_dir_all(root)
             .unwrap_or_else(|error| panic!("browser style fixture should clean up: {error}"));
@@ -879,6 +1062,15 @@ mod tests {
                 {"title": "old", "timestamp": "old", "description": "old"},
                 {"title": "old", "timestamp": "old", "description": "old"}
             ],
+            "intelligence": {
+                "previewRows": [
+                    {"id": "todo-0001", "title": "old"},
+                    {"id": "todo-0002", "title": "old"}
+                ],
+                "boardColumns": [
+                    {"items": [{"id": "todo-0001", "title": "old"}]}
+                ]
+            },
             "footer": {}
         });
         let timestamp = "2026-08-22T00:00:00.123456Z";
@@ -893,6 +1085,14 @@ mod tests {
         assert!(state["todos"][1]["description"]
             .as_str()
             .is_some_and(|value| value.contains(timestamp)));
+        assert_eq!(
+            state["intelligence"]["previewRows"][0]["title"],
+            format!("Todo 0001 · {timestamp}")
+        );
+        assert_eq!(
+            state["intelligence"]["boardColumns"][0]["items"][0]["title"],
+            format!("Todo 0001 · {timestamp}")
+        );
         let second_timestamp = "2026-08-22T00:00:00.654321Z";
         rewrite_request_state(&mut state, second_timestamp)
             .unwrap_or_else(|error| panic!("request state should be reusable: {error}"));

@@ -74,11 +74,11 @@ function help() {
   return [
     "Usage: node todo/browser/cli.mjs [options]",
     "",
-    "  --official          Run exactly seven randomized rounds (default)",
+    "  --official          Run exactly ten randomized rounds (default)",
     "  --quick             Run one smoke round",
     "  --apps LIST         Comma-separated app ids",
     "  --build             Build selected production server artifacts first",
-    "  --rounds N          Official rounds (exactly 7)",
+    "  --rounds N          Official rounds (exactly 10)",
     "  --output PATH       Override the results output path",
     "  --viewport WxH      Chromium viewport (default 1440x900)",
     "  --seed VALUE        Deterministic randomization seed",

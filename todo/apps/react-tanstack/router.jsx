@@ -1,0 +1,114 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+import {
+  Link,
+  Outlet,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { createContext, useContext } from "react";
+import { ActivityPage } from "../react/components/activity-page.jsx";
+import { SettingsPage } from "../react/components/settings-page.jsx";
+import { TodoApp } from "../react/components/todo-app.jsx";
+
+const WorkspaceState = createContext(null);
+
+function useWorkspaceState() {
+  const state = useContext(WorkspaceState);
+  if (state === null) {
+    throw new Error("The TanStack workspace state provider is missing");
+  }
+  return state;
+}
+
+function WorkspaceShell() {
+  return (
+    <div className="workspace-shell">
+      <header className="workspace-nav">
+        <Link className="workspace-brand" to="/dynamic">
+          <span className="workspace-brand__mark" aria-hidden="true">W</span>
+          <span>
+            <strong>Workstream</strong>
+            <small>Migration benchmark</small>
+          </span>
+        </Link>
+        <nav aria-label="Workspace">
+          <Link data-route-link="work" to="/dynamic">Work queue</Link>
+          <Link data-route-link="activity" to="/activity">Activity</Link>
+          <Link data-route-link="settings" to="/settings">Settings</Link>
+        </nav>
+      </header>
+      <Outlet />
+    </div>
+  );
+}
+
+function WorkRoute() {
+  return (
+    <TodoApp
+      hydrationId="react-tanstack"
+      state={useWorkspaceState()}
+    />
+  );
+}
+
+function ActivityRoute() {
+  return <ActivityPage state={useWorkspaceState()} />;
+}
+
+function SettingsRoute() {
+  return <SettingsPage state={useWorkspaceState()} />;
+}
+
+const rootRoute = createRootRoute({ component: WorkspaceShell });
+const routeTree = rootRoute.addChildren([
+  createRoute({
+    component: WorkRoute,
+    getParentRoute: () => rootRoute,
+    path: "/",
+  }),
+  createRoute({
+    component: WorkRoute,
+    getParentRoute: () => rootRoute,
+    path: "/dynamic",
+  }),
+  createRoute({
+    component: WorkRoute,
+    getParentRoute: () => rootRoute,
+    path: "/cached",
+  }),
+  createRoute({
+    component: ActivityRoute,
+    getParentRoute: () => rootRoute,
+    path: "/activity",
+  }),
+  createRoute({
+    component: SettingsRoute,
+    getParentRoute: () => rootRoute,
+    path: "/settings",
+  }),
+]);
+
+export function createWorkspaceRouter(requestPath) {
+  return createRouter({
+    ...(requestPath === undefined
+      ? {}
+      : {
+          history: createMemoryHistory({
+            initialEntries: [requestPath],
+          }),
+        }),
+    routeTree,
+  });
+}
+
+export function WorkspaceStateProvider({ children, state }) {
+  return (
+    <WorkspaceState.Provider value={state}>
+      {children}
+    </WorkspaceState.Provider>
+  );
+}

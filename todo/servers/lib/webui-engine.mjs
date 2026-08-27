@@ -180,8 +180,16 @@ export async function createWebuiRouteController({
       supported: true,
     },
     appId: "webui",
-    render(state) {
-      return protocol.render(state);
+    render(state, requestPath) {
+      return protocol.render(state, { requestPath });
+    },
+    renderPartial(state, requestPath, inventoryHex) {
+      return protocol.renderPartial(
+        state,
+        "index.html",
+        requestPath,
+        inventoryHex,
+      );
     },
     runtimeId,
     runtimeVersion: runtimeVersion(runtimeId),

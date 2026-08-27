@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { createWorkspaceIntelligence } from "../../shared/workspace-intelligence.mjs";
+
 function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
@@ -68,6 +70,7 @@ function withCounts(state, todos) {
       ...state.footer,
       itemCountLabel: plural(todos.length, "item"),
     },
+    intelligence: createWorkspaceIntelligence(todos, state.intelligence),
   };
 }
 
@@ -90,18 +93,20 @@ export function filterTodos(state, filterId) {
 }
 
 export function selectTodo(state, todoId) {
+  const todos = state.todos.map((todo) => ({
+    ...todo,
+    selected: todo.id === todoId,
+    selectionLabel: todo.id === todoId ? "Selected" : "Not selected",
+  }));
   return {
     ...state,
+    intelligence: createWorkspaceIntelligence(todos, state.intelligence),
     selection: {
       todoId,
       label: `Selected ${todoId}`,
       hasSelection: true,
     },
-    todos: state.todos.map((todo) => ({
-      ...todo,
-      selected: todo.id === todoId,
-      selectionLabel: todo.id === todoId ? "Selected" : "Not selected",
-    })),
+    todos,
   };
 }
 

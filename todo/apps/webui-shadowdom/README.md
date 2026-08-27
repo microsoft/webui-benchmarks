@@ -12,5 +12,5 @@ applies component-scoped CSS, and compiles a separate protocol with:
 ```
 
 The browser row verifies more than 800 open shadow roots (the exact count varies
-with conditional state) and the same six interaction outcomes. Keeping
+with conditional state) and the same 29-step interaction journey. Keeping
 application logic and transport fixed isolates DOM strategy.

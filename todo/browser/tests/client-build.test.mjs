@@ -11,12 +11,26 @@ import {
 import { collectHtmlObservation } from "../../shared/observation.mjs";
 import { TODO_STATE_VARIANTS } from "../../shared/state.mjs";
 import { assertValidObservation } from "../../shared/validator.mjs";
+import { WORKSPACE_MINIMUM_EMITTED_BYTES } from "../../shared/workspace-intelligence.mjs";
+
+const MAXIMUM_TREE_SHAKEN_ZOD_BYTES = 70 * 1024;
+const FORBIDDEN_WEBUI_CLIENT_FRAMEWORKS = Object.freeze([
+  "@tanstack/react-router",
+  "@tanstack/table-core",
+  "preact",
+  "react",
+  "react-dom",
+  "solid-js",
+  "svelte",
+  "vue",
+]);
 
 for (
   const appId of [
     "webui",
     "webui-fast",
     "react",
+    "react-tanstack",
     "vue",
     "solid",
     "preact",
@@ -26,6 +40,28 @@ for (
     const bundle = await buildClient(appId);
     assert.ok(Buffer.isBuffer(bundle));
     assert.ok(bundle.byteLength > 100);
+    if (appId === "preact") {
+      assert.ok(
+        bundle.byteLength >= WORKSPACE_MINIMUM_EMITTED_BYTES,
+        `Preact must emit at least ${WORKSPACE_MINIMUM_EMITTED_BYTES} bytes`,
+      );
+    }
+    if (appId === "preact" || appId === "webui") {
+      assert.ok(bundle.packageBytes.zod > 0);
+      assert.ok(
+        bundle.packageBytes.zod <= MAXIMUM_TREE_SHAKEN_ZOD_BYTES,
+        `${appId} emitted ${bundle.packageBytes.zod} bytes of Zod; use named imports so esbuild can tree-shake the package`,
+      );
+    }
+    if (appId === "webui") {
+      for (const packageName of FORBIDDEN_WEBUI_CLIENT_FRAMEWORKS) {
+        assert.equal(
+          bundle.packageBytes[packageName],
+          0,
+          `WebUI must not bundle ${packageName}`,
+        );
+      }
+    }
   });
 }
 
@@ -33,10 +69,13 @@ test("writes WebUI assets for the direct Rust browser server", async () => {
   for (const appId of ["webui", "webui-fast"]) {
     const bundle = await buildClient(appId);
     assert.equal(typeof bundle.browserAssetDirectory, "string");
-    await Promise.all([
-      access(`${bundle.browserAssetDirectory}/webui.js`),
-      access(`${bundle.browserAssetDirectory}/webui-components.js`),
-    ]);
+    await access(`${bundle.browserAssetDirectory}/webui.js`);
+    assert.ok(
+      [...bundle.additionalAssets.keys()].some(
+        (path) => path.startsWith("/__browser/chunks/"),
+      ),
+      `${appId} must emit lazy browser chunks`,
+    );
   }
 });
 

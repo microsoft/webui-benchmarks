@@ -5,15 +5,19 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WebUI Todo Benchmark</title>
   </head>
   <body>
     <div id="todo-browser-root">
-      <todo-app
-        data-component="todo-app"
-        data-variant-id="{{variantId}}"
-      ></todo-app>
+      <route path="/" component="app-shell">
+        <route path="" component="todo-app" exact></route>
+        <route path="dynamic" component="todo-app" exact></route>
+        <route path="cached" component="todo-app" exact></route>
+        <route path="activity" component="activity-page" exact></route>
+        <route path="settings" component="settings-page" exact></route>
+      </route>
     </div>
   </body>
 </html>

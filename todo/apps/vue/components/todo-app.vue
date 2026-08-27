@@ -16,6 +16,7 @@ import TodoHeader from "./todo-header.vue";
 import TodoList from "./todo-list.vue";
 import TodoSummary from "./todo-summary.vue";
 import TodoToolbar from "./todo-toolbar.vue";
+import WorkspaceIntelligence from "./workspace-intelligence.vue";
 
 const props = defineProps({
   state: { type: Object, required: true },
@@ -46,9 +47,17 @@ function clearCompleted() {
 
 <template>
   <todo-app data-component="todo-app" :data-variant-id="current.variantId">
-    <main aria-labelledby="todo-app-title" class="todo-app">
+    <main
+      aria-labelledby="todo-app-title"
+      class="todo-app"
+      data-route-page="work"
+    >
       <TodoHeader :app="current.app" :variant-label="current.variantLabel" />
       <TodoSummary :summary="current.summary" />
+      <WorkspaceIntelligence
+        :state="current"
+        @state-change="current = $event"
+      />
       <TodoToolbar
         :selection="current.selection"
         :toolbar="current.toolbar"

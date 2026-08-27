@@ -21,10 +21,10 @@ const banner = {
 let compiler;
 let buildPromise;
 
-// `<todo-*>` hosts are plain custom elements, never Vue components: without this
-// the compiler would resolve `<todo-item>` to the SFC that renders it.
+// Benchmark boundary hosts are plain custom elements, never Vue components:
+// without this the compiler resolves the host to the SFC that renders it.
 function isCustomElement(tag) {
-  return tag.startsWith("todo-");
+  return tag.startsWith("todo-") || tag === "workspace-intelligence";
 }
 
 function loadSfcCompiler() {
@@ -106,7 +106,7 @@ function buildServer() {
     banner,
     bundle: true,
     entryPoints: [resolve(here, "server.mjs")],
-    external: ["vue", "vue/*", "@vue/*"],
+    external: ["vue", "vue/*", "vue-router", "@vue/*"],
     format: "esm",
     legalComments: "none",
     minify: true,
@@ -140,7 +140,7 @@ function buildComponents() {
     banner,
     bundle: true,
     entryPoints: [resolve(here, "client.mjs")],
-    external: ["vue", "vue/*", "@vue/*"],
+    external: ["vue", "vue/*", "vue-router", "@vue/*"],
     format: "esm",
     legalComments: "none",
     outfile: componentsArtifactPath,

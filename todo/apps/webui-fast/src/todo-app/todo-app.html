@@ -1,7 +1,12 @@
 <!-- Copyright (c) Microsoft Corporation. -->
 <!-- Licensed under the MIT license. -->
 
-<main aria-labelledby="todo-app-title" class="todo-app" @click="{onClick($e)}">
+<main
+  aria-labelledby="todo-app-title"
+  class="todo-app"
+  data-route-page="work"
+  @click="{onClick($e)}"
+>
   <todo-header
     :description="{{app.description}}"
     :eyebrow="{{app.eyebrow}}"
@@ -23,6 +28,13 @@
     :totallabel="{{summary.totalLabel}}"
     data-component="todo-summary"
   ></todo-summary>
+  <workspace-intelligence
+    :intelligence="{{intelligence}}"
+    :todos="{{todos}}"
+    @workspace-change="{onWorkspaceChange($e)}"
+    data-component="workspace-intelligence"
+    f-ref="{workspaceIntelligence}"
+  ></workspace-intelligence>
   <todo-toolbar
     :clearcompletedlabel="{{toolbar.clearCompletedLabel}}"
     :filters="{{toolbar.filters}}"

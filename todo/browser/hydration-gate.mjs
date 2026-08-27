@@ -6,6 +6,7 @@ import process from "node:process";
 import { createCaseMatrix } from "../runner/lib/cases.mjs";
 import { BASELINE_ROOT } from "../runner/lib/paths.mjs";
 import { isMainModule } from "../servers/lib/cli.mjs";
+import { CANONICAL_INTERACTION_STEP_IDS } from "./interactions.mjs";
 import { runBrowserBenchmark } from "./runner.mjs";
 
 const defaultOutputPath = resolve(
@@ -20,10 +21,10 @@ function interactionFailure(round) {
   }
   const steps = Object.values(interactions.steps ?? {});
   if (
-    steps.length !== 6
+    steps.length !== CANONICAL_INTERACTION_STEP_IDS.length
     || steps.some(({ status }) => status !== "available")
   ) {
-    return "all six canonical interaction steps must be available";
+    return `all ${CANONICAL_INTERACTION_STEP_IDS.length} canonical interaction steps must be available`;
   }
   const evidence = interactions.evidence;
   if (
@@ -33,6 +34,26 @@ function interactionFailure(round) {
     || evidence?.completedBeforeClear !== 26
     || evidence?.remainingAfterClear !== 74
     || evidence?.selectedSentinel !== "todo-0050"
+    || evidence?.activityEvents !== 48
+    || evidence?.activityVisibleAfterFilter !== 16
+    || evidence?.activitySentinel !== "activity-0026"
+    || evidence?.settingsDensity !== "compact"
+    || evidence?.settingsSaved !== true
+    || evidence?.workItemsAfterReturn !== 100
+    || evidence?.workspaceArchived !== 1
+    || evidence?.workspaceAfterClear !== 74
+    || evidence?.workspaceExportRows !== 1
+    || !["completed", "pending"].includes(evidence?.workspaceFacets?.status)
+    || !["high", "medium", "low"].includes(evidence?.workspaceFacets?.priority)
+    || !["assigned", "unassigned"].includes(
+      evidence?.workspaceFacets?.assignment,
+    )
+    || evidence?.workspaceFinalResults !== 100
+    || evidence?.workspaceSavedViews !== 1
+    || evidence?.workspaceSchedule !== "weekly"
+    || evidence?.workspaceSearchResult !== 1
+    || evidence?.workspaceSelectedSentinel !== "todo-0050"
+    || JSON.stringify(evidence?.workspaceViews) !== '["board","insights"]'
   ) {
     return "canonical interaction evidence does not match the shared contract";
   }

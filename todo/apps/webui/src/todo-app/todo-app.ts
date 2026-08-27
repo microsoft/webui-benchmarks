@@ -62,6 +62,7 @@ interface TodoState {
   selection: SelectionState;
   todos: TodoItem[];
   footer: Record<string, unknown>;
+  intelligence: Record<string, unknown>;
 }
 
 export class TodoApp extends WebUIElement {
@@ -86,6 +87,7 @@ export class TodoApp extends WebUIElement {
   };
   @observable todos: TodoItem[] = [];
   @observable footer: Record<string, unknown> = {};
+  @observable intelligence: Record<string, unknown> = {};
 
   protected override hydratedCallback(): void {
     publishHydrated("webui");
@@ -121,6 +123,12 @@ export class TodoApp extends WebUIElement {
     }
   }
 
+  onWorkspaceChange(
+    event: CustomEvent<{ intelligence: Record<string, unknown> }>,
+  ): void {
+    this.intelligence = event.detail.intelligence;
+  }
+
   private state(): TodoState {
     return {
       app: this.app,
@@ -130,6 +138,7 @@ export class TodoApp extends WebUIElement {
       selection: this.selection,
       todos: this.todos,
       footer: this.footer,
+      intelligence: this.intelligence,
     };
   }
 
@@ -141,6 +150,7 @@ export class TodoApp extends WebUIElement {
     this.selection = state.selection;
     this.todos = state.todos;
     this.footer = state.footer;
+    this.intelligence = state.intelligence;
   }
 }
 

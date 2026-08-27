@@ -45,6 +45,11 @@ function reportFixture() {
         primaryRoute: "dynamic",
         productId: "react",
         readinessDefinition: "client hydrated",
+        routing: {
+          clientNavigation: "supported",
+          journey: ["/dynamic", "/activity", "/settings", "/dynamic"],
+          router: "react-router",
+        },
         tier: BROWSER_TIER,
       },
     ],
@@ -114,21 +119,21 @@ test("rejects unavailable rounds shaped like successful metrics", () => {
   );
 });
 
-test("enforces exactly seven official rounds", () => {
+test("enforces exactly ten official rounds", () => {
   const report = reportFixture();
   report.mode = "official";
-  report.roundsPerApp = 6;
+  report.roundsPerApp = 9;
   const validation = validateBrowserReport(report);
   assert.equal(validation.valid, false);
   assert.ok(
-    validation.errors.some((error) => error.includes("exactly 7")),
+    validation.errors.some((error) => error.includes("exactly 10")),
   );
 });
 
 test("rejects filtered or unavailable official evidence", () => {
   const report = reportFixture();
   report.mode = "official";
-  report.roundsPerApp = 7;
+  report.roundsPerApp = 10;
   const validation = validateBrowserReport(report);
   assert.equal(validation.valid, false);
   assert.ok(

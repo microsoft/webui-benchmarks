@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { Router } from "@microsoft/webui-router";
+
 const benchmarkGlobal = globalThis as typeof globalThis & {
   __TODO_BENCH_FORCE_HYDRATION__?: () => Promise<void>;
   __TODO_BENCH_HYDRATED__?: Readonly<{
@@ -34,10 +36,6 @@ function afterInitialPaint(): Promise<void> {
 }
 
 const startedAt = performance.now();
-const root = document.querySelector("todo-app");
-if (!(root instanceof HTMLElement)) {
-  throw new Error("The WebUI todo application root is missing");
-}
 const componentHydration = (async (): Promise<void> => {
   await import("./component-definitions.js");
   await customElements.whenDefined("todo-app");
@@ -50,6 +48,12 @@ const componentHydration = (async (): Promise<void> => {
 })();
 benchmarkGlobal.__TODO_BENCH_FORCE_HYDRATION__ = () => componentHydration;
 await componentHydration;
+Router.start({
+  loaders: {
+    "activity-page": () => import("./src/activity-page/activity-page.js"),
+    "settings-page": () => import("./src/settings-page/settings-page.js"),
+  },
+});
 await afterInitialPaint();
 await animationFrame();
 await animationFrame();

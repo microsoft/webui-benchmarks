@@ -23,7 +23,10 @@ test("injects benchmark metadata and client into a complete SSR document", () =>
   assert.equal(document.match(/<html/giu)?.length, 1);
   assert.equal(document.match(/<body/giu)?.length, 1);
   assert.match(document, /<meta name="todo-browser-app" content="react">/u);
-  assert.match(document, /globalThis\.__TODO_BENCH_INITIAL_STATE__/u);
+  assert.match(
+    document,
+    /<script id="todo-bench-initial-state" type="application\/json">/u,
+  );
   assert.match(document, /\\u003c\/script>/u);
   assert.ok(
     document.indexOf("/__browser/react.js") < document.indexOf("</body>"),
@@ -41,7 +44,7 @@ test("does not duplicate state already present in a complete SSR document", () =
   });
   assert.doesNotMatch(
     document,
-    /globalThis\.__TODO_BENCH_INITIAL_STATE__/u,
+    /id="todo-bench-initial-state"/u,
   );
   assert.match(document, /id="webui-data"/u);
   assert.match(document, /\/__browser\/webui\.js/u);

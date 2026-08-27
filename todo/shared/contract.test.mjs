@@ -4,6 +4,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACTIVITY_EVENT_COUNT,
+  ACTIVITY_SENTINEL_ID,
+  APP_ROUTES,
   BRANCHES,
   ARIA_PRESSED_COUNT,
   CACHE_POLICIES,
@@ -13,6 +16,7 @@ import {
   HEADLINE_CACHE_POLICY,
   INTERACTIONS,
   LOOPS,
+  ROUTE_INTERACTIONS,
   SENTINEL_IDS,
   STATE_VARIANT_COUNT,
   TODO_ITEM_COUNT,
@@ -20,6 +24,8 @@ import {
   TODO_BENCH_CONTRACT,
   TODO_ITEM_FIELDS,
   TODO_ITEM_METADATA_FIELDS,
+  WORKSPACE_INTERACTIONS,
+  SETTING_CONTROL_COUNT,
   countTodoBranches,
 } from "./contract.mjs";
 import {
@@ -30,6 +36,14 @@ import {
   currentRequestTimestamp,
 } from "./state.mjs";
 import {
+  filterActivity,
+  markActivityRead,
+  saveSettings,
+  selectDensity,
+  toggleActivityDetail,
+  toggleSetting,
+} from "./workspace-interactions.mjs";
+import {
   collectHtmlObservation,
 } from "./observation.mjs";
 import {
@@ -38,9 +52,10 @@ import {
   validateTodoState,
 } from "./validator.mjs";
 
-test("defines exactly the required 12 component boundaries", () => {
+test("defines exactly the required 13 component boundaries", () => {
   assert.deepEqual(COMPONENTS, [
     "todo-app",
+    "workspace-intelligence",
     "todo-header",
     "todo-summary",
     "todo-toolbar",
@@ -53,11 +68,12 @@ test("defines exactly the required 12 component boundaries", () => {
     "todo-button",
     "todo-footer",
   ]);
-  assert.equal(new Set(COMPONENTS).size, 12);
+  assert.equal(new Set(COMPONENTS).size, 13);
   assert.deepEqual(COMPONENT_GRAPH["todo-toolbar"], [
     "todo-filter",
     "todo-button",
   ]);
+  assert.ok(COMPONENT_GRAPH["todo-app"].includes("workspace-intelligence"));
   assert.deepEqual(COMPONENT_GRAPH["todo-item"], [
     "todo-checkbox",
     "todo-badge",
@@ -69,7 +85,7 @@ test("defines exactly the required 12 component boundaries", () => {
 
 test("pins exact visible graph counts and cache policy names", () => {
   assert.equal(TODO_BUTTON_COUNT, 101);
-  assert.equal(ARIA_PRESSED_COUNT, 103);
+  assert.equal(ARIA_PRESSED_COUNT, 106);
   assert.equal(
     TODO_ITEM_COUNT * TODO_ITEM_METADATA_FIELDS.length,
     400,
@@ -83,6 +99,7 @@ test("pins exact visible graph counts and cache policy names", () => {
   assert.deepEqual(CACHE_POLICY_NAMES, {
     REQUEST_TIMESTAMPED_INPUT: "request-timestamped-input",
   });
+
   assert.equal(
     HEADLINE_CACHE_POLICY,
     CACHE_POLICY_NAMES.REQUEST_TIMESTAMPED_INPUT,
@@ -106,7 +123,53 @@ test("pins exact visible graph counts and cache policy names", () => {
     },
   );
   assert.equal(TODO_BENCH_CONTRACT.buttonCount, 101);
-  assert.equal(TODO_BENCH_CONTRACT.ariaPressedCount, 103);
+  assert.equal(TODO_BENCH_CONTRACT.ariaPressedCount, 106);
+});
+
+test("defines the equal routed workspace contract", () => {
+  assert.deepEqual(
+    APP_ROUTES.map(({ id, path }) => [id, path]),
+    [
+      ["work", "/dynamic"],
+      ["activity", "/activity"],
+      ["settings", "/settings"],
+    ],
+  );
+  assert.equal(ACTIVITY_EVENT_COUNT, 48);
+  assert.equal(SETTING_CONTROL_COUNT, 8);
+  assert.equal(ACTIVITY_SENTINEL_ID, "activity-0026");
+  assert.deepEqual(
+    ROUTE_INTERACTIONS.map(({ id }) => id),
+    [
+      "navigate-activity",
+      "filter-activity",
+      "expand-activity",
+      "mark-activity-read",
+      "navigate-settings",
+      "toggle-setting",
+      "select-density",
+      "save-settings",
+      "navigate-work",
+    ],
+  );
+});
+
+test("defines advanced workspace intelligence interactions", () => {
+  assert.deepEqual(
+    WORKSPACE_INTERACTIONS.map(({ id }) => id),
+    [
+      "workspace-search",
+      "workspace-filter",
+      "workspace-view",
+      "workspace-select-all",
+      "workspace-row-select",
+      "workspace-save-view",
+      "workspace-export",
+      "workspace-archive",
+      "workspace-schedule",
+      "workspace-reset",
+    ],
+  );
 });
 
 test("materializes a unique current timestamp into every request todo", () => {
@@ -160,6 +223,13 @@ test("framework reducers keep footer and selection state valid after clear", asy
     assert.equal(cleared.todos.length, 75, `${appId} must remove completed todos`);
     assert.equal(cleared.summary.totalCount, 75);
     assert.equal(cleared.footer.itemCountLabel, "75 items");
+    assert.equal(cleared.intelligence.resultCount, 75);
+    assert.ok(
+      cleared.intelligence.previewRows.every(
+        ({ completed }) => completed === false,
+      ),
+      `${appId} must refresh workspace rows after clearing completed todos`,
+    );
     assert.equal(cleared.selection.hasSelection, true);
     assert.ok(
       cleared.todos.some(
@@ -207,6 +277,10 @@ test("creates 32 immutable deterministic variants of 100 fixed-shape items", () 
     assert.equal(Object.isFrozen(state.todos[0].assignee), true);
     assert.equal(Object.isFrozen(state.todos[0].tags), true);
     assert.equal(Object.isFrozen(state.todos[0].subtasks), true);
+    assert.equal(state.activity.events.length, ACTIVITY_EVENT_COUNT);
+    assert.equal(state.settings.toggles.length, SETTING_CONTROL_COUNT);
+    assert.equal(Object.isFrozen(state.activity.events), true);
+    assert.equal(Object.isFrozen(state.settings.toggles), true);
     assert.deepEqual(validateTodoState(state), { valid: true, errors: [] });
   }
   const todos = variants.flatMap((state) => state.todos);
@@ -227,6 +301,36 @@ test("creates 32 immutable deterministic variants of 100 fixed-shape items", () 
   assert.throws(() => {
     createTodoState(0).todos[0].title = "mutated";
   }, TypeError);
+});
+
+test("routed workspace reducers preserve immutable route state", () => {
+  const source = createTodoState(0);
+  const deployed = filterActivity(source, "deployment");
+  assert.notStrictEqual(deployed, source);
+  assert.equal(
+    deployed.activity.events.filter((event) => event.visible).length,
+    16,
+  );
+  const expanded = toggleActivityDetail(deployed, ACTIVITY_SENTINEL_ID);
+  assert.equal(
+    expanded.activity.events.find(
+      (event) => event.id === ACTIVITY_SENTINEL_ID,
+    ).expanded,
+    true,
+  );
+  assert.equal(markActivityRead(expanded).activity.unreadCount, 0);
+
+  const toggled = toggleSetting(source, "daily-digest");
+  assert.equal(
+    toggled.settings.toggles.find(
+      (setting) => setting.id === "daily-digest",
+    ).enabled,
+    false,
+  );
+  const compact = selectDensity(toggled, "compact");
+  assert.equal(compact.settings.density, "compact");
+  assert.equal(saveSettings(compact).settings.statusLabel, "Preferences saved");
+  assert.equal(source.settings.density, "comfortable");
 });
 
 test("pins the 12 equivalent branch conditions and derived counts", () => {

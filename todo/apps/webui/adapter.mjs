@@ -34,8 +34,11 @@ export function createRenderer() {
       ...metadata,
       css,
       protocolPath,
-      render(state = defaultState) {
-        return runtimeProtocol.render(state).toString("utf8");
+      render(state = defaultState, requestPath = "/dynamic") {
+        return runtimeProtocol.render(
+          state,
+          { requestPath },
+        ).toString("utf8");
       },
     });
   });

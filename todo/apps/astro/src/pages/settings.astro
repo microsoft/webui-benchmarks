@@ -1,0 +1,19 @@
+---
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+import { SettingsPage } from "../../../preact/components/settings-page.jsx";
+import WorkspaceLayout from "../layouts/workspace-layout.astro";
+import { nextDynamicTodoState } from "../lib/server-state.mjs";
+
+export const prerender = false;
+Astro.response.headers.set(
+  "cache-control",
+  "no-store, no-cache, must-revalidate",
+);
+const initialState = nextDynamicTodoState();
+---
+
+<WorkspaceLayout title="Settings · SSR Todo Benchmark">
+  <SettingsPage state={initialState} client:load />
+</WorkspaceLayout>

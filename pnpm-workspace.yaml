@@ -14,3 +14,14 @@ allowBuilds:
   deno: true
   esbuild: true
   sharp: true
+
+minimumReleaseAgeExclude:
+  - '@microsoft/webui-darwin-arm64@0.0.26'
+  - '@microsoft/webui-darwin-x64@0.0.26'
+  - '@microsoft/webui-framework@0.0.26'
+  - '@microsoft/webui-linux-arm64@0.0.26'
+  - '@microsoft/webui-linux-x64@0.0.26'
+  - '@microsoft/webui-router@0.0.26'
+  - '@microsoft/webui-win32-arm64@0.0.26'
+  - '@microsoft/webui-win32-x64@0.0.26'
+  - '@microsoft/webui@0.0.26'

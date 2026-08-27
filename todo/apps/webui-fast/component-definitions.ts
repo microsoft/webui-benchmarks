@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import "./src/app-shell/app-shell.js";
+import "./src/workspace-intelligence/workspace-intelligence.js";
 import "./src/todo-app/todo-app.js";
 import "./src/todo-badge/todo-badge.js";
 import "./src/todo-button/todo-button.js";
@@ -15,6 +17,7 @@ import "./src/todo-tag-list/todo-tag-list.js";
 import "./src/todo-toolbar/todo-toolbar.js";
 
 export const COMPONENT_NAMES = Object.freeze([
+  "app-shell",
   "todo-app",
   "todo-header",
   "todo-summary",
@@ -27,4 +30,5 @@ export const COMPONENT_NAMES = Object.freeze([
   "todo-tag-list",
   "todo-button",
   "todo-footer",
+  "workspace-intelligence",
 ]);

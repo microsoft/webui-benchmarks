@@ -41,7 +41,7 @@ function row(caseId, label, requestsPerSecond, firstContentfulPaintMs) {
 function benchmarkSummary() {
   const benchmarks = {
     description:
-      "Compare 3 product paths by single-core throughput or browser cost.",
+      "Compare 7 product paths by single-core throughput or browser cost.",
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: "SSR methodology",
@@ -74,7 +74,21 @@ function benchmarkSummary() {
     ],
     rows: [
       row("react", "React", 120, 30),
+      row("webui-rust-actix", "WebUI / Rust / Actix", 110, 35),
+      row(
+        "webui-shadowdom-rust-actix",
+        "WebUI / Shadow DOM / Rust / Actix",
+        105,
+        36,
+      ),
+      row(
+        "webui-fast-rust-actix",
+        "WebUI / FAST V3 / Rust / Actix",
+        102,
+        38,
+      ),
       row("webui-node-http", "WebUI / Node", 100, 40),
+      row("webui-bun-serve", "WebUI / Bun", 90, 50),
       row("webui-deno-serve", "WebUI / Deno", 80, 60),
     ],
     selectedMetric: "requestsPerSecond",
@@ -88,7 +102,7 @@ function benchmarkSummary() {
   };
 }
 
-test("filters and reranks the compact summary to WebUI rows", () => {
+test("keeps only the primary WebUI Rust row by default", () => {
   const source = benchmarkSummary();
   const original = structuredClone(source);
   const filtered = buildWebuiBenchmarkSummary(source);
@@ -96,25 +110,55 @@ test("filters and reranks the compact summary to WebUI rows", () => {
   assert.deepEqual(source, original);
   assert.deepEqual(
     filtered.benchmarks.rows.map(({ caseId }) => caseId),
-    ["webui-node-http", "webui-deno-serve"],
+    ["webui-rust-actix"],
   );
   assert.deepEqual(
     filtered.benchmarks.rows.map(({ rank }) => rank),
-    ["1", "2"],
+    ["1"],
   );
   assert.deepEqual(
     filtered.benchmarks.rows.map(({ activeWidth }) => activeWidth),
-    ["100.0%", "80.0%"],
+    ["100.0%"],
   );
-  assert.match(filtered.benchmarks.description, /^Compare 2 WebUI product/u);
+  assert.match(
+    filtered.benchmarks.description,
+    /^Compare 1 WebUI product path\b/u,
+  );
   assert.doesNotMatch(filtered.benchmarks.metricSummary, /React/u);
   assert.match(
     filtered.benchmarks.metrics[1].summary,
-    /WebUI \/ Node.*40 ms/u,
+    /WebUI \/ Rust \/ Actix.*35 ms/u,
   );
   assert.deepEqual(
     JSON.parse(filtered.benchmarksJson),
     filtered.benchmarks,
+  );
+});
+
+test("--all behavior keeps and reranks every WebUI row", () => {
+  const filtered = buildWebuiBenchmarkSummary(
+    benchmarkSummary(),
+    { all: true },
+  );
+
+  assert.deepEqual(
+    filtered.benchmarks.rows.map(({ caseId }) => caseId),
+    [
+      "webui-rust-actix",
+      "webui-shadowdom-rust-actix",
+      "webui-fast-rust-actix",
+      "webui-node-http",
+      "webui-bun-serve",
+      "webui-deno-serve",
+    ],
+  );
+  assert.deepEqual(
+    filtered.benchmarks.rows.map(({ rank }) => rank),
+    ["1", "2", "3", "4", "5", "6"],
+  );
+  assert.match(
+    filtered.benchmarks.description,
+    /^Compare 6 WebUI product paths\b/u,
   );
 });
 
@@ -123,7 +167,7 @@ test("rejects summaries without WebUI rows", () => {
   source.benchmarks.rows = source.benchmarks.rows.slice(0, 1);
   assert.throws(
     () => buildWebuiBenchmarkSummary(source),
-    /contains no WebUI rows/u,
+    /contains no webui-rust-actix row/u,
   );
 });
 
@@ -141,11 +185,35 @@ test("writes a WebUI-only state file", async (t) => {
   await extractWebuiBenchmarks(inputPath, outputPath);
 
   const written = JSON.parse(await readFile(outputPath, "utf8"));
-  assert.equal(written.benchmarks.rows.length, 2);
-  assert.equal(
-    written.benchmarks.rows.every(({ caseId }) =>
-      caseId.startsWith("webui-")
-    ),
-    true,
+  assert.deepEqual(
+    written.benchmarks.rows.map(({ caseId }) => caseId),
+    ["webui-rust-actix"],
+  );
+});
+
+test("writes every WebUI row when all is enabled", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "webui-benchmarks-"));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const inputPath = join(directory, "benchmark-summary.json");
+  const outputPath = join(directory, "webui.json");
+  await writeFile(
+    inputPath,
+    JSON.stringify(benchmarkSummary()),
+    "utf8",
+  );
+
+  await extractWebuiBenchmarks(inputPath, outputPath, { all: true });
+
+  const written = JSON.parse(await readFile(outputPath, "utf8"));
+  assert.deepEqual(
+    written.benchmarks.rows.map(({ caseId }) => caseId),
+    [
+      "webui-rust-actix",
+      "webui-shadowdom-rust-actix",
+      "webui-fast-rust-actix",
+      "webui-node-http",
+      "webui-bun-serve",
+      "webui-deno-serve",
+    ],
   );
 });
