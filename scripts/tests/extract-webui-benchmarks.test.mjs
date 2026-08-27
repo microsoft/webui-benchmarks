@@ -167,6 +167,39 @@ test("--all behavior keeps and reranks every WebUI row", () => {
   );
 });
 
+test("filters and preserves fixed-load saturation disclosures", () => {
+  const source = benchmarkSummary();
+  source.benchmarks.saturationWarnings = [
+    {
+      caseId: "react",
+      gainPercent: 20,
+      label: "React",
+      measuredConnections: 64,
+      probeConnections: 128,
+      reason: "still rising",
+    },
+    {
+      caseId: "webui-rust-actix",
+      gainPercent: 10,
+      label: "WebUI / Light DOM / Rust / Actix",
+      measuredConnections: 64,
+      probeConnections: 128,
+      reason: "still rising",
+    },
+  ];
+  const filtered = buildWebuiBenchmarkSummary(source);
+  assert.deepEqual(
+    filtered.benchmarks.saturationWarnings.map(({ caseId }) => caseId),
+    ["webui-rust-actix"],
+  );
+  assert.match(filtered.benchmarks.metricSummary, /lower bounds/u);
+  assert.doesNotMatch(filtered.benchmarks.metricSummary, /React/u);
+  assert.deepEqual(
+    JSON.parse(filtered.benchmarksJson),
+    filtered.benchmarks,
+  );
+});
+
 test("rejects summaries without WebUI rows", () => {
   const source = benchmarkSummary();
   source.benchmarks.rows = source.benchmarks.rows.slice(0, 1);

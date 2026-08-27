@@ -112,6 +112,19 @@ pnpm install --force --frozen-lockfile
 
 ## Run the benchmark
 
+Run the complete publication workflow from a clean commit:
+
+```bash
+pnpm run bench:official
+```
+
+This runs the official SSR matrix and ten-round headed browser matrix from the
+same source snapshot, then writes:
+
+- `results/ssr-todo-official.json` - complete raw SSR/RPS evidence
+- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence
+- `results/benchmark-summary.json` - copy-ready WebUI homepage state
+
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
 wildcard:
 
@@ -121,9 +134,9 @@ pnpm run bench:quick -- --case react
 pnpm run bench:quick -- --case webui-*
 ```
 
-Run and save the official timeboxed SSR matrix under a stable, descriptive
-name. Each product gets two four-second saturation probes, a three-second
-warmup, and one twenty-second measured round:
+Run only the official timeboxed SSR matrix when investigating server results.
+Each product gets two four-second saturation probes, a three-second warmup, and
+one twenty-second measured round:
 
 ```bash
 pnpm run bench:ssr:save -- \
@@ -152,9 +165,9 @@ process/context/page, and the shared interaction sequence.
 
 ## Result ownership and publishing
 
-Full raw reports and named baselines belong in [`results/`](./results/).
-CI runs may retain them as workflow artifacts. The WebUI documentation
-repository does not need to check in a duplicate full `latest.json`.
+Full raw reports and named baselines belong in [`results/`](./results/). CI runs
+may retain them as workflow artifacts. Copy `results/benchmark-summary.json`
+into the WebUI documentation state; do not copy either raw report.
 
 Export only the compact homepage DTO from a clean, unfiltered, complete
 canonical official SSR report. Add the matching headed browser report when

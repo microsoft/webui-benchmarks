@@ -23,6 +23,7 @@
     "test:todo:browser": "node --test --test-concurrency=1 todo/browser/tests/*.test.mjs",
     "test:todo": "node --test --test-concurrency=1 todo/shared/*.test.mjs todo/apps/*/tests/*.test.mjs todo/servers/tests/*.test.mjs todo/runner/tests/*.test.mjs todo/browser/tests/*.test.mjs",
     "bench": "node todo/runner/cli.mjs",
+    "bench:official": "node scripts/run-official-benchmarks.mjs",
     "bench:quick": "node todo/runner/cli.mjs --quick",
     "bench:json": "node todo/runner/cli.mjs --json",
     "bench:ssr:official": "node todo/runner/cli.mjs --runtime-mode official",

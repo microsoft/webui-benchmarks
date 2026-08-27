@@ -52,6 +52,8 @@ const summaryStatisticFields = Object.freeze([
   "p95",
 ]);
 const windowsSaturationReason = "Server process metrics were unavailable";
+const unsaturatedReason =
+  "Throughput was still increasing at the largest connection count";
 const runtimePins = loadRuntimePins();
 const defaultOutputPath = resolve(
   repositoryRoot,
@@ -421,7 +423,18 @@ function hasGreenRuntimeEvidence(report) {
     );
 }
 
-function hasOnlyWindowsSaturationWarnings(report) {
+function isWindowsReport(report) {
+  return report.machine?.osPlatform === "win32"
+    && report.machine?.processPlatform === "win32";
+}
+
+function hasExpectedProcessMetrics(report, serverMetrics) {
+  return isWindowsReport(report)
+    ? isWindowsProcessMetricsUnavailable(serverMetrics)
+    : serverMetrics?.status === "available";
+}
+
+function hasOnlyDocumentedSaturationResults(report) {
   const connections = report.config?.saturationConnections;
   if (
     !Array.isArray(connections)
@@ -435,34 +448,51 @@ function hasOnlyWindowsSaturationWarnings(report) {
     return false;
   }
   return report.saturation.every((entry) =>
-    entry.analysis?.status === "process-metrics-unavailable"
-    && entry.analysis.plateauStatus === "saturated"
-    && entry.analysis.reason === windowsSaturationReason
-    && Number.isFinite(entry.analysis.peakConnections)
-    && Number.isFinite(entry.analysis.peakRequestsPerSecond)
+    (
+      isWindowsReport(report)
+      && entry.analysis?.status === "process-metrics-unavailable"
+      && entry.analysis.plateauStatus === "saturated"
+      && entry.analysis.reason === windowsSaturationReason
+      && Number.isFinite(entry.analysis.peakConnections)
+      && Number.isFinite(entry.analysis.peakRequestsPerSecond)
+      || !isWindowsReport(report)
+      && entry.analysis?.status === "saturated"
+      && Number.isFinite(entry.analysis.peakConnections)
+      && Number.isFinite(entry.analysis.peakRequestsPerSecond)
+      || entry.analysis?.status === "server-unsaturated"
+      && entry.analysis.reason === unsaturatedReason
+      && Number.isFinite(entry.analysis.gain)
+      && entry.analysis.gain > 0.05
+    )
     && Array.isArray(entry.samples)
     && entry.samples.length === connections.length
     && entry.samples.every((sample, index) =>
       sample.connections === connections[index]
       && sample.latencyP95Status === "histogram-10us"
       && sample.loadGenerator?.status === "available"
-      && isWindowsProcessMetricsUnavailable(sample.serverMetrics)
+      && hasExpectedProcessMetrics(report, sample.serverMetrics)
     )
   );
 }
 
-function isDocumentedWindowsPartialReport(report) {
+function isDocumentedPartialReport(report) {
+  const windows = isWindowsReport(report);
+  const hasSaturationWarning = report.saturation.some(
+    ({ analysis }) => analysis.status === "server-unsaturated",
+  );
   return report.status === "partial"
-    && report.machine?.osPlatform === "win32"
-    && report.machine?.processPlatform === "win32"
+    && (windows || hasSaturationWarning)
     && hasGreenRuntimeEvidence(report)
     && report.rawRounds.every((round) =>
-      round.metricsStatus === "metrics-unavailable"
+      (windows
+        ? round.metricsStatus === "metrics-unavailable"
+          && isWindowsProcessMetricsUnavailable(round.serverMetrics)
+        : round.metricsStatus === "ok"
+          && round.serverMetrics?.status === "available")
       && round.latencyP95Status === "histogram-10us"
       && round.loadGenerator?.status === "available"
-      && isWindowsProcessMetricsUnavailable(round.serverMetrics)
     )
-    && hasOnlyWindowsSaturationWarnings(report);
+    && hasOnlyDocumentedSaturationResults(report);
 }
 
 function isCanonicalOfficialReport(report) {
@@ -587,10 +617,27 @@ function methodology(report) {
     "config.durationSeconds",
   );
   const roundLabel = rounds === 1 ? "measured round" : "randomized rounds";
-  return `100 todos · 12 component types · ${variants} warm structural variants · current UTC state materialized per request · ${connections} connections from ${workers} load workers · 1 server process/worker pinned to 1 CPU · ${rounds} × ${duration} s ${roundLabel} · dynamic SSR · natural bytes`;
+  return `100 todos · 13 component types · ${variants} warm structural variants · current UTC state materialized per request · ${connections} connections from ${workers} load workers · 1 server process/worker pinned to 1 CPU · ${rounds} × ${duration} s ${roundLabel} · dynamic SSR · natural bytes`;
 }
 
-function renderRows(rows, browserEvidence) {
+function saturationWarnings(report, rows) {
+  const labels = new Map(rows.map(({ caseId, label }) => [caseId, label]));
+  return report.saturation
+    .filter(({ analysis }) => analysis.status === "server-unsaturated")
+    .map(({ analysis, caseId }) => ({
+      caseId,
+      gainPercent: analysis.gain * 100,
+      label: labels.get(caseId) ?? caseId,
+      measuredConnections: report.config.connections,
+      probeConnections: report.config.saturationConnections.at(-1),
+      reason: analysis.reason,
+    }));
+}
+
+function renderRows(rows, browserEvidence, warnings) {
+  const warningsByCase = new Map(
+    warnings.map((warning) => [warning.caseId, warning]),
+  );
   const ordered = [...rows].sort(
     (left, right) =>
       right.medianRequestsPerSecond - left.medianRequestsPerSecond
@@ -608,7 +655,13 @@ function renderRows(rows, browserEvidence) {
       displayedRank = index + 1;
       previousDisplay = valueDisplay;
     }
-    const detail = `${row.renderer} · ${row.transport} · MAD ${formatNumber(row.madRequestsPerSecond)} req/s · p95 ${formatNumber(row.medianP95LatencyMs)} ms · ${formatNumber(row.minimumResponseBytes)}-${formatNumber(row.maximumResponseBytes)} B natural`;
+    const warning = warningsByCase.get(row.caseId);
+    const warningDetail = warning === undefined
+      ? ""
+      : ` · saturation warning: the 128-connection probe was ${
+          warning.gainPercent.toFixed(1)
+        }% faster`;
+    const detail = `${row.renderer} · ${row.transport} · MAD ${formatNumber(row.madRequestsPerSecond)} req/s · p95 ${formatNumber(row.medianP95LatencyMs)} ms · ${formatNumber(row.minimumResponseBytes)}-${formatNumber(row.maximumResponseBytes)} B natural${warningDetail}`;
     const metric = {
       available: true,
       detail,
@@ -640,17 +693,24 @@ export function buildBenchmarkSummary(report, browserReport = null) {
     !isCanonicalOfficialReport(report)
     || (
       report.status !== "ok"
-      && !isDocumentedWindowsPartialReport(report)
+      && !isDocumentedPartialReport(report)
     )
   ) {
     throw new Error(
-      "Summary export requires a clean, complete, unfiltered canonical official report; partial reports are allowed only for documented Windows process telemetry unavailability",
+      "Summary export requires a clean, complete, unfiltered canonical official report; partial reports are allowed only for documented process telemetry or disclosed fixed-load saturation warnings",
     );
   }
   const browserEvidence = createBrowserSummaryEvidence(report, browserReport);
   const rows = matrixRows(report);
-  const summary = winnerStatement(rows);
+  const warnings = saturationWarnings(report, rows);
+  const warningSummary = warnings.length === 0
+    ? ""
+    : ` Fixed ${report.config.connections}-connection results are retained for ${
+        warnings.map(({ label }) => label).join(", ")
+      }; their 128-connection saturation probes were still rising, so those throughput values are lower bounds.`;
+  const summary = `${winnerStatement(rows)}${warningSummary}`;
   const method = methodology(report);
+  const rpsLabel = `${report.config.connections}-connection RPS`;
   const benchmarks = {
     description:
       browserEvidence?.description
@@ -667,7 +727,7 @@ export function buildBenchmarkSummary(report, browserReport = null) {
         direction: "higher",
         directionLabel: "higher is better",
         id: "requestsPerSecond",
-        label: "Single-core RPS",
+        label: rpsLabel,
         methodology: method,
         selected: true,
         summary,
@@ -675,11 +735,12 @@ export function buildBenchmarkSummary(report, browserReport = null) {
       },
       ...(browserEvidence?.metrics ?? []),
     ],
-    rows: renderRows(rows, browserEvidence),
+    rows: renderRows(rows, browserEvidence, warnings),
+    saturationWarnings: warnings,
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
       "Dynamic SSR throughput from one timeboxed 20-second measured round.",
-    selectedMetricLabel: "Single-core RPS",
+    selectedMetricLabel: rpsLabel,
     title: "Same workload. Choose the metric.",
   };
   return {

@@ -180,6 +180,17 @@ export function buildWebuiBenchmarkSummary(summary, { all = false } = {}) {
         : `Benchmark summary contains no ${primaryWebuiCaseId} row`,
     );
   }
+  const retainedCaseIds = new Set(rows.map(({ caseId }) => caseId));
+  const saturationWarnings = Array.isArray(benchmarks.saturationWarnings)
+    ? benchmarks.saturationWarnings.filter(
+      ({ caseId }) => retainedCaseIds.has(caseId),
+    )
+    : [];
+  const saturationCaveat = saturationWarnings.length === 0
+    ? ""
+    : ` Fixed-load results for ${
+      saturationWarnings.map(({ label }) => label).join(", ")
+    } remain lower bounds because their saturation probes were still rising.`;
 
   const metrics = benchmarks.metrics.map((candidate, index) => {
     const metric = objectAt(
@@ -206,7 +217,9 @@ export function buildWebuiBenchmarkSummary(summary, { all = false } = {}) {
     };
     return {
       ...filteredMetric,
-      summary: metricSummary(rows, filteredMetric),
+      summary: `${
+        metricSummary(rows, filteredMetric)
+      }${id === "requestsPerSecond" ? saturationCaveat : ""}`,
     };
   });
   const selectedMetric = metrics.find(({ id }) => id === selectedMetricId);
@@ -224,6 +237,7 @@ export function buildWebuiBenchmarkSummary(summary, { all = false } = {}) {
     metricSummary: selectedMetric.summary,
     metrics,
     rows: filteredRows,
+    saturationWarnings,
     selectedMetricDescription: selectedMetric.description,
     selectedMetricLabel: selectedMetric.label,
   };
