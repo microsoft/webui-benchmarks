@@ -82,7 +82,7 @@ and `node_modules` trees are intentionally untracked.
 
 ## WebUI dependency strategy
 
-The canonical manifests benchmark the released WebUI `0.0.26` npm packages
+The canonical manifests benchmark the released WebUI `0.0.27` npm packages
 and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
@@ -98,7 +98,7 @@ To benchmark a tag, branch, or commit, let the configuration script create an
 untracked shallow checkout:
 
 ```bash
-pnpm run webui:configure -- --ref v0.0.26
+pnpm run webui:configure -- --ref v0.0.27
 pnpm install --force --no-frozen-lockfile --lockfile=false
 pnpm run build
 ```

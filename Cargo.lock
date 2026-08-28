@@ -943,9 +943,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "microsoft-webui-expressions"
-version = "0.0.26"
+version = "0.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60689242d9a4be68454d620ccb7ce0e4f38c9d75d2a913cdbf6827922201404c"
+checksum = "72d85b6c1e80d2c9b6638aa76c1c213a563bb311dd3902f2ad2ab1fcce154109"
 dependencies = [
  "microsoft-webui-protocol",
  "microsoft-webui-state",
@@ -955,9 +955,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-handler"
-version = "0.0.26"
+version = "0.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07f605e0c0458b910e126023c664c684dae165cb59f8dc876d64e1822f4fc9cf"
+checksum = "2a7f03c4353c1870a51379c2a8429559c1e6c81419b8b391e03640de611056a9"
 dependencies = [
  "memchr",
  "microsoft-webui-expressions",
@@ -970,9 +970,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-protocol"
-version = "0.0.26"
+version = "0.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72d178ddc0c9f50565ae2bd651d42aa137b4063dc4294dd10c571af3d1806832"
+checksum = "6dbae3b76d1ffed86d8baf0a894d52c1e39fa7869c6e4e4c4457097541db7948"
 dependencies = [
  "prost",
  "serde",
@@ -982,9 +982,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-state"
-version = "0.0.26"
+version = "0.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f58489637d050aff06947462dc66b40ea46f692c25390d61c69e607e1a74eb02"
+checksum = "b8bca9e03a548d6877a6c5b3533a5c8a48397e81574b65c28abdf5fd368a2321"
 dependencies = [
  "serde_json",
 ]

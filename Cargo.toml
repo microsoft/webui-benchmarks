@@ -23,7 +23,7 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.150", features = ["raw_value"] }
 time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
 tokio = { version = "=1.53.1", features = ["rt", "sync", "time"] }
-microsoft-webui-handler = "=0.0.26"
+microsoft-webui-handler = "=0.0.27"
 
 [workspace.lints.clippy]
 perf = { level = "deny", priority = -1 }

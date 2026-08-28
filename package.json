@@ -49,9 +49,9 @@
   "packageManager": "pnpm@11.5.3",
   "dependencies": {
     "@microsoft/fast-element": "3.0.1",
-    "@microsoft/webui": "0.0.26",
-    "@microsoft/webui-framework": "0.0.26",
-    "@microsoft/webui-router": "0.0.26",
+    "@microsoft/webui": "0.0.27",
+    "@microsoft/webui-framework": "0.0.27",
+    "@microsoft/webui-router": "0.0.27",
     "@solidjs/router": "1.0.0",
     "@tanstack/react-router": "1.170.31",
     "@vue/server-renderer": "3.5.41",
