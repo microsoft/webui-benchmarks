@@ -347,6 +347,24 @@ function officialCases() {
   ];
 }
 
+// Cores an app's own process design needs to *physically* run its declared
+// workerCount:1 HTTP worker concurrently with its other internal OS
+// threads. This is independent of workerCount (which fixes the number of
+// HTTP-serving workers at 1 for every headline case, for fairness) — it is
+// about how many cores that single HTTP worker's *process* needs available
+// so its other threads are not starved onto the same core. Every launcher
+// kind gets the same rule (declare the cores your own architecture uses);
+// rust-actix is the only current kind whose server keeps a dedicated
+// render-worker thread distinct from its single Actix worker thread, so it
+// is the only one that declares more than one.
+const SERVER_CORE_COUNT_BY_LAUNCHER_KIND = Object.freeze({
+  "rust-actix": 2,
+});
+
+export function requiredServerCoreCount(benchmarkCase) {
+  return SERVER_CORE_COUNT_BY_LAUNCHER_KIND[benchmarkCase.launcher?.kind] ?? 1;
+}
+
 /**
  * Build the official 15-row matrix for one response-mode suite. Product
  * identity (case id, appId, productKind, transport, runtimeId, serverId)

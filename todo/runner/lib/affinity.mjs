@@ -16,6 +16,7 @@ export function applyProcessAffinity(
   pid,
   cpuIndex,
   {
+    coreCount = 1,
     cpuCount = cpus().length,
     platform = process.platform,
     run = defaultRun,
@@ -27,62 +28,84 @@ export function applyProcessAffinity(
       status: "not-requested",
     });
   }
+  // `coreCount` reserves a contiguous CPU range starting at `cpuIndex`
+  // instead of a single core. It exists so a process whose own design uses
+  // more than one concurrently-active OS thread (for example, an HTTP
+  // worker thread plus a separate render worker thread) can be isolated on
+  // enough real cores to let those threads genuinely run in parallel,
+  // while still applying the exact same one-process/N-reserved-cores
+  // policy used for every other case. It defaults to 1, which reproduces
+  // today's single-core pin byte-for-byte for every existing caller.
+  if (!Number.isInteger(coreCount) || coreCount < 1) {
+    throw new RangeError("CPU affinity core count must be a positive integer");
+  }
+  const lastCpuIndex = cpuIndex + coreCount - 1;
   if (
     !Number.isInteger(pid)
     || pid <= 0
     || !Number.isInteger(cpuIndex)
     || cpuIndex < 0
-    || cpuIndex >= cpuCount
+    || lastCpuIndex >= cpuCount
   ) {
     throw new RangeError(
-      `CPU affinity index must be between 0 and ${Math.max(0, cpuCount - 1)}`,
+      `CPU affinity range must fit between 0 and ${Math.max(0, cpuCount - 1)}`,
     );
+  }
+  const result = { cpuIndex };
+  if (coreCount !== 1) {
+    result.coreCount = coreCount;
   }
   let command;
   let args;
   if (platform === "win32") {
-    if (cpuIndex >= 63) {
+    if (lastCpuIndex >= 63) {
       return Object.freeze({
-        cpuIndex,
+        ...result,
         reason: "Windows affinity masks above CPU 62 are not supported",
         status: "unavailable",
       });
     }
+    const mask = coreCount === 1
+      ? `1L -shl ${cpuIndex}`
+      : `((1L -shl ${coreCount}) - 1L) -shl ${cpuIndex}`;
     command = "powershell.exe";
     args = [
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `$process = Get-Process -Id ${pid} -ErrorAction Stop; $process.ProcessorAffinity = [IntPtr](1L -shl ${cpuIndex})`,
+      `$process = Get-Process -Id ${pid} -ErrorAction Stop; $process.ProcessorAffinity = [IntPtr](${mask})`,
     ];
   } else if (platform === "linux") {
+    const cpuList = coreCount === 1
+      ? String(cpuIndex)
+      : `${cpuIndex}-${lastCpuIndex}`;
     command = "taskset";
     args = [
       "--all-tasks",
       "--cpu-list",
       "--pid",
-      String(cpuIndex),
+      cpuList,
       String(pid),
     ];
   } else {
     return Object.freeze({
-      cpuIndex,
+      ...result,
       reason: `CPU affinity is not implemented for ${platform}`,
       status: "unavailable",
     });
   }
-  const result = run(command, args);
-  if (result.error || result.status !== 0) {
+  const commandResult = run(command, args);
+  if (commandResult.error || commandResult.status !== 0) {
     return Object.freeze({
-      cpuIndex,
+      ...result,
       reason:
-        result.error?.message
-        ?? `${result.stderr ?? result.stdout ?? "affinity command failed"}`.trim(),
+        commandResult.error?.message
+        ?? `${commandResult.stderr ?? commandResult.stdout ?? "affinity command failed"}`.trim(),
       status: "unavailable",
     });
   }
   return Object.freeze({
-    cpuIndex,
+    ...result,
     status: "applied",
   });
 }
