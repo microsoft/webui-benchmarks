@@ -452,13 +452,39 @@ fn reclaim_render_buffer(writer: ChannelWriter) -> String {
 /// Finish a render job for the persistent worker thread: publish any error
 /// and then reclaim the writer's buffer, in that order — see
 /// [`publish_render_error`] for why the order is mandatory.
+///
+/// `before_publish` runs immediately before this function attempts to lock
+/// `error` inside [`publish_render_error`] — i.e. at the exact production
+/// ordering point the mandatory sequencing hinges on. Production always
+/// passes a no-op closure via [`finish_render_job`]; it inlines away
+/// completely and adds no runtime overhead. The seam exists purely so
+/// tests can synchronize with a worker thread deterministically (a real
+/// thread reaching a real, load-bearing point in the real code path)
+/// instead of racing it with sleeps, and without any global test-only
+/// hook. If a future change ever reordered the reclaim before the
+/// publish, this closure would necessarily fire after the reclaim instead
+/// of before it, which is exactly what lets the test in `tests` detect
+/// that regression.
+#[inline]
+fn finish_render_job_inner(
+    error: &Mutex<Option<io::Error>>,
+    writer: ChannelWriter,
+    result: Result<()>,
+    before_publish: impl FnOnce(),
+) -> String {
+    before_publish();
+    publish_render_error(error, result);
+    reclaim_render_buffer(writer)
+}
+
+/// Production entry point for [`finish_render_job_inner`]: no-op seam, real
+/// logic only.
 fn finish_render_job(
     error: &Mutex<Option<io::Error>>,
     writer: ChannelWriter,
     result: Result<()>,
 ) -> String {
-    publish_render_error(error, result);
-    reclaim_render_buffer(writer)
+    finish_render_job_inner(error, writer, result, || {})
 }
 
 struct RenderWorker {
@@ -1865,8 +1891,8 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_request_timestamp, finish_render_job, html_response, load_browser_route_assets,
-        materialize_request_state, parse_states, rewrite_request_state,
+        current_request_timestamp, finish_render_job, finish_render_job_inner, html_response,
+        load_browser_route_assets, materialize_request_state, parse_states, rewrite_request_state,
         rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
         ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
         STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
@@ -1984,21 +2010,36 @@ mod tests {
 
     #[test]
     fn render_error_publication_never_races_a_polling_channel_stream_to_a_clean_eof() {
-        // Drives the real production path — `finish_render_job`, the exact
-        // helper `RenderWorker` calls — from another thread, while this
-        // thread holds the job's error mutex locked. `finish_render_job`
-        // must lock that same mutex (inside `publish_render_error`) before
-        // it can reach `reclaim_render_buffer`, which drops the writer's
-        // `mpsc::Sender` and closes the response channel. So as long as we
-        // hold the lock, the other thread is deterministically blocked
-        // *before* it can close the channel — no sleeps or timing needed.
+        // Drives the real production path — `finish_render_job_inner`, the
+        // exact helper `finish_render_job` (which `RenderWorker` calls)
+        // forwards to — from another thread, while this thread holds the
+        // job's error mutex locked. That inner helper must lock that same
+        // mutex (inside `publish_render_error`) before it can reach
+        // `reclaim_render_buffer`, which drops the writer's `mpsc::Sender`
+        // and closes the response channel. So as long as we hold the lock,
+        // the other thread is deterministically blocked *before* it can
+        // close the channel — no sleeps or timing needed.
+        //
+        // Merely spawning the worker and polling right away is not enough:
+        // the OS may not have scheduled the worker thread at all yet, so an
+        // immediate poll would observe `Pending` regardless of whether
+        // production publishes before or after reclaiming — the assertion
+        // would pass even with the ordering reversed. To close that
+        // loophole we synchronize on the exact production ordering point
+        // instead of guessing at timing: `finish_render_job_inner` accepts
+        // a `before_publish` seam that runs immediately before it attempts
+        // the mutex, and only the test wires it to a zero-capacity
+        // (rendezvous) channel. Our `recv()` only returns once the worker
+        // has actually run that hook, so once it does we know the worker
+        // is at that precise point in the real code path — not merely
+        // "probably scheduled by now".
         //
         // This is exactly the invariant that makes the ordering mandatory:
         // if production ever reclaimed the buffer before publishing the
-        // error, the sender would be dropped without ever needing this
-        // mutex, and the channel could close — surfacing a clean
-        // `Ready(None)` — while the mutex, and this test's lock on it, are
-        // still held.
+        // error, the worker's hook would necessarily fire *after* the
+        // sender was already dropped and the channel already closed —
+        // surfacing a clean `Ready(None)` here instead of `Pending`, even
+        // though the mutex, and this test's lock on it, are still held.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -2019,18 +2060,36 @@ mod tests {
             .lock()
             .unwrap_or_else(|error| panic!("mutex should not be poisoned: {error}"));
 
+        // A zero-capacity channel is a rendezvous: `send` blocks until this
+        // thread's `recv` takes the value, so `recv` returning is proof —
+        // not a guess — that the worker has just run `before_publish` and
+        // is about to attempt the (still held) mutex lock.
+        let (reached_seam_tx, reached_seam_rx) = std::sync::mpsc::sync_channel::<()>(0);
+
         let job_error_for_worker = Arc::clone(&job_error);
         let worker = thread::spawn(move || {
-            finish_render_job(&job_error_for_worker, writer, Err(anyhow!("render failed")))
+            finish_render_job_inner(
+                &job_error_for_worker,
+                writer,
+                Err(anyhow!("render failed")),
+                move || {
+                    let _ = reached_seam_tx.send(());
+                },
+            )
         });
 
-        // The worker cannot get past `publish_render_error`'s lock
-        // acquisition while we hold `guard`, so it cannot have reached
-        // `reclaim_render_buffer` yet: the sender is still alive and the
-        // channel cannot be observed closed. Correct production ordering
-        // guarantees `Pending` here; reversed ordering would let the worker
-        // drop the sender without ever touching this mutex, exposing
-        // `Ready(None)` instead.
+        reached_seam_rx
+            .recv()
+            .unwrap_or_else(|error| panic!("worker should reach the pre-publish seam: {error}"));
+
+        // The worker has just run the seam immediately before attempting
+        // `publish_render_error`'s lock, and cannot get past it while we
+        // hold `guard`, so it cannot have reached `reclaim_render_buffer`
+        // yet: the sender is still alive and the channel cannot be
+        // observed closed. Correct production ordering guarantees
+        // `Pending` here; reversed ordering would let the worker drop the
+        // sender before ever reaching this seam, exposing `Ready(None)`
+        // instead.
         assert!(
             matches!(Pin::new(&mut stream).poll_next(&mut context), Poll::Pending),
             "the channel must still be open while the error mutex is held, proving the \
