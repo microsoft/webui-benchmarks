@@ -3,6 +3,7 @@
 
 import { createSecureServer } from "node:http2";
 import { readFile } from "node:fs/promises";
+import { once } from "node:events";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -11,10 +12,17 @@ import {
   createRequestTodoState,
   currentRequestTimestamp,
 } from "../shared/state.mjs";
-import { controlledDocument } from "../shared/document.mjs";
+import {
+  controlledDocument,
+  controlledDocumentStream,
+  controlledDocumentWrapperBytes,
+} from "../shared/document.mjs";
 import { browserTlsMaterial } from "./tls.mjs";
 
-export { controlledDocument } from "../shared/document.mjs";
+export {
+  controlledDocument,
+  controlledDocumentStream,
+} from "../shared/document.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const stylesPath = resolve(here, "..", "shared", "styles.css");
@@ -28,6 +36,73 @@ function send(response, status, contentType, body, headers = {}) {
     ...headers,
   });
   response.end(bytes);
+}
+
+async function sendStream(
+  response,
+  status,
+  contentType,
+  stream,
+  headers = {},
+  headOnly = false,
+) {
+  let completed = false;
+  let closed = false;
+  let markClosed;
+  const closedSignal = new Promise((resolve) => {
+    markClosed = resolve;
+  });
+  const onClose = () => {
+    closed = true;
+    markClosed();
+  };
+  response.once("close", onClose);
+  response.writeHead(status, {
+    "cache-control": "no-store",
+    "content-type": contentType,
+    ...headers,
+  });
+  const reader = stream.getReader();
+  try {
+    if (headOnly) {
+      await reader.cancel(
+        new Error("HEAD requests do not consume renderer streams"),
+      );
+      completed = true;
+      response.end();
+      return;
+    }
+    while (true) {
+      const read = await Promise.race([
+        reader.read().then((result) => ({ result })),
+        closedSignal.then(() => ({ closed: true })),
+      ]);
+      if (read.closed || closed) {
+        throw new Error("HTTP/2 response closed before the stream completed");
+      }
+      const { result } = read;
+      if (result.done) break;
+      if (!response.write(result.value)) {
+        const drained = await Promise.race([
+          once(response, "drain").then(() => true),
+          closedSignal.then(() => false),
+        ]);
+        if (!drained) {
+          throw new Error("HTTP/2 response closed during backpressure");
+        }
+      }
+    }
+    completed = true;
+    response.end();
+  } finally {
+    response.off("close", onClose);
+    if (!completed) {
+      await reader.cancel(
+        new Error("HTTP/2 response transmission did not complete"),
+      );
+    }
+    reader.releaseLock();
+  }
 }
 
 function closeServer(server) {
@@ -136,6 +211,14 @@ export async function startControlledBrowserServer({
         send(response, 404, "text/plain; charset=utf-8", "Not found");
         return;
       }
+      const disconnect = new AbortController();
+      response.once("close", () => {
+        if (!response.writableEnded) {
+          disconnect.abort(
+            new Error("Controlled browser response closed before rendering"),
+          );
+        }
+      });
       const acceptsPartial = (request.headers.accept ?? "")
         .split(",")
         .some((value) =>
@@ -154,12 +237,59 @@ export async function startControlledBrowserServer({
         variantIndex = nextVariant;
         nextVariant = (nextVariant + 1) % TODO_STATE_VARIANTS.length;
         requestTimestamp = currentRequestTimestamp();
+        const requestState = createRequestTodoState(
+          TODO_STATE_VARIANTS[variantIndex],
+          requestTimestamp,
+        );
+        if (typeof serverRenderer.renderStream === "function") {
+          const fragment = await serverRenderer.renderStream(
+            requestState,
+            url.pathname,
+            { signal: disconnect.signal },
+          );
+          if (disconnect.signal.aborted) {
+            await fragment.cancel(disconnect.signal.reason);
+            return;
+          }
+          const documentOptions = {
+                appId: browserCase.appId,
+                bootstrap: serverRenderer.bootstrap,
+                clientPath,
+                initialStateSource: browserCase.initialStateSource,
+                state: requestState,
+              };
+          const wrapperBytes = serverRenderer.ownsDocument
+            ? 0
+            : controlledDocumentWrapperBytes(documentOptions);
+          const document = serverRenderer.ownsDocument
+            ? fragment
+            : controlledDocumentStream({
+                ...documentOptions,
+                fragment,
+              });
+          backendHeadersAt = performance.now();
+          backendBodyAt = backendHeadersAt;
+          await sendStream(
+            response,
+            200,
+            "text/html; charset=utf-8",
+            document,
+            {
+              "server-timing": `browser-stream-setup;dur=${
+                (backendHeadersAt - backendStartedAt).toFixed(3)
+              }`,
+              "x-webui-bench-timestamp": requestTimestamp,
+              "x-webui-browser-wrapper-bytes": String(wrapperBytes),
+              "x-webui-browser-variant": String(variantIndex),
+              "x-webui-browser-ssr": "native-stream",
+            },
+            request.method === "HEAD",
+          );
+          return;
+        }
         fragment = String(
           await serverRenderer.render(
-            createRequestTodoState(
-              TODO_STATE_VARIANTS[variantIndex],
-              requestTimestamp,
-            ),
+            requestState,
             url.pathname,
           ),
         );
@@ -179,14 +309,15 @@ export async function startControlledBrowserServer({
               : {}),
             "x-webui-browser-profile": "1",
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.any([
+            disconnect.signal,
+            AbortSignal.timeout(30_000),
+          ]),
         });
         backendHeadersAt = performance.now();
         if (!source.ok) {
           throw new Error(`Controlled source returned HTTP ${source.status}`);
         }
-        fragment = String(await source.text());
-        backendBodyAt = performance.now();
         requestTimestamp = source.headers.get("x-webui-bench-timestamp");
         if (requestTimestamp === null) {
           throw new Error("Controlled source omitted its request timestamp");
@@ -195,6 +326,30 @@ export async function startControlledBrowserServer({
           source.headers.get("x-webui-bench-variant"),
         );
         backendServerTiming = source.headers.get("server-timing");
+        if (
+          !acceptsPartial
+          && browserCase.initialStateSource === "ssr-document"
+          && source.body !== null
+        ) {
+          await sendStream(
+            response,
+            200,
+            "text/html; charset=utf-8",
+            source.body,
+            {
+              ...(backendServerTiming === null
+                ? {}
+                : { "server-timing": backendServerTiming }),
+              "x-webui-bench-timestamp": requestTimestamp,
+              "x-webui-browser-wrapper-bytes": "0",
+              "x-webui-browser-variant": String(variantIndex),
+            },
+            request.method === "HEAD",
+          );
+          return;
+        }
+        fragment = String(await source.text());
+        backendBodyAt = performance.now();
         if (acceptsPartial) {
           send(response, 200, "application/json; charset=utf-8", fragment, {
             "x-webui-bench-timestamp": requestTimestamp,
@@ -253,6 +408,10 @@ export async function startControlledBrowserServer({
           : { "x-webui-browser-ssr": "solid-hydratable" }),
       });
     } catch (error) {
+      if (response.headersSent) {
+        response.destroy(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       send(
         response,
         500,
@@ -281,6 +440,9 @@ export async function startControlledBrowserServer({
       serverId: serverRenderer === undefined
         ? "browser-document-host"
         : `${browserCase.appId}-browser-ssr`,
+      streaming: typeof serverRenderer?.renderStream === "function"
+        ? "native"
+        : "buffered",
       workerCount: 1,
     }),
     command: serverRenderer === undefined

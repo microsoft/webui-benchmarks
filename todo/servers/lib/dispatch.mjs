@@ -44,7 +44,12 @@ export function createRequestDispatcher(controller) {
     status: 200,
   });
 
-  return async function dispatch(requestUrl, method = "GET", headers = {}) {
+  return async function dispatch(
+    requestUrl,
+    method = "GET",
+    headers = {},
+    options = undefined,
+  ) {
     const normalizedMethod = method.toUpperCase();
     if (normalizedMethod !== "GET" && normalizedMethod !== "HEAD") {
       return jsonResponse(405, {
@@ -68,7 +73,7 @@ export function createRequestDispatcher(controller) {
             pathname,
             requestHeader(headers, "x-webui-inventory") ?? "",
           )
-        : await controller.renderDynamic(pathname);
+        : await controller.renderDynamic(pathname, options);
       response = Object.freeze({
         body: result.body,
         headers: acceptsJson
@@ -89,9 +94,15 @@ export function createRequestDispatcher(controller) {
           `Use ${DYNAMIC_PATH}, ${ACTIVITY_PATH}, ${SETTINGS_PATH}, ${CACHED_PATH}, or ${READY_PATH}.`,
       });
     }
+    const headOnly = normalizedMethod === "HEAD";
+    if (headOnly && response.body instanceof ReadableStream) {
+      await response.body.cancel(
+        new Error("HEAD requests do not consume renderer streams"),
+      );
+    }
     return Object.freeze({
       ...response,
-      headOnly: normalizedMethod === "HEAD",
+      headOnly,
     });
   };
 }

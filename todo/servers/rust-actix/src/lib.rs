@@ -8,21 +8,30 @@ use actix_web::http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_TY
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{Context, Result};
 use config::HydrationPlugin;
+use futures_core::Stream;
 use metadata::{build_metadata, Announcement, ReadyMetadata};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::io;
+use std::mem;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::task::{Context as TaskContext, Poll};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use time::format_description::BorrowedFormatItem;
 use time::macros::format_description;
 use time::OffsetDateTime;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::SendTimeoutError;
 use webui_handler::plugin::fast_v3::FastV3HydrationPlugin;
 use webui_handler::plugin::webui::WebUIHydrationPlugin;
-use webui_handler::{Protocol, RenderOptions, ResponseWriter, WebUIHandler};
+use webui_handler::{FlushWriter, Protocol, RenderOptions, ResponseWriter, WebUIHandler};
 
 pub use config::ServerConfig;
 
@@ -39,6 +48,9 @@ const INITIAL_CAPACITY: usize = 64 * 1024;
 const PROFILE_TIMESTAMP: &str = "2000-01-01T00:00:00.000000Z";
 const REQUEST_TIMESTAMP_FORMAT: &[BorrowedFormatItem<'static>] =
     format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]Z");
+const STREAM_CHUNK_SIZE: usize = 16 * 1024;
+const STREAM_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
+const STREAM_RENDER_QUEUE_CAPACITY: usize = 128;
 
 struct MemoryWriter {
     output: String,
@@ -77,6 +89,189 @@ impl ResponseWriter for MemoryWriter {
 
     fn end(&mut self) -> webui_handler::Result<()> {
         Ok(())
+    }
+}
+
+impl FlushWriter for MemoryWriter {
+    fn flush(&mut self) -> webui_handler::Result<()> {
+        Ok(())
+    }
+}
+
+type StreamChunk = std::result::Result<web::Bytes, io::Error>;
+
+struct ChannelWriter {
+    buffer: String,
+    flush_threshold: Option<usize>,
+    runtime: tokio::runtime::Handle,
+    sender: mpsc::Sender<StreamChunk>,
+}
+
+impl ChannelWriter {
+    fn new(
+        sender: mpsc::Sender<StreamChunk>,
+        flush_threshold: Option<usize>,
+        runtime: tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            buffer: String::with_capacity(INITIAL_CAPACITY),
+            flush_threshold,
+            runtime,
+            sender,
+        }
+    }
+}
+
+impl ResponseWriter for ChannelWriter {
+    fn write(&mut self, content: &str) -> webui_handler::Result<()> {
+        if self.sender.is_closed() {
+            return Err(webui_handler::HandlerError::ClientDisconnected);
+        }
+        self.buffer.push_str(content);
+        if self
+            .flush_threshold
+            .is_some_and(|threshold| self.buffer.len() >= threshold)
+        {
+            self.flush()
+        } else {
+            Ok(())
+        }
+    }
+
+    fn end(&mut self) -> webui_handler::Result<()> {
+        self.flush()
+    }
+}
+
+impl FlushWriter for ChannelWriter {
+    fn flush(&mut self) -> webui_handler::Result<()> {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        let bytes = web::Bytes::from(mem::take(&mut self.buffer));
+        match self
+            .runtime
+            .block_on(self.sender.send_timeout(Ok(bytes), STREAM_FLUSH_TIMEOUT))
+        {
+            Ok(()) => Ok(()),
+            Err(SendTimeoutError::Closed(_)) => {
+                Err(webui_handler::HandlerError::ClientDisconnected)
+            }
+            Err(SendTimeoutError::Timeout(_)) => Err(webui_handler::HandlerError::StreamTimeout),
+        }
+    }
+}
+
+struct ChannelStream {
+    error: Arc<Mutex<Option<io::Error>>>,
+    receiver: mpsc::Receiver<StreamChunk>,
+    reported_error: bool,
+}
+
+impl Stream for ChannelStream {
+    type Item = StreamChunk;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        context: &mut TaskContext<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        match self.receiver.poll_recv(context) {
+            Poll::Ready(None) if !self.reported_error => {
+                self.reported_error = true;
+                let error = self.error.lock().ok().and_then(|mut error| error.take());
+                Poll::Ready(error.map(Err))
+            }
+
+            result => result,
+        }
+    }
+}
+
+struct RenderJob {
+    error: Arc<Mutex<Option<io::Error>>>,
+    render_state: Value,
+    request_path: String,
+    sender: mpsc::Sender<StreamChunk>,
+}
+
+struct RenderWorker {
+    sender: Option<mpsc::Sender<RenderJob>>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl RenderWorker {
+    fn new(
+        handler: Arc<WebUIHandler>,
+        protocol: Arc<Protocol>,
+        progressive_boundaries: bool,
+    ) -> Result<Self> {
+        let (sender, mut receiver) = mpsc::channel::<RenderJob>(STREAM_RENDER_QUEUE_CAPACITY);
+        let runtime = tokio::runtime::Handle::current();
+        let thread = thread::Builder::new()
+            .name("webui-stream-render".to_owned())
+            .spawn(move || {
+                while let Some(job) = receiver.blocking_recv() {
+                    if job.sender.is_closed() {
+                        continue;
+                    }
+                    let mut writer = ChannelWriter::new(
+                        job.sender,
+                        (!progressive_boundaries).then_some(STREAM_CHUNK_SIZE),
+                        runtime.clone(),
+                    );
+                    let options = RenderOptions::new(ENTRY_ID, &job.request_path);
+                    let result = if progressive_boundaries {
+                        drive_streaming_response(
+                            &handler,
+                            &protocol,
+                            &job.render_state,
+                            &options,
+                            &mut writer,
+                        )
+                    } else {
+                        handler.render(&protocol, &job.render_state, &options, &mut writer)
+                    };
+                    if let Err(error) = result {
+                        if let Ok(mut render_error) = job.error.lock() {
+                            *render_error = Some(io::Error::other(error));
+                        }
+                    }
+                }
+            })
+            .context("Failed to start WebUI streaming render worker")?;
+        Ok(Self {
+            sender: Some(sender),
+            thread: Some(thread),
+        })
+    }
+
+    fn stream(&self, render_state: Value, request_path: String) -> Result<ChannelStream> {
+        let (sender, receiver) = mpsc::channel(1);
+        let error = Arc::new(Mutex::new(None));
+        self.sender
+            .as_ref()
+            .context("WebUI streaming render worker is closed")?
+            .try_send(RenderJob {
+                error: Arc::clone(&error),
+                render_state,
+                request_path,
+                sender,
+            })
+            .context("WebUI streaming render queue is full or closed")?;
+        Ok(ChannelStream {
+            error,
+            receiver,
+            reported_error: false,
+        })
+    }
+}
+
+impl Drop for RenderWorker {
+    fn drop(&mut self) {
+        self.sender.take();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 
@@ -141,11 +336,10 @@ impl StatePool {
 struct AppState {
     browser_assets: Option<BrowserAssets>,
     cached_body: web::Bytes,
-    dynamic_capacity: usize,
     fast_routes: bool,
-    handler: WebUIHandler,
     metadata_body: web::Bytes,
-    protocol: Protocol,
+    protocol: Arc<Protocol>,
+    render_worker: RenderWorker,
     states: Mutex<StatePool>,
     last_timestamp_micros: AtomicI64,
     variant_headers: Box<[HeaderValue]>,
@@ -154,7 +348,6 @@ struct AppState {
 
 struct BrowserAssets {
     bootstrap: web::Bytes,
-    body_inject: String,
     styles: HashMap<String, web::Bytes>,
 }
 
@@ -164,22 +357,42 @@ struct ErrorBody {
     message: String,
 }
 
+fn drive_streaming_response<W: FlushWriter + ?Sized>(
+    handler: &WebUIHandler,
+    protocol: &Protocol,
+    state: &Value,
+    options: &RenderOptions<'_>,
+    writer: &mut W,
+) -> webui_handler::Result<()> {
+    handler.render_streaming(protocol, state, options, writer)
+}
+
 fn render_html(
     handler: &WebUIHandler,
     protocol: &Protocol,
     state: &Value,
     capacity: usize,
     request_path: &str,
-    body_inject: Option<&str>,
 ) -> Result<String> {
     let mut writer = MemoryWriter::with_capacity(capacity);
-    let mut options = RenderOptions::new(ENTRY_ID, request_path);
-    if let Some(content) = body_inject {
-        options = options.with_body_inject(content);
-    }
+    let options = RenderOptions::new(ENTRY_ID, request_path);
     handler
         .render(protocol, state, &options, &mut writer)
         .context("WebUI render failed")?;
+    Ok(writer.output)
+}
+
+fn render_streaming_html(
+    handler: &WebUIHandler,
+    protocol: &Protocol,
+    state: &Value,
+    capacity: usize,
+    request_path: &str,
+) -> Result<String> {
+    let mut writer = MemoryWriter::with_capacity(capacity);
+    let options = RenderOptions::new(ENTRY_ID, request_path);
+    drive_streaming_response(handler, protocol, state, &options, &mut writer)
+        .context("WebUI streaming render failed")?;
     Ok(writer.output)
 }
 
@@ -438,14 +651,11 @@ fn response_sizes(
         } else {
             request_state
         };
-        let output = render_html(
-            handler,
-            protocol,
-            &request_state,
-            capacity,
-            DYNAMIC_PATH,
-            None,
-        )?;
+        let output = if project_webui {
+            render_streaming_html(handler, protocol, &request_state, capacity, DYNAMIC_PATH)?
+        } else {
+            render_html(handler, protocol, &request_state, capacity, DYNAMIC_PATH)?
+        };
         capacity = capacity.max(output.len());
         lengths.push(output.len());
     }
@@ -466,12 +676,14 @@ fn create_handler(plugin: HydrationPlugin) -> WebUIHandler {
 fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMetadata<'static>)> {
     let protocol_bytes = std::fs::read(&config.protocol_path)
         .with_context(|| format!("Failed to read {}", config.protocol_path.display()))?;
-    let protocol = Protocol::from_protobuf(&protocol_bytes)
-        .with_context(|| format!("Failed to decode {}", config.protocol_path.display()))?;
+    let protocol = Arc::new(
+        Protocol::from_protobuf(&protocol_bytes)
+            .with_context(|| format!("Failed to decode {}", config.protocol_path.display()))?,
+    );
     let state_bytes = std::fs::read(&config.states_path)
         .with_context(|| format!("Failed to read {}", config.states_path.display()))?;
     let states = parse_states(&state_bytes)?;
-    let handler = create_handler(config.plugin);
+    let handler = Arc::new(create_handler(config.plugin));
     let project_webui = config.plugin == HydrationPlugin::WebUi;
     let (lengths, dynamic_capacity) =
         response_sizes(&handler, &protocol, &states.variants, project_webui)?;
@@ -482,17 +694,28 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
     } else {
         cached_state
     };
-    let cached_body = web::Bytes::from(render_html(
-        &handler,
-        &protocol,
-        &cached_state,
-        dynamic_capacity,
-        CACHED_PATH,
-        None,
-    )?);
+    let cached_body = web::Bytes::from(if project_webui {
+        render_streaming_html(
+            &handler,
+            &protocol,
+            &cached_state,
+            dynamic_capacity,
+            CACHED_PATH,
+        )?
+    } else {
+        render_html(
+            &handler,
+            &protocol,
+            &cached_state,
+            dynamic_capacity,
+            CACHED_PATH,
+        )?
+    });
     let browser_assets = load_browser_assets()?;
     let metadata = build_metadata(lengths, cached_body.len(), config.plugin.app_id());
     let metadata_body = web::Bytes::from(serde_json::to_vec(&metadata)?);
+    let render_worker =
+        RenderWorker::new(Arc::clone(&handler), Arc::clone(&protocol), project_webui)?;
     let variant_headers = (0..STATE_VARIANT_COUNT)
         .map(|index| HeaderValue::from_str(&index.to_string()))
         .collect::<std::result::Result<Vec<_>, _>>()?
@@ -501,11 +724,10 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
         web::Data::new(AppState {
             browser_assets,
             cached_body,
-            dynamic_capacity,
             fast_routes: config.plugin == HydrationPlugin::FastV3,
-            handler,
             metadata_body,
             protocol,
+            render_worker,
             states: Mutex::new(states),
             last_timestamp_micros: AtomicI64::new(0),
             variant_headers,
@@ -526,7 +748,6 @@ fn load_browser_assets() -> Result<Option<BrowserAssets>> {
     let styles = load_browser_route_assets(&directory)?;
     Ok(Some(BrowserAssets {
         bootstrap: web::Bytes::from(bootstrap),
-        body_inject: r#"<script type="module" src="/__browser/webui.js"></script>"#.to_owned(),
         styles,
     }))
 }
@@ -587,59 +808,40 @@ fn html_response(
         .body(body)
 }
 
-fn dynamic_response(
-    body: web::Bytes,
+fn dynamic_stream_response(
+    stream: ChannelStream,
+    content_type: &'static str,
     variant: HeaderValue,
     request_timestamp: HeaderValue,
     server_timing: Option<HeaderValue>,
-    source_bytes: Option<usize>,
 ) -> HttpResponse {
-    let mut response = html_response(
-        body,
-        DYNAMIC_CACHE_CONTROL,
-        "dynamic",
-        variant,
-        request_timestamp,
-    );
-    if let Some(value) = server_timing {
-        response
-            .headers_mut()
-            .insert(HeaderName::from_static("server-timing"), value);
-    }
-    if let Some(value) = source_bytes {
-        match HeaderValue::from_str(&value.to_string()) {
-            Ok(value) => {
-                response.headers_mut().insert(
-                    HeaderName::from_static("x-webui-browser-source-bytes"),
-                    value,
-                );
-            }
-            Err(error) => {
-                return HttpResponse::InternalServerError()
-                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                    .json(ErrorBody {
-                        code: "source-byte-header-failed",
-                        message: error.to_string(),
-                    });
-            }
-        }
-    }
+    let mut response = HttpResponse::Ok();
     response
+        .insert_header((CONTENT_TYPE, content_type))
+        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+        .insert_header(("x-webui-bench-cache", "dynamic"))
+        .insert_header(("x-webui-bench-timestamp", request_timestamp))
+        .insert_header(("x-webui-bench-variant", variant));
+    if let Some(value) = server_timing {
+        response.insert_header((HeaderName::from_static("server-timing"), value));
+    }
+    response.streaming(stream)
 }
 
-fn timing_header(
-    state_milliseconds: f64,
-    render_milliseconds: f64,
-    total_milliseconds: f64,
-) -> Result<HeaderValue> {
-    let mut value = String::with_capacity(96);
-    write!(&mut value, "webui-state;dur={state_milliseconds:.3}")
-        .context("Failed to format state timing")?;
-    write!(&mut value, ",webui-render;dur={render_milliseconds:.3}")
-        .context("Failed to format render timing")?;
-    write!(&mut value, ",webui-total;dur={total_milliseconds:.3}")
-        .context("Failed to format total timing")?;
+fn empty_channel_stream() -> ChannelStream {
+    let (sender, receiver) = mpsc::channel(1);
+    drop(sender);
+    ChannelStream {
+        error: Arc::new(Mutex::new(None)),
+        receiver,
+        reported_error: false,
+    }
+}
+
+fn stream_timing_header(milliseconds: f64) -> Result<HeaderValue> {
+    let mut value = String::with_capacity(32);
+    write!(&mut value, "webui-stream-setup;dur={milliseconds:.3}")
+        .context("Failed to format stream timing")?;
     HeaderValue::from_str(&value).context("Failed to encode server timing header")
 }
 
@@ -680,11 +882,6 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 message: error.to_string(),
             });
     }
-    let render_started = profile.then(Instant::now);
-    let body_inject = state
-        .browser_assets
-        .as_ref()
-        .map(|assets| assets.body_inject.as_str());
     let request_path = request.path();
     let scoped_state = if state.fast_routes {
         match fast_route_state(request_state, request_path) {
@@ -769,71 +966,125 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 }),
         };
     }
-    match render_html(
-        &state.handler,
-        &state.protocol,
-        render_state,
-        state.dynamic_capacity,
-        request_path,
-        body_inject,
-    ) {
-        Ok(output) => {
-            let source_bytes = profile.then(|| {
-                body_inject
-                    .map(|content| output.len().saturating_sub(content.len()))
-                    .unwrap_or(output.len())
-            });
-            let server_timing = match (started, render_started) {
-                (Some(started), Some(render_started)) => {
-                    match timing_header(
-                        render_started.duration_since(started).as_secs_f64() * 1_000.0,
-                        render_started.elapsed().as_secs_f64() * 1_000.0,
-                        started.elapsed().as_secs_f64() * 1_000.0,
-                    ) {
-                        Ok(value) => Some(value),
-                        Err(error) => {
-                            return HttpResponse::InternalServerError()
-                                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                                .json(ErrorBody {
-                                    code: "timing-header-failed",
-                                    message: error.to_string(),
-                                });
-                        }
-                    }
-                }
-                _ => None,
-            };
-            dynamic_response(
-                web::Bytes::from(output),
-                state.variant_headers[index].clone(),
-                match HeaderValue::from_str(&request_timestamp) {
-                    Ok(header) => header,
-                    Err(error) => {
-                        return HttpResponse::InternalServerError()
-                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                            .json(ErrorBody {
-                                code: "timestamp-header-failed",
-                                message: error.to_string(),
-                            });
-                    }
-                },
-                server_timing,
-                source_bytes,
-            )
+    let render_state = render_state.clone();
+    let request_path = request_path.to_owned();
+    let variant = state.variant_headers[index].clone();
+    drop(states);
+    let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
+        Ok(header) => header,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "timestamp-header-failed",
+                    message: error.to_string(),
+                });
         }
-        Err(error) => HttpResponse::InternalServerError()
-            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-            .json(ErrorBody {
-                code: "render-failed",
-                message: error.to_string(),
-            }),
-    }
+    };
+    let stream = match state.render_worker.stream(render_state, request_path) {
+        Ok(stream) => stream,
+        Err(error) => {
+            return HttpResponse::ServiceUnavailable()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "render-queue-unavailable",
+                    message: error.to_string(),
+                });
+        }
+    };
+    let server_timing = match started {
+        Some(started) => match stream_timing_header(started.elapsed().as_secs_f64() * 1_000.0) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "timing-header-failed",
+                        message: error.to_string(),
+                    });
+            }
+        },
+        None => None,
+    };
+    dynamic_stream_response(
+        stream,
+        HTML_CONTENT_TYPE,
+        variant,
+        request_timestamp_header,
+        server_timing,
+    )
+}
+
+async fn dynamic_head(request: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
+    let request_timestamp = match current_request_timestamp(&state.last_timestamp_micros) {
+        Ok(timestamp) => timestamp,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "timestamp-failed",
+                    message: error.to_string(),
+                });
+        }
+    };
+    let index = match state.states.lock() {
+        Ok(mut states) => states.next_mut().0,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                .json(ErrorBody {
+                    code: "state-pool-unavailable",
+                    message: error.to_string(),
+                });
+        }
+    };
+    dynamic_stream_response(
+        empty_channel_stream(),
+        if request
+            .headers()
+            .get("accept")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| {
+                value.contains("application/json") || value.contains("application/x-ndjson")
+            })
+        {
+            JSON_CONTENT_TYPE
+        } else {
+            HTML_CONTENT_TYPE
+        },
+        state.variant_headers[index].clone(),
+        match HeaderValue::from_str(&request_timestamp) {
+            Ok(header) => header,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "timestamp-header-failed",
+                        message: error.to_string(),
+                    });
+            }
+        },
+        None,
+    )
 }
 
 async fn cached(state: web::Data<AppState>) -> HttpResponse {
+    html_response(
+        state.cached_body.clone(),
+        CACHED_CACHE_CONTROL,
+        "cached",
+        HeaderValue::from_static("0"),
+        state.cached_timestamp_header.clone(),
+    )
+}
+
+async fn cached_head(state: web::Data<AppState>) -> HttpResponse {
     html_response(
         state.cached_body.clone(),
         CACHED_CACHE_CONTROL,
@@ -980,10 +1231,26 @@ pub async fn run(config: ServerConfig) -> Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(state.clone())
-            .route("/dynamic", web::get().to(dynamic))
-            .route("/activity", web::get().to(dynamic))
-            .route("/settings", web::get().to(dynamic))
-            .route("/cached", web::get().to(cached))
+            .service(
+                web::resource("/dynamic")
+                    .route(web::head().to(dynamic_head))
+                    .route(web::get().to(dynamic)),
+            )
+            .service(
+                web::resource("/activity")
+                    .route(web::head().to(dynamic_head))
+                    .route(web::get().to(dynamic)),
+            )
+            .service(
+                web::resource("/settings")
+                    .route(web::head().to(dynamic_head))
+                    .route(web::get().to(dynamic)),
+            )
+            .service(
+                web::resource("/cached")
+                    .route(web::head().to(cached_head))
+                    .route(web::get().to(cached)),
+            )
             .route("/__browser/webui.js", web::get().to(browser_bootstrap))
             .route("/__browser/{asset:.*}", web::get().to(browser_style))
             .route("/__bench/ready", web::get().to(ready))
@@ -1024,7 +1291,7 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 mod tests {
     use super::{
         current_request_timestamp, html_response, load_browser_route_assets,
-        materialize_request_state, parse_states, rewrite_request_state, timing_header,
+        materialize_request_state, parse_states, rewrite_request_state, stream_timing_header,
         webui_render_state, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
         STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
@@ -1051,13 +1318,10 @@ mod tests {
     }
 
     #[test]
-    fn browser_timing_header_exposes_state_render_and_total_phases() {
-        let header = timing_header(0.125, 0.75, 0.9)
+    fn browser_timing_header_exposes_stream_start() {
+        let header = stream_timing_header(0.125)
             .unwrap_or_else(|error| panic!("timing header should encode: {error}"));
-        assert_eq!(
-            header,
-            "webui-state;dur=0.125,webui-render;dur=0.750,webui-total;dur=0.900"
-        );
+        assert_eq!(header, "webui-stream-setup;dur=0.125");
     }
 
     #[test]

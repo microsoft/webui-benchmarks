@@ -11,26 +11,33 @@ it.
 
 | # | Case id | Product SSR renderer | HTTP transport |
 | --- | --- | --- | --- |
-| 1 | `webui-rust-actix` | `webui-handler` `WebUIHandler` (Rust) | `actix-web` |
-| 2 | `webui-shadowdom-rust-actix` | `WebUIHandler` (Rust, Shadow DOM) | `actix-web` |
-| 3 | `webui-fast-rust-actix` | `WebUIHandler` (Rust, FAST V3) | `actix-web` |
-| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.render` | `Bun.serve` |
-| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.render` | `Deno.serve` |
-| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.render` | `node:http` |
+| 1 | `webui-rust-actix` | `webui-handler` `StreamingResponse` (Rust) | `actix-web` |
+| 2 | `webui-shadowdom-rust-actix` | `StreamingResponse` (Rust, Shadow DOM) | `actix-web` |
+| 3 | `webui-fast-rust-actix` | chunked `ResponseWriter` (Rust, FAST V3) | `actix-web` |
+| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Bun.serve` |
+| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Deno.serve` |
+| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` | `node:http` |
 | 7 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
 | 8 | `nuxt` | Nuxt production SSR | nitro node-server |
 | 9 | `next` | Next.js production App Router SSR | `next start` |
 | 10 | `astro` | Astro production SSR + hydrated Preact island | `@astrojs/node` |
-| 11 | `vue` | `@vue/server-renderer` `renderToString` | `node:http` |
-| 12 | `preact` | `preact-render-to-string` `renderToString` | `node:http` |
-| 13 | `react` | `react-dom/server` `renderToString` | `node:http` |
-| 14 | `react-tanstack` | React SSR + TanStack Router | `node:http` |
-| 15 | `solid` | `solid-js/web` `renderToString` | `node:http` |
+| 11 | `vue` | `@vue/server-renderer` `renderToWebStream` | `node:http` |
+| 12 | `preact` | `preact-render-to-string` `renderToReadableStream` | `node:http` |
+| 13 | `react` | `react-dom/server` `renderToReadableStream` | `node:http` |
+| 14 | `react-tanstack` | React stream + TanStack Router `renderRouterToStream` | `node:http` |
+| 15 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
 
 The WebUI rows isolate Light DOM, Shadow DOM, FAST V3 hydration, and four
 runtime hosts. The production framework rows use their real production build
 and server adapters. Product renderers without a canonical server share the
 same minimal `node:http` transport.
+
+Dynamic responses use each renderer's native streaming surface. WebUI Light
+and Shadow use semantic streaming boundaries; FAST uses a chunked writer;
+React, Preact, Vue, Solid, and TanStack use their native stream renderers.
+Next.js and Astro stream through their production servers. The synchronous
+SvelteKit and Nuxt routes retain their production servers' buffered
+`Content-Length` responses rather than simulating application suspension.
 
 Every browser product exposes the same three-page workspace:
 

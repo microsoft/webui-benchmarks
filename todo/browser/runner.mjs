@@ -406,6 +406,8 @@ async function runCaseRound({
                   backend.announcement.browserSsrBundleBytes ?? null,
                 command: backend.command,
                 serverId: backend.announcement.serverId,
+                streaming: backend.announcement.streaming
+                  ?? browserCase.sourceCase.streaming,
                 workerCount: backend.announcement.workerCount,
               }),
               semanticValidation: measured.semanticValidation,

@@ -170,3 +170,36 @@ test("dispatcher exposes metadata and equivalent cache headers", async () => {
   assert.equal(dynamic.headers["content-encoding"], undefined);
   assert.equal(cached.headers["content-encoding"], undefined);
 });
+
+test("dispatcher cancels native renderer streams for HEAD requests", async () => {
+  let cancellations = 0;
+  const controller = await createRouteController({
+    addonCapability: {
+      fallback: "not-applicable",
+      kind: "not-required",
+      required: false,
+      supported: true,
+    },
+    appId: "streaming",
+    render: () => "<p>streaming</p>",
+    renderStream() {
+      return new ReadableStream({
+        cancel() {
+          cancellations += 1;
+        },
+        pull(stream) {
+          stream.enqueue(new TextEncoder().encode("<p>streaming</p>"));
+          stream.close();
+        },
+      });
+    },
+    runtimeId: "node",
+    runtimeVersion: "24.19.0",
+    serverId: "node-http",
+    states: fakeStates(),
+  });
+  const dispatch = createRequestDispatcher(controller);
+  const response = await dispatch("http://localhost/dynamic", "HEAD");
+  assert.equal(response.headOnly, true);
+  assert.equal(cancellations, 1);
+});

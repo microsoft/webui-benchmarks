@@ -5,6 +5,7 @@ import {
   installInteractionHydration,
   wakeInteractionHydration,
 } from "@microsoft/webui-framework/interaction-hydration.js";
+import "@microsoft/webui-framework/streaming.js";
 import {
   prepareRoutePreload,
   type PreparedRoutePreload,

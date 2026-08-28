@@ -61,6 +61,7 @@ function serializableCase(benchmarkCase, status, reason = null) {
     runtimeId: benchmarkCase.runtimeId,
     serverId: benchmarkCase.serverId,
     status,
+    streaming: benchmarkCase.streaming,
     tier: benchmarkCase.tier,
     transport: benchmarkCase.transport,
     workerCount: benchmarkCase.workerCount,
@@ -131,6 +132,7 @@ function summarizeCases(cases, rawRounds) {
       renderer: benchmarkCase.renderer,
       responseByteProfile,
       responseBytes: responseByteProfile.dynamic.mean,
+      streaming: benchmarkCase.streaming,
       tier: benchmarkCase.tier,
       transport: benchmarkCase.transport,
       workerCount: benchmarkCase.workerCount,
@@ -389,6 +391,7 @@ export async function runBenchmark(options, {
             responseBytes: validation.measuredBytes,
             round,
             serverMetrics: measurement.serverMetrics,
+            streaming: benchmarkCase.streaming,
             throughputBytesPerSecond:
               measurement.throughputBytesPerSecond,
             tier: benchmarkCase.tier,

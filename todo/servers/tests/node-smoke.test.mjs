@@ -56,6 +56,7 @@ async function validateWebuiServer(server, expectedServerId) {
   assert.equal(metadata.runtimeId, "node");
   assert.equal(metadata.serverId, expectedServerId);
   assert.equal(metadata.responseBytes.dynamic.byVariant.length, 32);
+  assert.equal(metadata.streaming, "progressive-boundaries");
 
   const firstDynamic = await assertHtmlResponse(
     await fetch(`${announcement.url}/dynamic`),
@@ -116,6 +117,7 @@ test("node:http renderer transport serves one product renderer", async () => {
     assert.equal(server.announcement.appId, "react");
     assert.equal(server.announcement.serverId, "node-http");
     assert.equal(server.announcement.workerCount, 1);
+    assert.equal(server.announcement.streaming, "native");
     assert.equal(
       server.announcement.addonCapability.kind,
       "not-required",

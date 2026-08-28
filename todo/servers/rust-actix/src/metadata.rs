@@ -52,6 +52,7 @@ pub(crate) struct ReadyMetadata<'a> {
     server_id: &'a str,
     state_variant_count: usize,
     status: &'a str,
+    streaming: &'a str,
     worker_count: usize,
 }
 
@@ -103,6 +104,11 @@ pub(crate) fn build_metadata(
         server_id: "actix",
         state_variant_count: STATE_VARIANT_COUNT,
         status: "ready",
+        streaming: if app_id == "webui" {
+            "progressive-boundaries"
+        } else {
+            "native-chunks"
+        },
         worker_count: 1,
     }
 }
@@ -121,6 +127,7 @@ mod tests {
         assert_eq!(metadata.app_id, "webui");
         assert_eq!(metadata.cache_mode, "dynamic-and-cached");
         assert_eq!(metadata.state_variant_count, STATE_VARIANT_COUNT);
+        assert_eq!(metadata.streaming, "progressive-boundaries");
         assert_eq!(metadata.response_bytes.cached, 99);
         assert_eq!(metadata.response_bytes.dynamic.minimum, 100);
         assert_eq!(
@@ -134,5 +141,6 @@ mod tests {
     fn metadata_identifies_the_fast_v3_app() {
         let metadata = build_metadata(vec![100; STATE_VARIANT_COUNT], 99, "webui-fast");
         assert_eq!(metadata.app_id, "webui-fast");
+        assert_eq!(metadata.streaming, "native-chunks");
     }
 }

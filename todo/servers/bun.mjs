@@ -23,7 +23,12 @@ export async function startBunWebuiServer(options) {
     fetch: async (request) => {
       try {
         return toFetchResponse(
-          await dispatch(request.url, request.method, request.headers),
+          await dispatch(
+            request.url,
+            request.method,
+            request.headers,
+            { signal: request.signal },
+          ),
         );
       } catch (error) {
         return toFetchResponse(internalErrorResponse(error));

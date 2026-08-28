@@ -259,6 +259,8 @@ export async function buildSolidBrowserRenderer() {
     bootstrap: module.renderHydrationScript(),
     bundleBytes: (await readFile(browserArtifactPath)).byteLength,
     render: module.renderTodo,
+    renderStream: module.renderTodoStream,
+    ownsDocument: module.ownsDocument === true,
   });
 }
 
@@ -272,6 +274,8 @@ async function buildControlledServerRenderer(appId) {
   return Object.freeze({
     bundleBytes: (await readFile(artifactPath)).byteLength,
     render: module.renderTodo,
+    renderStream: module.renderTodoStream,
+    ownsDocument: module.ownsDocument === true,
   });
 }
 

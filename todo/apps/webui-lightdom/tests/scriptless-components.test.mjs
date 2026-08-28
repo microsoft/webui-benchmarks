@@ -72,11 +72,34 @@ test("the app shell defers its authored graph until interaction", async () => {
     true,
   );
   assert.match(template, /w-hydrate="interaction"/u);
+  assert.match(template, /<boundary name="navigation-ready">/u);
   assert.match(entry, /installInteractionHydration/u);
   assert.match(entry, /prepareRoutePreload/u);
   assert.match(entry, /wakeInteractionHydration/u);
   assert.match(entry, /import\("\.\/component-definitions\.js"\)/u);
   assert.doesNotMatch(entry, /^import \{ Router \}/mu);
+});
+
+test("the streamed Work route flushes the workbench before the todo list", async () => {
+  const [entry, template] = await Promise.all([
+    readFile(resolve(appRoot, "src", "index.html"), "utf8"),
+    readFile(
+      resolve(appRoot, "src", "todo-app", "todo-app.html"),
+      "utf8",
+    ),
+  ]);
+  assert.match(
+    entry,
+    /<script type="module" async src="\/__browser\/webui\.js"><\/script>/u,
+  );
+  const boundary = template.indexOf(
+    '<boundary name="workbench-ready" key="{{variantLabel}}">',
+  );
+  const workbench = template.indexOf("<workspace-intelligence");
+  const boundaryClose = template.indexOf("</boundary>", workbench);
+  const todoList = template.indexOf("<todo-list");
+  assert.ok(boundary !== -1 && boundary < workbench);
+  assert.ok(workbench < boundaryClose && boundaryClose < todoList);
 });
 
 test("workspace feature libraries load only for their interaction", async () => {

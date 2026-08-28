@@ -21,7 +21,7 @@ export const TIERS = Object.freeze({
 
 const NODE_HTTP_TRANSPORT = "node:http";
 const WEBUI_NATIVE_RENDERER =
-  "@microsoft/webui Protocol.render (request-materialized Node-API state)";
+  "@microsoft/webui Protocol.streamResponse (request-materialized Node-API state)";
 
 function freezeCase(value) {
   if (typeof value.renderer !== "string" || typeof value.transport !== "string") {
@@ -35,6 +35,7 @@ function freezeCase(value) {
     matrixId: OFFICIAL_MATRIX_ID,
     mode: "dynamic",
     payloadPolicy: NATURAL_PAYLOAD_POLICY,
+    streaming: value.streaming ?? "buffered",
     workerCount: 1,
     ...value,
     buildIds: Object.freeze(value.buildIds ?? []),
@@ -56,11 +57,12 @@ function webuiRuntimeCase({ buildIds, entry, id, label, runtimeId, serverId, tra
     renderer: WEBUI_NATIVE_RENDERER,
     runtimeId,
     serverId,
+    streaming: "progressive-boundaries",
     transport,
   });
 }
 
-function frameworkCase({ appId, label, renderer, transport }) {
+function frameworkCase({ appId, label, renderer, streaming, transport }) {
   return freezeCase({
     appId,
     buildIds: [`full-stack-${appId}`],
@@ -71,6 +73,7 @@ function frameworkCase({ appId, label, renderer, transport }) {
     renderer,
     runtimeId: "node",
     serverId: appId,
+    streaming,
     transport,
   });
 }
@@ -86,6 +89,7 @@ function rendererCase({ appId, buildIds = [], label, renderer }) {
     renderer,
     runtimeId: "node",
     serverId: "node-http",
+    streaming: "native",
     transport: NODE_HTTP_TRANSPORT,
   });
 }
@@ -99,9 +103,10 @@ function officialCases() {
       label: "WebUI / Light DOM / Rust / Actix",
       launcher: { kind: "rust-actix" },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust)",
+      renderer: "webui-handler StreamingResponse (Rust)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "progressive-boundaries",
       transport: "actix-web",
     }),
     freezeCase({
@@ -118,9 +123,10 @@ function officialCases() {
         protocol: "todo/apps/webui-shadowdom/dist/protocol.bin",
       },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust, Shadow DOM)",
+      renderer: "webui-handler StreamingResponse (Rust, Shadow DOM)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "progressive-boundaries",
       transport: "actix-web",
     }),
     freezeCase({
@@ -138,9 +144,10 @@ function officialCases() {
         protocol: "todo/apps/webui-fast/dist/protocol.bin",
       },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust, FAST V3)",
+      renderer: "webui-handler chunked ResponseWriter (Rust, FAST V3)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "native-chunks",
       transport: "actix-web",
     }),
     webuiRuntimeCase({
@@ -173,57 +180,61 @@ function officialCases() {
     frameworkCase({
       appId: "sveltekit",
       label: "SvelteKit",
-      renderer: "SvelteKit production SSR (@sveltejs/kit)",
+      renderer: "SvelteKit production SSR (buffered synchronous route)",
+      streaming: "buffered",
       transport: "@sveltejs/adapter-node",
     }),
     frameworkCase({
       appId: "nuxt",
       label: "Nuxt",
-      renderer: "Nuxt production SSR (vue-bundle-renderer)",
+      renderer: "Nuxt production SSR (buffered synchronous route)",
+      streaming: "buffered",
       transport: "nitro node-server",
     }),
     frameworkCase({
       appId: "next",
       label: "Next.js",
-      renderer: "Next.js production App Router SSR",
+      renderer: "Next.js production App Router streaming SSR",
+      streaming: "native",
       transport: "next start",
     }),
     frameworkCase({
       appId: "astro",
       label: "Astro + Preact",
-      renderer: "Astro production SSR + @astrojs/preact island",
+      renderer: "Astro production streaming SSR + @astrojs/preact island",
+      streaming: "native",
       transport: "@astrojs/node standalone",
     }),
     rendererCase({
       appId: "vue",
       buildIds: ["vue"],
       label: "Vue",
-      renderer: "@vue/server-renderer renderToString",
+      renderer: "@vue/server-renderer renderToWebStream",
     }),
     rendererCase({
       appId: "preact",
       buildIds: ["preact"],
       label: "Preact",
-      renderer: "preact-render-to-string renderToString",
+      renderer: "preact-render-to-string renderToReadableStream",
     }),
     rendererCase({
       appId: "react",
       buildIds: ["react"],
       label: "React",
-      renderer: "react-dom/server renderToString",
+      renderer: "react-dom/server renderToReadableStream",
     }),
     rendererCase({
       appId: "react-tanstack",
       buildIds: ["react-tanstack"],
       label: "React + TanStack Router",
       renderer:
-        "react-dom/server renderToString + @tanstack/react-router",
+        "react-dom/server stream + @tanstack/react-router renderRouterToStream",
     }),
     rendererCase({
       appId: "solid",
       buildIds: ["solid"],
       label: "Solid",
-      renderer: "solid-js/web renderToString",
+      renderer: "solid-js/web renderToStream",
     }),
   ];
 }

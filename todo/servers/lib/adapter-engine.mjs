@@ -56,15 +56,21 @@ export async function createAdapterRouteController({
       supported: true,
     },
     appId,
-    document: {
-      appId,
-      bootstrap: renderer.bootstrap ?? "",
-      clientPath: `/__browser/${appId}.js`,
-      initialStateSource: "browser-wrapper",
-    },
+    document: renderer.ownsDocument === true
+      ? null
+      : {
+          appId,
+          bootstrap: renderer.bootstrap ?? "",
+          clientPath: `/__browser/${appId}.js`,
+          initialStateSource: "browser-wrapper",
+        },
     render(state, requestPath) {
       return renderer.render(state, requestPath);
     },
+    renderStream: typeof renderer.renderStream === "function"
+      ? (state, requestPath, options) =>
+        renderer.renderStream(state, requestPath, options)
+      : null,
     runtimeId: "node",
     runtimeVersion: runtimeVersion("node"),
     serverId,

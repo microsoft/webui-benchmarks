@@ -13,11 +13,13 @@ optimized-webui-writer = []
 [dependencies]
 actix-web = { workspace = true, features = ["rustls-0_23"] }
 anyhow = { workspace = true }
+futures-core = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
 microsoft-webui-handler = { workspace = true }
 
 [lints]

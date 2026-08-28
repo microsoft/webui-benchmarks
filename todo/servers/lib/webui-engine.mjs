@@ -131,6 +131,36 @@ function nativeLoadError(runtimeId, addonPath, cause) {
   );
 }
 
+function streamWebuiResponse(protocol, state, requestPath) {
+  const session = protocol.streamResponse({ requestPath });
+  let started = false;
+  let step;
+  return new ReadableStream({
+    pull(controller) {
+      try {
+        do {
+          if (!started) {
+            started = true;
+            step = session.start(state);
+          } else if (step.boundary !== undefined) {
+            step = session.resume(step.boundary.instanceId, {}, "final");
+          } else {
+            step = session.advance();
+          }
+          if (step.bytes.byteLength > 0) {
+            controller.enqueue(step.bytes);
+            if (step.done) controller.close();
+            return;
+          }
+        } while (!step.done);
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
 export async function createWebuiRouteController({
   addonPath = undefined,
   runtimeId,
@@ -184,6 +214,13 @@ export async function createWebuiRouteController({
     render(state, requestPath) {
       return protocol.render(createWebuiRenderState(state), { requestPath });
     },
+    renderStream(state, requestPath) {
+      return streamWebuiResponse(
+        protocol,
+        createWebuiRenderState(state),
+        requestPath,
+      );
+    },
     renderPartial(state, requestPath, inventoryHex) {
       return protocol.renderPartial(
         createWebuiRenderState(state),
@@ -196,6 +233,7 @@ export async function createWebuiRouteController({
     runtimeVersion: runtimeVersion(runtimeId),
     serverId,
     states: TODO_STATE_VARIANTS,
+    streaming: "progressive-boundaries",
   });
 }
 

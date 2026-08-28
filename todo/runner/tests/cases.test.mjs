@@ -135,13 +135,14 @@ test("metadata separates the product SSR renderer from its transport", () => {
   assert.deepEqual(
     renderers.map((benchmarkCase) => benchmarkCase.renderer),
     [
-      "@vue/server-renderer renderToString",
-      "preact-render-to-string renderToString",
-      "react-dom/server renderToString",
-      "react-dom/server renderToString + @tanstack/react-router",
-      "solid-js/web renderToString",
+      "@vue/server-renderer renderToWebStream",
+      "preact-render-to-string renderToReadableStream",
+      "react-dom/server renderToReadableStream",
+      "react-dom/server stream + @tanstack/react-router renderRouterToStream",
+      "solid-js/web renderToStream",
     ],
   );
+  assert.ok(renderers.every(({ streaming }) => streaming === "native"));
 });
 
 test("framework rows keep their own production servers", () => {
@@ -159,6 +160,10 @@ test("framework rows keep their own production servers", () => {
         && benchmarkCase.serverId === benchmarkCase.appId,
     ),
   );
+  assert.deepEqual(
+    frameworks.map(({ streaming }) => streaming),
+    ["buffered", "buffered", "native", "native"],
+  );
 });
 
 test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
@@ -174,6 +179,17 @@ test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
       "Bun.serve",
       "Deno.serve",
       "node:http",
+    ],
+  );
+  assert.deepEqual(
+    webui.map(({ streaming }) => streaming),
+    [
+      "progressive-boundaries",
+      "progressive-boundaries",
+      "native-chunks",
+      "progressive-boundaries",
+      "progressive-boundaries",
+      "progressive-boundaries",
     ],
   );
   assert.deepEqual(

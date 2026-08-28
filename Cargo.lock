@@ -1481,12 +1481,14 @@ version = "0.0.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "futures-core",
  "microsoft-webui-handler",
  "rcgen",
  "rustls",
  "serde",
  "serde_json",
  "time",
+ "tokio",
 ]
 
 [[package]]

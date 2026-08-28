@@ -89,6 +89,7 @@ const CLIENT_METADATA = Object.freeze({
       status: "supported",
     }),
     label: "React + TanStack Router",
+    initialStateSource: "ssr-document",
     lazyHydration: Object.freeze({
       reason: "React has no built-in viewport hydration strategy.",
       status: "unavailable",
