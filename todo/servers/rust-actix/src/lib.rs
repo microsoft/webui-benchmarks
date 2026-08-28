@@ -7,6 +7,7 @@ mod metadata;
 use actix_web::http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{Context, Result};
+use bytes::{BufMut, BytesMut};
 use config::{HydrationPlugin, ResponseMode};
 use futures_core::Stream;
 use metadata::{build_metadata, Announcement, ReadyMetadata};
@@ -15,7 +16,6 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io;
-use std::mem;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
@@ -156,7 +156,7 @@ impl FlushWriter for MemoryWriter {
 type StreamChunk = std::result::Result<web::Bytes, io::Error>;
 
 struct ChannelWriter {
-    buffer: String,
+    buffer: BytesMut,
     flush_threshold: Option<usize>,
     runtime: tokio::runtime::Handle,
     sender: mpsc::Sender<StreamChunk>,
@@ -181,7 +181,7 @@ impl ChannelWriter {
         trace: Option<Arc<RequestTrace>>,
     ) -> Self {
         Self {
-            buffer: String::with_capacity(INITIAL_CAPACITY),
+            buffer: BytesMut::with_capacity(INITIAL_CAPACITY),
             flush_threshold,
             runtime,
             sender,
@@ -267,7 +267,7 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push_str(content);
+        self.buffer.put_slice(content.as_bytes());
         self.flush_if_needed()
     }
 
@@ -276,11 +276,11 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push(' ');
-        self.buffer.push_str(name);
-        self.buffer.push_str("=\"");
-        self.buffer.push_str(value);
-        self.buffer.push('"');
+        self.buffer.put_u8(b' ');
+        self.buffer.put_slice(name.as_bytes());
+        self.buffer.put_slice(b"=\"");
+        self.buffer.put_slice(value.as_bytes());
+        self.buffer.put_u8(b'"');
         self.flush_if_needed()
     }
 
@@ -289,8 +289,8 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push(' ');
-        self.buffer.push_str(name);
+        self.buffer.put_u8(b' ');
+        self.buffer.put_slice(name.as_bytes());
         self.flush_if_needed()
     }
 
@@ -304,7 +304,18 @@ impl FlushWriter for ChannelWriter {
         if self.buffer.is_empty() {
             return Ok(());
         }
-        let bytes = web::Bytes::from(mem::take(&mut self.buffer));
+        // `split()` carves off exactly the written bytes `[0, len)` as an
+        // independent, immutably-shared `Bytes` (a cheap refcount bump on
+        // the same underlying allocation, no copy). `self.buffer` is left
+        // empty but retains the unused *tail* capacity from that same
+        // allocation, so the next semantic flush's writes reuse it instead
+        // of starting from a zero-capacity buffer (as `mem::take` on a
+        // `String` would). If that tail capacity is ever exhausted while
+        // this split-off chunk (or any earlier one) is still alive, `bytes`
+        // guarantees `reserve`/`put_slice` allocate a fresh buffer rather
+        // than mutating memory a live `Bytes` still points at — see the
+        // `flush_does_not_mutate_earlier_split_chunks_on_reserve` test.
+        let bytes = self.buffer.split().freeze();
         self.send(Ok(bytes))
     }
 }
@@ -1805,16 +1816,19 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_request_timestamp, finish_render_job_inner, html_response,
-        load_browser_route_assets, materialize_request_state, parse_states, rewrite_request_state,
-        rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
-        ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
-        INITIAL_CAPACITY, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        create_handler, current_request_timestamp, drive_streaming_response,
+        finish_render_job_inner, html_response, load_browser_route_assets,
+        materialize_request_state, materialize_webui_request_state, parse_states,
+        rewrite_request_state, rewrite_webui_request_state, stream_timing_header,
+        webui_render_state, ChannelStream, ChannelWriter, HydrationPlugin, ServerConfig,
+        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, DYNAMIC_PATH, ENTRY_ID, HTML_CONTENT_TYPE,
+        INITIAL_CAPACITY, PROFILE_TIMESTAMP, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
     use actix_web::web;
     use anyhow::anyhow;
+    use bytes::{BufMut, BytesMut};
     use futures_core::Stream as _;
     use serde::Serialize;
     use serde_json::{json, Map, Value};
@@ -1884,7 +1898,9 @@ mod tests {
     }
 
     #[test]
-    fn stream_flush_transfers_the_buffer_without_copying() {
+    fn stream_flush_transfers_bytes_without_copying_and_retains_tail_capacity() {
+        // Byte identity: each flushed chunk must contain exactly and only the
+        // bytes written since the previous flush, in order.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -1895,14 +1911,17 @@ mod tests {
         writer
             .write("first-chunk")
             .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        // Capture the address of the writer's own allocation before the
+        // split so we can prove the flushed `Bytes` shares it (no copy).
+        let allocation_ptr = writer.buffer.as_ptr();
         writer
             .flush()
             .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
         assert!(writer.buffer.is_empty());
-        assert_eq!(
-            writer.buffer.capacity(),
-            0,
-            "flush must transfer ownership of the allocation to the stream chunk"
+        assert!(
+            writer.buffer.capacity() > 0,
+            "flush must retain the unused tail capacity from the same allocation for reuse, \
+             not drop to a zero-capacity buffer"
         );
         writer
             .write("second-chunk")
@@ -1920,6 +1939,145 @@ mod tests {
             .unwrap_or_else(|error| panic!("second stream chunk should succeed: {error}"));
         assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
         assert_eq!(second, web::Bytes::from_static(b"second-chunk"));
+        assert_eq!(
+            first.as_ptr(),
+            allocation_ptr,
+            "the first flushed chunk must be a zero-copy split of the writer's own allocation"
+        );
+    }
+
+    #[test]
+    fn flush_does_not_mutate_earlier_split_chunks_when_a_later_write_forces_reserve() {
+        // The key `bytes` invariant this prototype depends on: once a chunk
+        // has been split off (and is therefore shared, refcount > 1), any
+        // later growth of the writer's own tail (`reserve`/`put_slice`
+        // needing more capacity than remains) must allocate a fresh buffer
+        // instead of mutating memory the earlier split chunk still points
+        // at. This test forces exactly that by writing far more than the
+        // writer's initial capacity while the first chunk is still alive.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        writer
+            .write("first-chunk")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let first = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("first stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("first stream chunk should succeed: {error}"));
+        assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
+
+        // Overflow the writer's remaining tail capacity by a wide margin so
+        // `BytesMut` is forced to grow while `first` is still outstanding.
+        let overflow = "y".repeat(INITIAL_CAPACITY * 2);
+        writer
+            .write(&overflow)
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+
+        // `first` must be byte-for-byte unchanged after the forced reserve.
+        assert_eq!(
+            first,
+            web::Bytes::from_static(b"first-chunk"),
+            "reserve on the writer's own tail must never mutate an already-split chunk"
+        );
+
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let second = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("second stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("second stream chunk should succeed: {error}"));
+        assert_eq!(second, web::Bytes::from(overflow));
+        // Re-check `first` again after the second chunk has also been
+        // observed, in case anything aliased the two chunks together.
+        assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
+    }
+
+    #[test]
+    fn stream_preserves_exactly_seven_nonempty_ordered_chunks() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        let expected: Vec<String> = (0..7).map(|index| format!("chunk-{index}")).collect();
+        for chunk in &expected {
+            writer
+                .write(chunk)
+                .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+            writer
+                .flush()
+                .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        }
+        drop(writer);
+        let mut received = Vec::new();
+        while let Some(chunk) = runtime.block_on(receiver.recv()) {
+            received.push(
+                chunk.unwrap_or_else(|error| panic!("stream chunk should succeed: {error}")),
+            );
+        }
+        assert_eq!(received.len(), 7, "exactly seven chunks must be observed");
+        for (chunk, expected_content) in received.iter().zip(expected.iter()) {
+            assert!(!chunk.is_empty(), "every published chunk must be nonempty");
+            assert_eq!(chunk, expected_content.as_bytes());
+        }
+    }
+
+    #[test]
+    fn concurrent_writers_do_not_corrupt_each_others_buffers() {
+        // 320 requests worth of independent `ChannelWriter`s running across
+        // real OS threads concurrently, each writing distinct, per-writer
+        // content. Proves the `BytesMut`-backed writer has no shared state
+        // (allocator/global buffer aliasing, etc.) that could let one
+        // request's flush corrupt or observe another's bytes.
+        const CONCURRENT_REQUESTS: usize = 320;
+        let handles: Vec<thread::JoinHandle<()>> = (0..CONCURRENT_REQUESTS)
+            .map(|request_index| {
+                thread::spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_time()
+                        .build()
+                        .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+                    let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+                    let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+                    let payload = format!("request-{request_index}-chunk");
+                    for _ in 0..3 {
+                        writer
+                            .write(&payload)
+                            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+                        writer
+                            .flush()
+                            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+                    }
+                    drop(writer);
+                    let mut observed = 0;
+                    while let Some(chunk) = runtime.block_on(receiver.recv()) {
+                        let chunk = chunk
+                            .unwrap_or_else(|error| panic!("stream chunk should succeed: {error}"));
+                        assert_eq!(
+                            chunk.as_ref(),
+                            payload.as_bytes(),
+                            "request {request_index} observed a chunk that did not match its own payload"
+                        );
+                        observed += 1;
+                    }
+                    assert_eq!(observed, 3);
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle
+                .join()
+                .unwrap_or_else(|_| panic!("concurrent writer thread should not panic"));
+        }
     }
 
     #[test]
@@ -2265,4 +2423,5 @@ mod tests {
         assert!(first.ends_with('Z'));
         assert!(second > first);
     }
+
 }
