@@ -106,6 +106,33 @@ test("node:http serves request-materialized WebUI dynamic and cached routes", as
   }
 });
 
+test("node:http serves the complete suite as one buffered WebUI response", async () => {
+  const server = await startNodeHttpWebuiServer({
+    addonPath: undefined,
+    host: "127.0.0.1",
+    port: 0,
+    responseMode: "complete",
+  });
+  try {
+    const { announcement } = server;
+    assert.equal(announcement.status, "ready");
+    const readyResponse = await fetch(`${announcement.url}/__bench/ready`);
+    const metadata = await readyResponse.json();
+    assert.equal(metadata.streaming, "buffered");
+    assert.equal(metadata.responseMode, "complete");
+    const result = await assertHtmlResponse(
+      await fetch(`${announcement.url}/dynamic`),
+      "dynamic",
+    );
+    assertValidObservation(
+      collectObservation(result.body.toString("utf8")),
+      createRequestTodoState(TODO_STATE_VARIANTS[0], result.timestamp),
+    );
+  } finally {
+    await server.close();
+  }
+});
+
 test("node:http renderer transport serves one product renderer", async () => {
   const server = await startNodeRendererServer({
     addonPath: undefined,

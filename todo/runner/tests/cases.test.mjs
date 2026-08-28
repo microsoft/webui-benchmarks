@@ -4,11 +4,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
   HEADLINE_INPUT_POLICY,
   NATURAL_PAYLOAD_POLICY,
   OFFICIAL_CASE_COUNT,
   OFFICIAL_MATRIX_ID,
   PRODUCT_KINDS,
+  RESPONSE_MODES,
   assertCaseMatrix,
   createCaseMatrix,
   filterCases,
@@ -225,6 +227,84 @@ test("assertCaseMatrix rejects any deviation from the official contract", () => 
       ]),
     /one-worker/u,
   );
+});
+
+test("the default matrix is the progressive suite and keeps identical ids", () => {
+  const matrix = createCaseMatrix();
+  assert.ok(
+    matrix.every(
+      (benchmarkCase) => benchmarkCase.responseMode === RESPONSE_MODES.progressive,
+    ),
+  );
+  assert.deepEqual(
+    matrix.map((benchmarkCase) => benchmarkCase.id),
+    EXPECTED_ROWS,
+  );
+});
+
+test("createCaseMatrix rejects unknown response modes", () => {
+  assert.throws(
+    () => createCaseMatrix({ responseMode: "eventual" }),
+    /Unknown response mode/u,
+  );
+});
+
+test("the complete suite keeps product identity but publishes one buffered response", () => {
+  const progressive = createCaseMatrix();
+  const complete = createCaseMatrix({ responseMode: RESPONSE_MODES.complete });
+  assert.deepEqual(
+    complete.map((benchmarkCase) => benchmarkCase.id),
+    progressive.map((benchmarkCase) => benchmarkCase.id),
+  );
+  assert.ok(
+    complete.every(
+      (benchmarkCase) => benchmarkCase.responseMode === RESPONSE_MODES.complete,
+    ),
+  );
+  assert.ok(
+    complete.every(
+      (benchmarkCase) => benchmarkCase.launcher.responseMode === RESPONSE_MODES.complete,
+    ),
+  );
+  // SvelteKit and Nuxt never had a native streaming path to collect, so their
+  // renderer/streaming labels are identical between suites.
+  const unchanged = ["sveltekit", "nuxt"];
+  for (const id of unchanged) {
+    const [before] = progressive.filter((benchmarkCase) => benchmarkCase.id === id);
+    const [after] = complete.filter((benchmarkCase) => benchmarkCase.id === id);
+    assert.equal(after.streaming, before.streaming, id);
+    assert.equal(after.renderer, before.renderer, id);
+  }
+  // Every other row must report a buffered (collected) response and must
+  // describe a genuinely different, non-streaming rendering mechanism than
+  // its progressive-suite counterpart.
+  for (const after of complete) {
+    if (unchanged.includes(after.id)) {
+      continue;
+    }
+    assert.equal(after.streaming, "buffered", after.id);
+    const [before] = progressive.filter(
+      (benchmarkCase) => benchmarkCase.id === after.id,
+    );
+    assert.notEqual(after.renderer, before.renderer, after.id);
+  }
+});
+
+test("assertCaseMatrix rejects a matrix that mixes response modes", () => {
+  const complete = createCaseMatrix({ responseMode: RESPONSE_MODES.complete });
+  const progressive = createCaseMatrix();
+  assert.throws(
+    () => assertCaseMatrix([...complete.slice(1), progressive[0]]),
+    /must not mix response modes/u,
+  );
+});
+
+test("the async data-boundary capability is disclosed, not faked as active", () => {
+  assert.equal(
+    ASYNC_DATA_BOUNDARY_CAPABILITY.status,
+    "deferred-pending-webui-release",
+  );
+  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.27");
 });
 
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {

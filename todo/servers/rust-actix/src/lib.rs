@@ -7,7 +7,7 @@ mod metadata;
 use actix_web::http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{Context, Result};
-use config::HydrationPlugin;
+use config::{HydrationPlugin, ResponseMode};
 use futures_core::Stream;
 use metadata::{build_metadata, Announcement, ReadyMetadata};
 use serde::Serialize;
@@ -316,9 +316,9 @@ impl RenderWorker {
                                 .context("WebUI render failed")
                         }
                     })();
-                    if let Err(error) = result {
+                    if let Err(error_value) = result {
                         if let Ok(mut render_error) = job.error.lock() {
-                            *render_error = Some(io::Error::other(error));
+                            *render_error = Some(io::Error::other(error_value));
                         }
                     }
                 }
@@ -368,6 +368,7 @@ impl RenderWorker {
             reported_error: false,
         })
     }
+
 }
 
 impl Drop for RenderWorker {
@@ -441,10 +442,13 @@ impl StatePool {
 struct AppState {
     browser_assets: Option<BrowserAssets>,
     cached_body: web::Bytes,
+    dynamic_capacity: usize,
     fast_routes: bool,
+    handler: Arc<WebUIHandler>,
     metadata_body: web::Bytes,
     protocol: Arc<Protocol>,
-    render_worker: RenderWorker,
+    render_worker: Option<RenderWorker>,
+    response_mode: ResponseMode,
     states: Mutex<StatePool>,
     next_variant: AtomicUsize,
     last_timestamp_micros: AtomicI64,
@@ -819,6 +823,7 @@ fn response_sizes(
     protocol: &Protocol,
     states: &[Value],
     project_webui: bool,
+    use_streaming_render: bool,
 ) -> Result<(Vec<usize>, usize)> {
     let mut lengths = Vec::with_capacity(states.len());
     let mut capacity = INITIAL_CAPACITY;
@@ -828,7 +833,7 @@ fn response_sizes(
         } else {
             materialize_request_state(state, PROFILE_TIMESTAMP)?
         };
-        let output = if project_webui {
+        let output = if use_streaming_render {
             render_streaming_html(handler, protocol, &request_state, capacity, DYNAMIC_PATH)?
         } else {
             render_html(handler, protocol, &request_state, capacity, DYNAMIC_PATH)?
@@ -867,15 +872,27 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
             *state = webui_render_state(state)?;
         }
     }
-    let (lengths, dynamic_capacity) =
-        response_sizes(&handler, &protocol, &states.variants, project_webui)?;
+    // The complete suite always renders through WebUIHandler::render (never
+    // render_streaming), so the one-time startup metadata (byte lengths and
+    // the pre-rendered /cached body) must reflect that too, independent of
+    // whichever streaming strategy the render worker uses for the (separate,
+    // progressive-suite-only) Stream completion path below.
+    let use_streaming_render =
+        project_webui && config.response_mode == ResponseMode::Progressive;
+    let (lengths, dynamic_capacity) = response_sizes(
+        &handler,
+        &protocol,
+        &states.variants,
+        project_webui,
+        use_streaming_render,
+    )?;
     let cached_timestamp = current_request_timestamp(&AtomicI64::new(0))?;
     let cached_state = if project_webui {
         materialize_webui_request_state(&states.variants[0], &cached_timestamp)?
     } else {
         materialize_request_state(&states.variants[0], &cached_timestamp)?
     };
-    let cached_body = web::Bytes::from(if project_webui {
+    let cached_body = web::Bytes::from(if use_streaming_render {
         render_streaming_html(
             &handler,
             &protocol,
@@ -893,14 +910,23 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
         )?
     });
     let browser_assets = load_browser_assets()?;
-    let metadata = build_metadata(lengths, cached_body.len(), config.plugin.app_id());
+    let metadata = build_metadata(
+        lengths,
+        cached_body.len(),
+        config.plugin.app_id(),
+        config.response_mode,
+    );
     let metadata_body = web::Bytes::from(serde_json::to_vec(&metadata)?);
-    let render_worker = RenderWorker::new(
-        Arc::clone(&handler),
-        Arc::clone(&protocol),
-        project_webui,
-        project_webui.then(|| states.clone()),
-    )?;
+    let render_worker = if config.response_mode == ResponseMode::Progressive {
+        Some(RenderWorker::new(
+            Arc::clone(&handler),
+            Arc::clone(&protocol),
+            project_webui,
+            project_webui.then(|| states.clone()),
+        )?)
+    } else {
+        None
+    };
     let variant_headers = (0..STATE_VARIANT_COUNT)
         .map(|index| HeaderValue::from_str(&index.to_string()))
         .collect::<std::result::Result<Vec<_>, _>>()?
@@ -909,10 +935,13 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
         web::Data::new(AppState {
             browser_assets,
             cached_body,
+            dynamic_capacity,
             fast_routes: config.plugin == HydrationPlugin::FastV3,
+            handler,
             metadata_body,
             protocol,
             render_worker,
+            response_mode: config.response_mode,
             states: Mutex::new(states),
             next_variant: AtomicUsize::new(0),
             last_timestamp_micros: AtomicI64::new(0),
@@ -1054,7 +1083,10 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
         .is_some_and(|value| {
                 value.contains("application/json") || value.contains("application/x-ndjson")
         });
-    if !state.fast_routes && !accepts_partial {
+    if state.response_mode == ResponseMode::Progressive
+        && !state.fast_routes
+        && !accepts_partial
+    {
         let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
         let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
                 Ok(header) => header,
@@ -1068,11 +1100,18 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                         });
                 }
         };
-        let stream = match state.render_worker.stream_webui(
-                index,
-                request_timestamp,
-                request_path.to_owned(),
-        ) {
+        let stream = match state
+            .render_worker
+            .as_ref()
+            .context("Progressive render worker is unavailable")
+            .and_then(|worker| {
+                worker.stream_webui(
+                    index,
+                    request_timestamp,
+                    request_path.to_owned(),
+                )
+            })
+        {
                 Ok(stream) => stream,
                 Err(error) => {
                     return HttpResponse::ServiceUnavailable()
@@ -1107,99 +1146,142 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 server_timing,
         );
     }
-    let mut states = match state.states.lock() {
-        Ok(states) => states,
-        Err(error) => {
+    let (render_state, request_path, variant) = {
+        let mut states = match state.states.lock() {
+            Ok(states) => states,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "state-pool-unavailable",
+                        message: error.to_string(),
+                    });
+            }
+        };
+        let (index, request_state) = if state.fast_routes {
+            states.next_mut()
+        } else {
+            let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
+            (index, &mut states.variants[index])
+        };
+        let rewrite_result = if state.fast_routes {
+            rewrite_request_state(request_state, &request_timestamp)
+        } else {
+            rewrite_webui_request_state(request_state, &request_timestamp)
+        };
+        if let Err(error) = rewrite_result {
             return HttpResponse::InternalServerError()
                 .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
                 .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
                 .json(ErrorBody {
-                    code: "state-pool-unavailable",
+                    code: "state-materialization-failed",
                     message: error.to_string(),
                 });
         }
-    };
-    let (index, request_state) = if state.fast_routes {
-        states.next_mut()
-    } else {
-        let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
-        (index, &mut states.variants[index])
-    };
-    let rewrite_result = if state.fast_routes {
-        rewrite_request_state(request_state, &request_timestamp)
-    } else {
-        rewrite_webui_request_state(request_state, &request_timestamp)
-    };
-    if let Err(error) = rewrite_result {
-        return HttpResponse::InternalServerError()
-            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-            .json(ErrorBody {
-                code: "state-materialization-failed",
-                message: error.to_string(),
-            });
-    }
-    let scoped_state = if state.fast_routes {
-        match fast_route_state(request_state, request_path) {
-            Ok(value) => value,
-            Err(error) => {
-                return HttpResponse::InternalServerError()
+        let scoped_state = if state.fast_routes {
+            match fast_route_state(request_state, request_path) {
+                Ok(value) => value,
+                Err(error) => {
+                    return HttpResponse::InternalServerError()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "route-state-failed",
+                            message: error.to_string(),
+                        });
+                }
+            }
+        } else {
+            None
+        };
+        let render_state = scoped_state.as_ref().unwrap_or(request_state);
+        if accepts_partial {
+            let inventory = request
+                .headers()
+                .get("x-webui-inventory")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default();
+            let state_json = match serde_json::to_string(render_state) {
+                Ok(value) => value,
+                Err(error) => {
+                    return HttpResponse::InternalServerError()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "state-serialization-failed",
+                            message: error.to_string(),
+                        });
+                }
+            };
+            return match state
+                .protocol
+                .render_partial(&state_json, ENTRY_ID, request_path, inventory)
+            {
+                Ok(output) => HttpResponse::Ok()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .insert_header(("x-webui-bench-timestamp", request_timestamp))
+                    .insert_header((
+                        "x-webui-bench-variant",
+                        state.variant_headers[index].clone(),
+                    ))
+                    .body(output),
+                Err(error) => HttpResponse::InternalServerError()
                     .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
                     .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
                     .json(ErrorBody {
-                        code: "route-state-failed",
+                        code: "partial-render-failed",
                         message: error.to_string(),
-                    });
-            }
+                    }),
+            };
         }
-    } else {
-        None
-    };
-    let render_state = scoped_state.as_ref().unwrap_or(request_state);
-    if accepts_partial {
-        let inventory = request
-            .headers()
-            .get("x-webui-inventory")
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or_default();
-        let state_json = match serde_json::to_string(render_state) {
-            Ok(value) => value,
-            Err(error) => {
-                return HttpResponse::InternalServerError()
-                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                    .json(ErrorBody {
-                        code: "state-serialization-failed",
-                        message: error.to_string(),
-                    });
-            }
-        };
-        return match state
-            .protocol
-            .render_partial(&state_json, ENTRY_ID, request_path, inventory)
-        {
-            Ok(output) => HttpResponse::Ok()
-                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                .insert_header(("x-webui-bench-timestamp", request_timestamp))
-                .insert_header((
-                    "x-webui-bench-variant",
+        if state.response_mode == ResponseMode::Complete {
+            let output = match render_html(
+                    &state.handler,
+                    &state.protocol,
+                    render_state,
+                    state.dynamic_capacity,
+                    request_path,
+            ) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        return HttpResponse::InternalServerError()
+                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                            .json(ErrorBody {
+                                code: "render-failed",
+                                message: error.to_string(),
+                            });
+                    }
+            };
+            let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
+                    Ok(header) => header,
+                    Err(error) => {
+                        return HttpResponse::InternalServerError()
+                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                            .json(ErrorBody {
+                                code: "timestamp-header-failed",
+                                message: error.to_string(),
+                            });
+                    }
+            };
+            return html_response(
+                    web::Bytes::from(output),
+                    DYNAMIC_CACHE_CONTROL,
+                    "dynamic",
                     state.variant_headers[index].clone(),
-                ))
-                .body(output),
-            Err(error) => HttpResponse::InternalServerError()
-                .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                .json(ErrorBody {
-                    code: "partial-render-failed",
-                    message: error.to_string(),
-                }),
-        };
-    }
-    let render_state = scoped_state.unwrap_or_else(|| request_state.clone());
-    let request_path = request_path.to_owned();
-    let variant = state.variant_headers[index].clone();
-    drop(states);
+                    request_timestamp_header,
+            );
+        }
+        let render_state = scoped_state.unwrap_or_else(|| request_state.clone());
+        let request_path = request_path.to_owned();
+        let variant = state.variant_headers[index].clone();
+        // Drop the state guard before handing progressive work to the render
+        // worker so partial/route requests are never blocked by body delivery.
+        (render_state, request_path, variant)
+    };
     let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
         Ok(header) => header,
         Err(error) => {
@@ -1212,7 +1294,12 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 });
         }
     };
-    let stream = match state.render_worker.stream(render_state, request_path) {
+    let stream = match state
+        .render_worker
+        .as_ref()
+        .context("Progressive render worker is unavailable")
+        .and_then(|worker| worker.stream(render_state, request_path))
+    {
         Ok(stream) => stream,
         Err(error) => {
             return HttpResponse::ServiceUnavailable()
@@ -1249,6 +1336,9 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
 }
 
 async fn dynamic_head(request: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
+    if state.response_mode == ResponseMode::Complete {
+        return dynamic(request, state).await;
+    }
     let request_timestamp = match current_request_timestamp(&state.last_timestamp_micros) {
         Ok(timestamp) => timestamp,
         Err(error) => {

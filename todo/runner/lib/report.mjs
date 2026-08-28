@@ -23,8 +23,14 @@ function formatNumber(value) {
 }
 
 export function renderHumanReport(report) {
+  const responseMode = report.policies?.responseMode ?? "progressive";
   const lines = [
     `Todo SSR benchmark: ${report.status}`,
+    `Response mode: ${responseMode} (${
+      responseMode === "complete"
+        ? "one fully collected HTML response per request"
+        : "native progressive/streaming boundaries preserved"
+    })`,
     `Fixture: ${report.fixture.hash.value}`,
     `Protocol: ${report.config.rounds} rounds, ${report.config.connections} connections, ${report.config.durationSeconds}s`,
     `Matrix: ${report.matrix.id} (${report.matrix.expectedCaseCount} rows, dynamic SSR, natural response bytes, 1 worker per case)`,

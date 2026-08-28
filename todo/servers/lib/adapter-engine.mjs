@@ -23,6 +23,7 @@ export const RENDERER_IDS = Object.freeze(
 export async function createAdapterRouteController({
   addonPath = undefined,
   appId,
+  responseMode = "progressive",
   serverId = "node-http",
 }) {
   if (!Object.hasOwn(adapterLoaders, appId)) {
@@ -33,6 +34,7 @@ export async function createAdapterRouteController({
   if (appId === "webui") {
     return createWebuiRouteController({
       addonPath,
+      responseMode,
       runtimeId: "node",
       serverId,
     });
@@ -71,6 +73,7 @@ export async function createAdapterRouteController({
       ? (state, requestPath, options) =>
         renderer.renderStream(state, requestPath, options)
       : null,
+    responseMode,
     runtimeId: "node",
     runtimeVersion: runtimeVersion("node"),
     serverId,

@@ -700,6 +700,12 @@ export function buildBenchmarkSummary(report, browserReport = null) {
       "Summary export requires a clean, complete, unfiltered canonical official report; partial reports are allowed only for documented process telemetry or disclosed fixed-load saturation warnings",
     );
   }
+  const responseMode = report.policies?.responseMode ?? "progressive";
+  if (responseMode === "complete" && browserReport !== null) {
+    throw new Error(
+      "Do not merge browser-derived progressive UX evidence into a complete-suite (buffered, one-response) summary; export them as separate result files",
+    );
+  }
   const browserEvidence = createBrowserSummaryEvidence(report, browserReport);
   const rows = matrixRows(report);
   const warnings = saturationWarnings(report, rows);
@@ -712,9 +718,13 @@ export function buildBenchmarkSummary(report, browserReport = null) {
   const method = methodology(report);
   const rpsLabel = `${report.config.connections}-connection RPS`;
   const benchmarks = {
+    asyncDataBoundary:
+      report.capabilities?.asyncDataBoundary ?? null,
     description:
       browserEvidence?.description
-      ?? "Compare the complete product matrix by single-core server throughput.",
+      ?? (responseMode === "complete"
+        ? "Compare the complete product matrix by single-core completion throughput: every product publishes exactly one fully collected HTML response."
+        : "Compare the complete product matrix by single-core server throughput."),
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: method,
@@ -736,12 +746,15 @@ export function buildBenchmarkSummary(report, browserReport = null) {
       ...(browserEvidence?.metrics ?? []),
     ],
     rows: renderRows(rows, browserEvidence, warnings),
+    responseMode,
     saturationWarnings: warnings,
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
       "Dynamic SSR throughput from one timeboxed 20-second measured round.",
     selectedMetricLabel: rpsLabel,
-    title: "Same workload. Choose the metric.",
+    title: responseMode === "complete"
+      ? "Same workload, one complete response. Choose the metric."
+      : "Same workload. Choose the metric.",
   };
   return {
     benchmarks,

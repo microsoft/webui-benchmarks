@@ -12,6 +12,39 @@ export const PRODUCT_KINDS = Object.freeze({
   webui: "webui-runtime",
 });
 
+// The response-mode dimension separates *what is measured* from *product
+// identity*: every product id above is unique and stable across both suites,
+// only the response contract changes.
+//   - complete:    all data is ready; the server publishes exactly one
+//                  completed HTML response (RPS/p95/CPU/bytes/memory ranking).
+//   - progressive: the product's native progressive/streaming boundaries are
+//                  preserved unchanged (time-to-boundary/UX ranking).
+export const RESPONSE_MODES = Object.freeze({
+  complete: "complete",
+  progressive: "progressive",
+});
+
+// WebUI's resumable async data-boundary (StreamingSession) is a first-class
+// capability on newer WebUI releases, but the canonical dependency pinned by
+// this repository is 0.0.27 (see package.json). Rather than fake an async
+// shell/list boundary workload against an API that is not released yet, the
+// progressive suite honestly reports this capability gap so consumers do not
+// mistake "unchanged native streaming" for "new async data-boundary
+// streaming". See README.md for the version-gated follow-up.
+export const ASYNC_DATA_BOUNDARY_CAPABILITY = Object.freeze({
+  canonicalWebuiVersion: "0.0.27",
+  notes:
+    "The progressive suite continues to measure each product's existing "
+    + "native progressive/streaming boundaries unchanged. A dedicated "
+    + "above-the-fold-shell / below-the-fold-async-list workload driven by "
+    + "WebUI's resumable StreamingSession boundary API is intentionally not "
+    + "implemented against canonical WebUI 0.0.27, because that API is not "
+    + "part of this release. This is disclosed capability metadata, not an "
+    + "active measurement.",
+  requiredCapability: "StreamingSession resumable async data-boundary API",
+  status: "deferred-pending-webui-release",
+});
+
 // Grouping consumed by the separate, non-headline browser outcome tier when it
 // picks one SSR source per application. The official SSR table itself is flat.
 export const TIERS = Object.freeze({
@@ -35,6 +68,7 @@ function freezeCase(value) {
     matrixId: OFFICIAL_MATRIX_ID,
     mode: "dynamic",
     payloadPolicy: NATURAL_PAYLOAD_POLICY,
+    responseMode: RESPONSE_MODES.progressive,
     streaming: value.streaming ?? "buffered",
     workerCount: 1,
     ...value,
@@ -43,6 +77,80 @@ function freezeCase(value) {
     tier: value.productKind === PRODUCT_KINDS.framework
       ? TIERS.fullStack
       : TIERS.controlled,
+  });
+}
+
+// Per-product overrides applied only when building the `complete` suite. Each
+// entry documents the *best correct* complete-response mechanism the product
+// already ships (see the adjacent render()/renderStream() adapters and the
+// Rust WebUIHandler::render vs render_streaming split) so the complete suite
+// never silently reuses a progressive/native-streaming code path.
+const COMPLETE_RENDERER_OVERRIDES = Object.freeze({
+  astro: {
+    renderer:
+      "Astro production SSR + @astrojs/preact island (fully collected at "
+      + "the framework's own Node http.Server response boundary before "
+      + "the response completes)",
+  },
+  next: {
+    renderer:
+      "Next.js production App Router SSR (fully collected at the "
+      + "framework's own Node http.Server response boundary before the "
+      + "response completes)",
+  },
+  preact: { renderer: "preact-render-to-string renderToString" },
+  react: { renderer: "react-dom/server renderToString" },
+  "react-tanstack": {
+    renderer:
+      "react-dom/server renderToString + @tanstack/react-router renderRouterToString",
+  },
+  solid: { renderer: "solid-js/web renderToString" },
+  vue: { renderer: "@vue/server-renderer renderToString" },
+  "webui-bun-serve": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-deno-serve": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-fast-rust-actix": {
+    renderer: "webui-handler render (Rust, FAST V3, single response)",
+  },
+  "webui-node-http": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-rust-actix": { renderer: "webui-handler render (Rust)" },
+  "webui-shadowdom-rust-actix": {
+    renderer: "webui-handler render (Rust, Shadow DOM)",
+  },
+});
+
+// Frameworks whose production servers already always publish one buffered
+// response (SvelteKit and Nuxt here) keep their progressive-suite labels
+// unchanged in the complete suite too: there is no native streaming path to
+// collect, so `complete` and `progressive` measure the identical mechanism.
+const COMPLETE_STREAMING_UNCHANGED = Object.freeze(
+  new Set(["nuxt", "sveltekit"]),
+);
+
+function applyResponseMode(benchmarkCase, responseMode) {
+  if (responseMode === RESPONSE_MODES.progressive) {
+    return benchmarkCase;
+  }
+  const rendererOverride = COMPLETE_RENDERER_OVERRIDES[benchmarkCase.id];
+  return Object.freeze({
+    ...benchmarkCase,
+    ...(rendererOverride ?? {}),
+    launcher: Object.freeze({
+      ...benchmarkCase.launcher,
+      responseMode,
+    }),
+    responseMode,
+    streaming: COMPLETE_STREAMING_UNCHANGED.has(benchmarkCase.id)
+      ? benchmarkCase.streaming
+      : "buffered",
   });
 }
 
@@ -239,8 +347,25 @@ function officialCases() {
   ];
 }
 
-export function createCaseMatrix() {
-  const matrix = Object.freeze(officialCases());
+/**
+ * Build the official 15-row matrix for one response-mode suite. Product
+ * identity (case id, appId, productKind, transport, runtimeId, serverId)
+ * never changes between suites: only the response contract (renderer label,
+ * streaming label, and the launcher's `responseMode` hint consumed by
+ * server.mjs) does. Omitting `responseMode` preserves the exact progressive
+ * suite that shipped before this dimension existed.
+ */
+export function createCaseMatrix({
+  responseMode = RESPONSE_MODES.progressive,
+} = {}) {
+  if (!Object.values(RESPONSE_MODES).includes(responseMode)) {
+    throw new RangeError(`Unknown response mode '${responseMode}'`);
+  }
+  const matrix = Object.freeze(
+    officialCases().map((benchmarkCase) =>
+      applyResponseMode(benchmarkCase, responseMode)
+    ),
+  );
   assertCaseMatrix(matrix);
   return matrix;
 }
@@ -252,6 +377,7 @@ export function assertCaseMatrix(matrix) {
     );
   }
   const ids = new Set();
+  const responseModes = new Set();
   for (const benchmarkCase of matrix) {
     if (ids.has(benchmarkCase.id)) {
       throw new Error(`Duplicate benchmark case '${benchmarkCase.id}'`);
@@ -275,6 +401,16 @@ export function assertCaseMatrix(matrix) {
     if (benchmarkCase.serverId === "fastify") {
       throw new Error(`${benchmarkCase.id} must not use the Fastify transport`);
     }
+    if (!Object.values(RESPONSE_MODES).includes(benchmarkCase.responseMode)) {
+      throw new Error(`${benchmarkCase.id} has an unknown response mode`);
+    }
+    responseModes.add(benchmarkCase.responseMode);
+  }
+  if (responseModes.size > 1) {
+    throw new Error(
+      "A benchmark matrix must not mix response modes: publish complete and "
+      + "progressive results as separate reports",
+    );
   }
   return matrix;
 }

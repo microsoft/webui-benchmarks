@@ -203,3 +203,105 @@ test("dispatcher cancels native renderer streams for HEAD requests", async () =>
   assert.equal(response.headOnly, true);
   assert.equal(cancellations, 1);
 });
+
+test("the complete suite always calls render() and never collects renderStream()", async () => {
+  let renderCalls = 0;
+  let renderStreamCalls = 0;
+  const controller = await createRouteController({
+    addonCapability: {
+      fallback: "not-applicable",
+      kind: "not-required",
+      required: false,
+      supported: true,
+    },
+    appId: "dual",
+    render(state) {
+      renderCalls += 1;
+      return `<p>complete ${state.variantIndex}</p>`;
+    },
+    renderStream(state) {
+      renderStreamCalls += 1;
+      return new ReadableStream({
+        pull(stream) {
+          stream.enqueue(
+            new TextEncoder().encode(`<p>streamed ${state.variantIndex}</p>`),
+          );
+          stream.close();
+        },
+      });
+    },
+    responseMode: "complete",
+    runtimeId: "node",
+    runtimeVersion: "24.19.0",
+    serverId: "node-http",
+    states: fakeStates(),
+  });
+  assert.equal(controller.metadata.streaming, "buffered");
+  assert.equal(controller.metadata.responseMode, "complete");
+  const before = renderCalls;
+  const result = await controller.renderDynamic();
+  assert.equal(result.body.toString("utf8").startsWith("<p>complete"), true);
+  assert.ok(renderCalls > before);
+  assert.equal(renderStreamCalls, 0);
+});
+
+test("the progressive suite keeps calling renderStream() when it is available", async () => {
+  let renderStreamCalls = 0;
+  const controller = await createRouteController({
+    addonCapability: {
+      fallback: "not-applicable",
+      kind: "not-required",
+      required: false,
+      supported: true,
+    },
+    appId: "dual",
+    render() {
+      return "<p>complete</p>";
+    },
+    renderStream(state) {
+      renderStreamCalls += 1;
+      return new ReadableStream({
+        pull(stream) {
+          stream.enqueue(
+            new TextEncoder().encode(`<p>streamed ${state.variantIndex}</p>`),
+          );
+          stream.close();
+        },
+      });
+    },
+    responseMode: "progressive",
+    runtimeId: "node",
+    runtimeVersion: "24.19.0",
+    serverId: "node-http",
+    states: fakeStates(),
+  });
+  assert.equal(controller.metadata.streaming, "native");
+  const before = renderStreamCalls;
+  const result = await controller.renderDynamic();
+  assert.ok(result.body instanceof ReadableStream);
+  const reader = result.body.getReader();
+  const { value } = await reader.read();
+  assert.equal(new TextDecoder().decode(value).startsWith("<p>streamed"), true);
+  assert.ok(renderStreamCalls > before);
+});
+
+test("createRouteController rejects unknown response modes", async () => {
+  await assert.rejects(
+    createRouteController({
+      addonCapability: {
+        fallback: "not-applicable",
+        kind: "not-required",
+        required: false,
+        supported: true,
+      },
+      appId: "dual",
+      render: () => "<p>x</p>",
+      responseMode: "eventual",
+      runtimeId: "node",
+      runtimeVersion: "24.19.0",
+      serverId: "node-http",
+      states: fakeStates(),
+    }),
+    /Unknown response mode/u,
+  );
+});

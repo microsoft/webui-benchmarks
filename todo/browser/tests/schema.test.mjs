@@ -96,6 +96,19 @@ test("accepts an explicit unavailable quick report", () => {
   assert.equal(validation.valid, true, validation.errors.join("\n"));
 });
 
+test("accepts an explicit progressive response mode and rejects any other value", () => {
+  const explicit = reportFixture();
+  explicit.responseMode = "progressive";
+  assert.equal(validateBrowserReport(explicit).valid, true);
+  const unsupported = reportFixture();
+  unsupported.responseMode = "complete";
+  const validation = validateBrowserReport(unsupported);
+  assert.equal(validation.valid, false);
+  assert.ok(
+    validation.errors.some((error) => error.includes("progressive")),
+  );
+});
+
 test("rejects browser evidence that could alter headline scoring", () => {
   const report = reportFixture();
   report.apps[0].headline = true;

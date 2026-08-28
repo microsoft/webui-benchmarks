@@ -151,12 +151,16 @@ Run the complete publication workflow from a clean commit:
 pnpm run bench:official
 ```
 
-This runs the official SSR matrix and ten-round headed browser matrix from the
-same source snapshot, then writes:
+This runs the official SSR matrix in **both** response-mode suites (see
+[Response-mode suites](#response-mode-suites) below), the ten-round headed
+browser matrix, and both summary exports, all from the same source snapshot.
+It writes:
 
-- `results/ssr-todo-official.json` - complete raw SSR/RPS evidence
-- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence
-- `results/benchmark-summary.json` - copy-ready WebUI homepage state
+- `results/ssr-todo-official.json` - complete raw progressive-suite SSR/RPS evidence
+- `results/ssr-todo-official-complete.json` - complete raw complete-suite SSR/RPS evidence
+- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence (progressive)
+- `results/benchmark-summary.json` - copy-ready WebUI homepage state (progressive SSR + browser)
+- `results/benchmark-summary-complete.json` - copy-ready homepage state for the complete suite (SSR only)
 
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
 wildcard:
@@ -176,13 +180,27 @@ pnpm run bench:ssr:save -- \
   --save-baseline 2026-08-25-windows-285k
 ```
 
+Run only one response-mode suite explicitly:
+
+```bash
+pnpm run bench:ssr:streaming:official   # progressive suite (native streaming, unchanged)
+pnpm run bench:ssr:complete:official    # complete suite (one buffered HTML response)
+```
+
 Run the separate browser outcome tier or the one-round hydration gate:
 
 ```bash
 pnpm run bench:browser:official -- \
   --output results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json
+pnpm run bench:browser:streaming:official
 pnpm run bench:hydration-gate
 ```
+
+`bench:browser:streaming:official` is an explicit alias for
+`bench:browser:official`: the browser suite always measures a product's real
+page load, so it always exercises native progressive/streaming boundaries
+end to end. There is no separate buffered-complete browser variant yet (see
+[Response-mode suites](#response-mode-suites)).
 
 Launch every built production browser product concurrently for manual testing:
 
@@ -195,6 +213,73 @@ The command prints each HTTPS URL and keeps every server alive until Ctrl+C.
 Browser outcomes are never folded into headline SSR scoring. Every official
 browser row uses HTTPS/HTTP2, real framework hydration, a fresh Chromium
 process/context/page, and the shared interaction sequence.
+
+## Response-mode suites
+
+The official 15-row product matrix is measured in two response-mode suites.
+Product identity (case id, app id, transport, runtime) never changes between
+them: only the response contract does. Every case exposes a `responseMode`
+field (`complete` or `progressive`), and reports never mix the two: a report's
+`policies.responseMode` and every one of its `cases[].responseMode` must
+agree, or `assertReportSchema`/`assertCaseMatrix` reject it.
+
+### Complete suite (`bench:ssr:complete:official`)
+
+All data is ready before the response starts; every product publishes exactly
+one fully collected HTML response. Primary metrics: completion
+requests/second, p95 latency, render CPU, response bytes, and memory.
+
+- **WebUI Rust (Light DOM, Shadow DOM, FAST V3)** always calls
+  `WebUIHandler::render` -- never `render_streaming` -- directly in the single
+  Actix worker and answers with one `Content-Length` response. It does not
+  allocate the progressive suite's render thread or projected worker-state
+  clone (`todo/servers/rust-actix/src/lib.rs`).
+- **WebUI JS runtimes (Bun/Deno/Node) and the controlled renderer tier**
+  (React, Vue, Preact, Solid, React + TanStack Router) call each app's own
+  `render()` adapter -- the same complete-response API (`renderToString`,
+  `renderRouterToString`, ...) they already shipped alongside `renderStream()`
+  -- instead of collecting the native stream (`todo/servers/lib/contract.mjs`).
+- **SvelteKit and Nuxt** were already buffered in the progressive suite (their
+  production adapters have no native streaming path), so both suites measure
+  the identical mechanism for them.
+- **Next.js and Astro** own their entire production HTTP server; there is no
+  in-repo request handler to call directly. The complete suite loads
+  `todo/runner/lib/response-buffer-preload.cjs` in that same process (via
+  `NODE_OPTIONS=--require`, never an external reverse proxy) to buffer every
+  `http.ServerResponse` write and publish the body in one piece, honestly
+  labeled `"...fully collected at the framework's own Node http.Server
+  response boundary..."` in the case's `renderer` string.
+
+### Progressive suite (`bench:ssr:streaming:official`, the historical default)
+
+Preserves every product's existing native streaming/progressive-boundary
+behavior unchanged: WebUI Light/Shadow DOM progressive boundaries, FAST V3
+native chunked delivery, React/Preact/Vue/Solid/TanStack native streams,
+Next/Astro native streaming, SvelteKit/Nuxt buffered (they have no native
+stream to preserve). Primary metrics: time to first meaningful boundary,
+FCP/LCP (browser suite), tail completion, and occupied render/CPU time.
+Completion RPS, bytes, and disclosed chunk/flush counts are secondary,
+disclosed costs -- not the primary ranking -- for this suite.
+
+Running `pnpm run bench:ssr:official` (no `--response-mode`) or calling
+`createCaseMatrix()` with no arguments is exactly this suite: response-mode
+selection is fully opt-in and changes nothing by default.
+
+### Async data-boundary follow-up (not yet active)
+
+The approved design also calls for a deterministic async data-boundary
+workload in the progressive suite: an above-the-fold shell/workbench that
+renders immediately, with the below-the-fold todo list resolving later through
+a shared, configured async readiness delay, driven for WebUI by its
+resumable `StreamingSession` boundary API. That API is not part of the
+canonical WebUI dependency pinned by this repository
+(`@microsoft/webui@0.0.27`; see `todo/runner/lib/cases.mjs`'s
+`ASYNC_DATA_BOUNDARY_CAPABILITY`). Rather than fake that workload against an
+unreleased API, this capability gap is disclosed as metadata
+(`status: "deferred-pending-webui-release"`) and the progressive suite
+continues to measure each product's existing native streaming boundaries
+unchanged. Implementing the async data-boundary workload is a version-gated
+follow-up once a WebUI release exposes that API.
 
 ## Result ownership and publishing
 

@@ -4,6 +4,7 @@
 import { applyProcessAffinity } from "./affinity.mjs";
 import { createBuildPlan, runBuildPlan } from "./builds.mjs";
 import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
   HEADLINE_INPUT_POLICY,
   NATURAL_PAYLOAD_POLICY,
   OFFICIAL_MATRIX_ID,
@@ -58,6 +59,7 @@ function serializableCase(benchmarkCase, status, reason = null) {
     productKind: benchmarkCase.productKind,
     reason,
     renderer: benchmarkCase.renderer,
+    responseMode: benchmarkCase.responseMode,
     runtimeId: benchmarkCase.runtimeId,
     serverId: benchmarkCase.serverId,
     status,
@@ -132,6 +134,7 @@ function summarizeCases(cases, rawRounds) {
       renderer: benchmarkCase.renderer,
       responseByteProfile,
       responseBytes: responseByteProfile.dynamic.mean,
+      responseMode: benchmarkCase.responseMode,
       streaming: benchmarkCase.streaming,
       tier: benchmarkCase.tier,
       transport: benchmarkCase.transport,
@@ -247,7 +250,7 @@ export async function runBenchmark(options, {
   progress = () => {},
 } = {}) {
   const selectedCases = filterCases(
-    createCaseMatrix(),
+    createCaseMatrix({ responseMode: options.responseMode }),
     options.caseFilters,
   );
   let fixtureBefore;
@@ -391,6 +394,7 @@ export async function runBenchmark(options, {
             requestsPerSecond: measurement.requestsPerSecond,
             responseByteProfile: validation.responseByteProfile,
             responseBytes: validation.measuredBytes,
+            responseMode: benchmarkCase.responseMode,
             round,
             serverMetrics: measurement.serverMetrics,
             streaming: benchmarkCase.streaming,
@@ -444,12 +448,16 @@ export async function runBenchmark(options, {
     );
     const report = {
       builds,
+      capabilities: options.responseMode === "progressive"
+        ? { asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY }
+        : {},
       cases: caseReports,
       config: {
         ...options.protocol,
         build: options.build,
         caseFilters: options.caseFilters,
         quick: options.quick,
+        responseMode: options.responseMode,
         runtimeMode: options.runtimeMode,
         scalingCores: options.scalingCores,
         serverCpu: options.serverCpu,
@@ -467,7 +475,8 @@ export async function runBenchmark(options, {
           : "same-server-core",
       },
       matrix: {
-        expectedCaseCount: createCaseMatrix().length,
+        expectedCaseCount:
+          createCaseMatrix({ responseMode: options.responseMode }).length,
         id: OFFICIAL_MATRIX_ID,
         naturalResponseBytes: naturalResponseByteSummary(summaries),
         summaries,
@@ -478,6 +487,7 @@ export async function runBenchmark(options, {
         headlineMode: "dynamic",
         nativeAddonPath,
         payload: NATURAL_PAYLOAD_POLICY,
+        responseMode: options.responseMode,
         workersPerCase: 1,
       },
       rawRounds,

@@ -122,11 +122,12 @@ export async function createRouteController(options) {
     render,
     renderStream = null,
     renderPartial = null,
+    responseMode = "progressive",
     runtimeId,
     runtimeVersion,
     serverId,
     states,
-    streaming = renderStream === null ? "buffered" : "native",
+    streaming,
   } = options;
   validateStates(states);
   if (typeof render !== "function") {
@@ -135,15 +136,28 @@ export async function createRouteController(options) {
   if (renderStream !== null && typeof renderStream !== "function") {
     throw new TypeError("renderStream must be a function or null");
   }
-  if (!["buffered", "native", "progressive-boundaries"].includes(streaming)) {
-    throw new RangeError(`Unknown streaming mode '${streaming}'`);
+  if (!["complete", "progressive"].includes(responseMode)) {
+    throw new RangeError(`Unknown response mode '${responseMode}'`);
+  }
+  // The complete suite always publishes one fully collected HTML response:
+  // every controlled renderer already ships a genuine complete-response API
+  // (see each app's render() adapter), so the complete suite calls it
+  // directly instead of collecting the native renderStream() output.
+  const effectiveRenderStream = responseMode === "complete" ? null : renderStream;
+  const resolvedStreaming = responseMode === "complete"
+    ? "buffered"
+    : streaming ?? (effectiveRenderStream === null ? "buffered" : "native");
+  if (
+    !["buffered", "native", "progressive-boundaries"].includes(resolvedStreaming)
+  ) {
+    throw new RangeError(`Unknown streaming mode '${resolvedStreaming}'`);
   }
 
   const dynamicLengths = new Array(states.length);
   for (let index = 0; index < states.length; index += 1) {
     const body = await collectResponse(
       render,
-      renderStream,
+      effectiveRenderStream,
       createRequestTodoState(states[index], PROFILE_TIMESTAMP),
       documentOptions,
       DYNAMIC_PATH,
@@ -153,7 +167,7 @@ export async function createRouteController(options) {
   const cachedTimestamp = currentRequestTimestamp();
   const cachedBody = await collectResponse(
     render,
-    renderStream,
+    effectiveRenderStream,
     createRequestTodoState(states[0], cachedTimestamp),
     documentOptions,
     CACHED_PATH,
@@ -170,6 +184,7 @@ export async function createRouteController(options) {
     naturalResponseBytes: responseBytes,
     payloadPolicy: "natural",
     responseBytes,
+    responseMode,
     routes: Object.freeze({
       cached: CACHED_PATH,
       dynamic: DYNAMIC_PATH,
@@ -183,7 +198,7 @@ export async function createRouteController(options) {
     serverId,
     stateVariantCount: states.length,
     status: "ready",
-    streaming,
+    streaming: resolvedStreaming,
     workerCount: 1,
   });
   let nextVariant = 0;
@@ -207,7 +222,7 @@ export async function createRouteController(options) {
         requestTimestamp,
       );
       return Object.freeze({
-        body: renderStream === null
+        body: effectiveRenderStream === null
           ? toResponseBytes(
               await renderResponse(
                 render,
@@ -217,7 +232,7 @@ export async function createRouteController(options) {
               ),
             )
           : await renderStreamResponse(
-              renderStream,
+              effectiveRenderStream,
               requestState,
               documentOptions,
               requestPath,

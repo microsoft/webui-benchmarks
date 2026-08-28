@@ -163,6 +163,7 @@ function streamWebuiResponse(protocol, state, requestPath) {
 
 export async function createWebuiRouteController({
   addonPath = undefined,
+  responseMode = "progressive",
   runtimeId,
   serverId,
 }) {
@@ -229,6 +230,7 @@ export async function createWebuiRouteController({
         inventoryHex,
       );
     },
+    responseMode,
     runtimeId,
     runtimeVersion: runtimeVersion(runtimeId),
     serverId,

@@ -638,6 +638,10 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     fixture: Object.freeze({ hash: fixtureBefore }),
     mode: options.mode,
     rawRounds: Object.freeze(rawRounds),
+    // The browser suite always measures each product's real page load, so it
+    // always exercises native progressive/streaming boundaries end to end;
+    // there is no buffered-complete browser variant yet (see README.md).
+    responseMode: "progressive",
     roundOrder: Object.freeze(roundOrder),
     roundsPerApp: options.rounds,
     runtimePolicy,

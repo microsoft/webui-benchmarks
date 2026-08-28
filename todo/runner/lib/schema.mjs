@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { OFFICIAL_CASE_COUNT } from "./cases.mjs";
+import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
+  OFFICIAL_CASE_COUNT,
+  RESPONSE_MODES,
+} from "./cases.mjs";
 
 export const REPORT_SCHEMA = "webui.ssr-todo-benchmark/v1";
 
@@ -113,6 +117,77 @@ export function validateReportSchema(report) {
     && report.cases.some((benchmarkCase) => benchmarkCase.serverId === "fastify")
   ) {
     errors.push("the official matrix must not use the Fastify transport");
+  }
+  const responseModeValues = Object.values(RESPONSE_MODES);
+  const modeEntries = [
+    ["policies.responseMode", report.policies?.responseMode],
+    ["config.responseMode", report.config?.responseMode],
+    ...(Array.isArray(report.cases)
+      ? report.cases.map((entry, index) => [
+          `cases[${index}].responseMode`,
+          entry.responseMode,
+        ])
+      : []),
+    ...(Array.isArray(report.rawRounds)
+      ? report.rawRounds.map((entry, index) => [
+          `rawRounds[${index}].responseMode`,
+          entry.responseMode,
+        ])
+      : []),
+    ...(Array.isArray(report.summaries)
+      ? report.summaries.map((entry, index) => [
+          `summaries[${index}].responseMode`,
+          entry.responseMode,
+        ])
+      : []),
+    ...(Array.isArray(report.matrix?.summaries)
+      ? report.matrix.summaries.map((entry, index) => [
+          `matrix.summaries[${index}].responseMode`,
+          entry.responseMode,
+        ])
+      : []),
+  ];
+  const explicitModes = modeEntries.filter(([, mode]) => mode !== undefined);
+  if (
+    explicitModes.length > 0
+    && modeEntries.some(([, mode]) => mode === undefined)
+  ) {
+    errors.push(
+      "responseMode must be absent everywhere for legacy evidence or present on every mode-bearing entry",
+    );
+  }
+  if (
+    explicitModes.some(([, mode]) => !responseModeValues.includes(mode))
+  ) {
+    errors.push("every responseMode must be complete or progressive");
+  }
+  if (
+    new Set(explicitModes.map(([, mode]) => mode)).size > 1
+  ) {
+    errors.push(
+      "a report must not mix response modes: publish complete and progressive results separately",
+    );
+  }
+  if (report.policies?.responseMode === RESPONSE_MODES.progressive) {
+    const capability = report.capabilities?.asyncDataBoundary;
+    if (
+      capability?.status !== ASYNC_DATA_BOUNDARY_CAPABILITY.status
+      || capability.canonicalWebuiVersion
+        !== ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion
+      || capability.requiredCapability
+        !== ASYNC_DATA_BOUNDARY_CAPABILITY.requiredCapability
+    ) {
+      errors.push(
+        "progressive reports must disclose the canonical async data-boundary capability",
+      );
+    }
+  } else if (
+    report.policies?.responseMode === RESPONSE_MODES.complete
+    && report.capabilities?.asyncDataBoundary !== undefined
+  ) {
+    errors.push(
+      "complete reports must not claim progressive async data-boundary evidence",
+    );
   }
   if (Array.isArray(report.cases)) {
     const ids = report.cases

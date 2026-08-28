@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ASYNC_DATA_BOUNDARY_CAPABILITY } from "../lib/cases.mjs";
 import {
   REPORT_SCHEMA,
   assertReportSchema,
@@ -57,6 +58,23 @@ function validReport() {
     },
     summaries: [],
   };
+}
+
+function setResponseMode(report, responseMode) {
+  report.config = { responseMode };
+  report.policies.responseMode = responseMode;
+  for (const collection of [
+    report.cases,
+    report.rawRounds,
+    report.summaries,
+  ]) {
+    for (const entry of collection) {
+      entry.responseMode = responseMode;
+    }
+  }
+  report.capabilities = responseMode === "progressive"
+    ? { asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY }
+    : {};
 }
 
 test("schema accepts one unified official matrix report", () => {
@@ -128,4 +146,76 @@ test("schema rejects multi-worker cases and wrong matrix size", () => {
     validateReportSchema(size).errors.join("\n"),
     /exactly 15 rows/u,
   );
+});
+
+test("schema accepts an explicit response mode and rejects an unknown one", () => {
+  const complete = validReport();
+  setResponseMode(complete, "complete");
+  assert.deepEqual(validateReportSchema(complete), {
+    errors: [],
+    valid: true,
+  });
+  const unknownPolicy = validReport();
+  setResponseMode(unknownPolicy, "complete");
+  unknownPolicy.policies.responseMode = "eventual";
+  assert.match(
+    validateReportSchema(unknownPolicy).errors.join("\n"),
+    /every responseMode must be complete or progressive/u,
+  );
+  const unknownCase = validReport();
+  setResponseMode(unknownCase, "complete");
+  unknownCase.cases[0].responseMode = "eventual";
+  assert.match(
+    validateReportSchema(unknownCase).errors.join("\n"),
+    /every responseMode must be complete or progressive/u,
+  );
+});
+
+test("schema rejects a report that mixes response modes across cases and policy", () => {
+  const mixed = validReport();
+  setResponseMode(mixed, "progressive");
+  mixed.cases[0].responseMode = "complete";
+  assert.match(
+    validateReportSchema(mixed).errors.join("\n"),
+    /must not mix response modes/u,
+  );
+});
+
+test("schema rejects partially labeled response-mode evidence", () => {
+  const partial = validReport();
+  setResponseMode(partial, "complete");
+  delete partial.policies.responseMode;
+  assert.match(
+    validateReportSchema(partial).errors.join("\n"),
+    /absent everywhere.*present on every mode-bearing entry/u,
+  );
+});
+
+test("schema validates matrix modes and progressive capability disclosure", () => {
+  const mixedMatrix = validReport();
+  mixedMatrix.matrix.summaries = [{ responseMode: "progressive" }];
+  setResponseMode(mixedMatrix, "complete");
+  mixedMatrix.matrix.summaries[0].responseMode = "progressive";
+  assert.match(
+    validateReportSchema(mixedMatrix).errors.join("\n"),
+    /must not mix response modes/u,
+  );
+
+  const missingCapability = validReport();
+  setResponseMode(missingCapability, "progressive");
+  delete missingCapability.capabilities.asyncDataBoundary;
+  assert.match(
+    validateReportSchema(missingCapability).errors.join("\n"),
+    /must disclose.*async data-boundary capability/u,
+  );
+});
+
+test("schema keeps validating legacy reports that predate the response-mode dimension", () => {
+  const legacy = validReport();
+  assert.equal(legacy.policies.responseMode, undefined);
+  assert.equal(legacy.cases[0].responseMode, undefined);
+  assert.deepEqual(validateReportSchema(legacy), {
+    errors: [],
+    valid: true,
+  });
 });

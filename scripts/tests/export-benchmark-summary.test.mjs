@@ -16,7 +16,10 @@ import {
   metricAt,
 } from "../../todo/browser/metrics.mjs";
 import { createBuildPlan } from "../../todo/runner/lib/builds.mjs";
-import { createCaseMatrix } from "../../todo/runner/lib/cases.mjs";
+import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
+  createCaseMatrix,
+} from "../../todo/runner/lib/cases.mjs";
 import {
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../../todo/runner/lib/metrics.mjs";
@@ -117,6 +120,7 @@ function rawRound(benchmarkCase, round, orderIndex) {
     naturalResponseBytes: 10_065.5 + orderIndex,
     orderIndex,
     payloadPolicy: "natural",
+    responseMode: benchmarkCase.responseMode,
     requests: 10_000,
     requestsPerSecond: 1_000 - orderIndex * 10,
     responseByteProfile: responseByteProfile(orderIndex),
@@ -158,6 +162,7 @@ function report() {
       naturalResponseBytes: profile.dynamic.mean,
       payloadPolicy: "natural",
       renderer: benchmarkCase.renderer,
+      responseMode: benchmarkCase.responseMode,
       responseByteProfile: profile,
       responseBytes: profile.dynamic.mean,
       transport: benchmarkCase.transport,
@@ -167,6 +172,9 @@ function report() {
   });
   return {
     builds: OFFICIAL_BUILD_IDS.map((id) => ({ id, status: "ok" })),
+    capabilities: {
+      asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY,
+    },
     cases,
     config: {
       build: true,
@@ -175,6 +183,7 @@ function report() {
       durationSeconds: DEFAULT_PROTOCOL.durationSeconds,
       loadWorkers: DEFAULT_PROTOCOL.loadWorkers,
       quick: false,
+      responseMode: "progressive",
       rounds: DEFAULT_PROTOCOL.rounds,
       runtimeMode: "official",
       saturationConnections: [...DEFAULT_PROTOCOL.saturationConnections],
@@ -202,6 +211,7 @@ function report() {
       headlineInput: "request-timestamped-input",
       headlineMode: "dynamic",
       payload: "natural",
+      responseMode: "progressive",
       workersPerCase: 1,
     },
     rawRounds,
@@ -242,6 +252,24 @@ function report() {
     status: "ok",
     summaries,
   };
+}
+
+function setReportResponseMode(report, responseMode) {
+  report.config.responseMode = responseMode;
+  report.policies.responseMode = responseMode;
+  for (const collection of [
+    report.cases,
+    report.rawRounds,
+    report.summaries,
+    report.matrix.summaries,
+  ]) {
+    for (const entry of collection) {
+      entry.responseMode = responseMode;
+    }
+  }
+  report.capabilities = responseMode === "progressive"
+    ? { asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY }
+    : {};
 }
 
 function windowsPartialReport() {
@@ -469,6 +497,24 @@ test("exports only the compact homepage benchmark DTO", () => {
   );
   assert.deepEqual(JSON.parse(summary.benchmarksJson), summary.benchmarks);
   assert.equal("rawRounds" in summary, false);
+  assert.equal(summary.benchmarks.responseMode, "progressive");
+  assert.deepEqual(
+    summary.benchmarks.asyncDataBoundary,
+    ASYNC_DATA_BOUNDARY_CAPABILITY,
+  );
+});
+
+test("labels an explicit complete-suite report and refuses to merge browser evidence into it", () => {
+  const value = report();
+  setReportResponseMode(value, "complete");
+  const summary = buildBenchmarkSummary(value);
+  assert.equal(summary.benchmarks.responseMode, "complete");
+  assert.equal(summary.benchmarks.asyncDataBoundary, null);
+  assert.match(summary.benchmarks.title, /one complete response/u);
+  assert.throws(
+    () => buildBenchmarkSummary(value, browserReport(value)),
+    /Do not merge browser-derived progressive UX evidence/u,
+  );
 });
 
 test("accepts complete Windows reports with intentional process telemetry gaps", () => {
