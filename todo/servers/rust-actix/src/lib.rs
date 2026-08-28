@@ -171,44 +171,23 @@ impl ChannelWriter {
         flush_threshold: Option<usize>,
         runtime: tokio::runtime::Handle,
     ) -> Self {
-        Self::with_trace(
-            sender,
-            flush_threshold,
-            runtime,
-            None,
-            String::with_capacity(INITIAL_CAPACITY),
-        )
+        Self::with_trace(sender, flush_threshold, runtime, None)
     }
 
-    /// Build a writer around an existing (ideally already-warmed) `String`
-    /// allocation. The persistent render worker passes its reused scratch
-    /// buffer here instead of a fresh allocation so a hot worker never pays
-    /// another `String::with_capacity` per request; see [`Self::into_buffer`].
     fn with_trace(
         sender: mpsc::Sender<StreamChunk>,
         flush_threshold: Option<usize>,
         runtime: tokio::runtime::Handle,
         trace: Option<Arc<RequestTrace>>,
-        buffer: String,
     ) -> Self {
         Self {
-            buffer,
+            buffer: String::with_capacity(INITIAL_CAPACITY),
             flush_threshold,
             runtime,
             sender,
             flush_count: 0,
             trace,
         }
-    }
-
-    /// Reclaim the writer's buffer allocation so the caller can recycle its
-    /// capacity for the next render job on this persistent worker thread. The
-    /// buffer's length reflects whatever was left unflushed (empty on the
-    /// normal `end()`-flushes-everything path); callers must `clear()` before
-    /// reuse so a failed render's partial output can never leak into the next
-    /// request's stream.
-    fn into_buffer(mut self) -> String {
-        mem::take(&mut self.buffer)
     }
 
     fn send(&mut self, chunk: StreamChunk) -> webui_handler::Result<()> {
@@ -325,32 +304,7 @@ impl FlushWriter for ChannelWriter {
         if self.buffer.is_empty() {
             return Ok(());
         }
-        // Copy the committed segment into its own allocation instead of
-        // `mem::take`-ing `self.buffer` (which would hand its allocation to
-        // the channel and leave a zero-capacity `String` behind). A semantic
-        // response emits several flushes, so taking the buffer forced every
-        // following segment to regrow a `String` from empty one reallocation
-        // at a time; measured over a representative response this cost ~60
-        // extra heap allocations versus a single-flush render of the same
-        // page. Clearing (not taking) keeps this buffer's capacity resident
-        // for the rest of the response, and — because the persistent render
-        // worker recycles it via `into_buffer` — for every later request the
-        // worker serves, trading one bounded memcpy per flush for that
-        // repeated allocator churn.
-        //
-        // Isolated benchmarking (4 configurations x 4 repeated passes against
-        // the same local WebUI build) showed this copy-and-reuse strategy
-        // regresses relative to baseline when paired with the system
-        // allocator alone (median ~-3%, with individual passes as low as
-        // -20%), but is never a net loss versus mimalloc-only once paired
-        // with mimalloc — the only configuration this code actually ships in
-        // (median +4.1%, no regressing pass). It is kept unconditionally on
-        // that basis rather than as an independently toggleable feature.
-        let bytes = {
-            let bytes = web::Bytes::copy_from_slice(self.buffer.as_bytes());
-            self.buffer.clear();
-            bytes
-        };
+        let bytes = web::Bytes::from(mem::take(&mut self.buffer));
         self.send(Ok(bytes))
     }
 }
@@ -414,7 +368,7 @@ enum RenderInput {
 /// Publish a render job's error, if any, to its shared error mutex.
 ///
 /// This MUST run — and complete — before the job's `ChannelWriter` (and the
-/// `mpsc::Sender` it owns) is dropped via [`reclaim_render_buffer`].
+/// `mpsc::Sender` it owns) is dropped.
 /// Dropping the sender closes the response channel, and `ChannelStream`
 /// treats a closed, drained channel as the terminal signal telling it to
 /// consult this same mutex for a pending error (see
@@ -433,25 +387,9 @@ fn publish_render_error(error: &Mutex<Option<io::Error>>, result: Result<()>) {
     }
 }
 
-/// Reclaim and clear a job's writer buffer so its allocation can be
-/// recycled for the next job on this persistent worker thread.
-///
-/// `flush()` already clears the buffer on every successful boundary, but a
-/// failed render may have left a partial, unflushed segment behind, and
-/// that must never leak into the next request's stream — hence the
-/// unconditional `clear()` here regardless of how the job ended. Consuming
-/// `writer` drops its `mpsc::Sender`, closing the response channel; callers
-/// MUST have already published any render error (see
-/// [`publish_render_error`]) before calling this.
-fn reclaim_render_buffer(writer: ChannelWriter) -> String {
-    let mut buffer = writer.into_buffer();
-    buffer.clear();
-    buffer
-}
-
 /// Finish a render job for the persistent worker thread: publish any error
-/// and then reclaim the writer's buffer, in that order — see
-/// [`publish_render_error`] for why the order is mandatory.
+/// and then drop the writer, in that order — see [`publish_render_error`] for
+/// why the order is mandatory.
 ///
 /// `before_publish` runs immediately before this function attempts to lock
 /// `error` inside [`publish_render_error`] — i.e. at the exact production
@@ -471,19 +409,15 @@ fn finish_render_job_inner(
     writer: ChannelWriter,
     result: Result<()>,
     before_publish: impl FnOnce(),
-) -> String {
+) {
     before_publish();
     publish_render_error(error, result);
-    reclaim_render_buffer(writer)
+    drop(writer);
 }
 
 /// Production entry point for [`finish_render_job_inner`]: no-op seam, real
 /// logic only.
-fn finish_render_job(
-    error: &Mutex<Option<io::Error>>,
-    writer: ChannelWriter,
-    result: Result<()>,
-) -> String {
+fn finish_render_job(error: &Mutex<Option<io::Error>>, writer: ChannelWriter, result: Result<()>) {
     finish_render_job_inner(error, writer, result, || {})
 }
 
@@ -504,15 +438,6 @@ impl RenderWorker {
         let thread = thread::Builder::new()
             .name("webui-stream-render".to_owned())
             .spawn(move || {
-                // This thread is the single, persistent render worker for every
-                // request the process serves — jobs are handled one at a time,
-                // never concurrently — so the writer's scratch buffer can be
-                // recycled across requests instead of allocated fresh per job.
-                // `render_scratch` always carries whatever capacity the buffer
-                // grew to on a prior request; only the very first job (or one
-                // whose peak segment exceeds the current capacity) pays a real
-                // allocation.
-                let mut render_scratch = String::with_capacity(INITIAL_CAPACITY);
                 while let Some(job) = receiver.blocking_recv() {
                     if job.sender.is_closed() {
                         continue;
@@ -520,20 +445,11 @@ impl RenderWorker {
                     if let Some(trace) = &job.trace {
                         trace.mark("render-start");
                     }
-                    // Reuse the render worker's persistent scratch buffer
-                    // across jobs (see comment above `render_scratch`).
-                    // Isolated benchmarking confirmed this reclamation is
-                    // never a net loss once combined with mimalloc (its only
-                    // shipped configuration) — see the comment in
-                    // `ChannelWriter::flush` for the measured deltas — so it
-                    // is kept unconditionally.
-                    let scratch_buffer = mem::take(&mut render_scratch);
                     let mut writer = ChannelWriter::with_trace(
                         job.sender,
                         (!progressive_boundaries).then_some(STREAM_CHUNK_SIZE),
                         runtime.clone(),
                         job.trace.clone(),
-                        scratch_buffer,
                     );
                     let options = RenderOptions::new(ENTRY_ID, &job.request_path);
                     let result = (|| -> Result<()> {
@@ -579,11 +495,9 @@ impl RenderWorker {
                     if let Some(trace) = &job.trace {
                         trace.mark_detail("render-end", format_args!("ok={}", result.is_ok()));
                     }
-                    // Publish any error before reclaiming the writer's
-                    // buffer (which drops its sender and closes the
-                    // channel) — see `finish_render_job` for why the order
-                    // matters.
-                    render_scratch = finish_render_job(&job.error, writer, result);
+                    // Publish any error before dropping the writer's sender
+                    // and closing the channel.
+                    finish_render_job(&job.error, writer, result);
                 }
             })
             .context("Failed to start WebUI streaming render worker")?;
@@ -1891,11 +1805,11 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_request_timestamp, finish_render_job, finish_render_job_inner, html_response,
+        current_request_timestamp, finish_render_job_inner, html_response,
         load_browser_route_assets, materialize_request_state, parse_states, rewrite_request_state,
         rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
         ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
-        STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        INITIAL_CAPACITY, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
@@ -1970,14 +1884,14 @@ mod tests {
     }
 
     #[test]
-    fn stream_flush_clears_the_buffer_but_keeps_its_capacity() {
+    fn stream_flush_transfers_the_buffer_without_copying() {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
             .unwrap_or_else(|error| panic!("runtime should build: {error}"));
         let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
         let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
-        let capacity_before_first_flush = writer.buffer.capacity();
+        assert!(writer.buffer.capacity() >= INITIAL_CAPACITY);
         writer
             .write("first-chunk")
             .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
@@ -1987,8 +1901,8 @@ mod tests {
         assert!(writer.buffer.is_empty());
         assert_eq!(
             writer.buffer.capacity(),
-            capacity_before_first_flush,
-            "flush must clear the buffer without discarding its allocation"
+            0,
+            "flush must transfer ownership of the allocation to the stream chunk"
         );
         writer
             .write("second-chunk")
@@ -2014,11 +1928,10 @@ mod tests {
         // exact helper `finish_render_job` (which `RenderWorker` calls)
         // forwards to — from another thread, while this thread holds the
         // job's error mutex locked. That inner helper must lock that same
-        // mutex (inside `publish_render_error`) before it can reach
-        // `reclaim_render_buffer`, which drops the writer's `mpsc::Sender`
-        // and closes the response channel. So as long as we hold the lock,
-        // the other thread is deterministically blocked *before* it can
-        // close the channel — no sleeps or timing needed.
+        // mutex (inside `publish_render_error`) before it can drop the
+        // writer's `mpsc::Sender` and close the response channel. So as long
+        // as we hold the lock, the other thread is deterministically blocked
+        // *before* it can close the channel — no sleeps or timing needed.
         //
         // Merely spawning the worker and polling right away is not enough:
         // the OS may not have scheduled the worker thread at all yet, so an
@@ -2035,11 +1948,11 @@ mod tests {
         // "probably scheduled by now".
         //
         // This is exactly the invariant that makes the ordering mandatory:
-        // if production ever reclaimed the buffer before publishing the
-        // error, the worker's hook would necessarily fire *after* the
-        // sender was already dropped and the channel already closed —
-        // surfacing a clean `Ready(None)` here instead of `Pending`, even
-        // though the mutex, and this test's lock on it, are still held.
+        // if production ever dropped the writer before publishing the error,
+        // the worker's hook would necessarily fire *after* the sender was
+        // already dropped and the channel already closed — surfacing a clean
+        // `Ready(None)` here instead of `Pending`, even though the mutex, and
+        // this test's lock on it, are still held.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -2084,26 +1997,21 @@ mod tests {
 
         // The worker has just run the seam immediately before attempting
         // `publish_render_error`'s lock, and cannot get past it while we
-        // hold `guard`, so it cannot have reached `reclaim_render_buffer`
-        // yet: the sender is still alive and the channel cannot be
-        // observed closed. Correct production ordering guarantees
-        // `Pending` here; reversed ordering would let the worker drop the
-        // sender before ever reaching this seam, exposing `Ready(None)`
-        // instead.
+        // hold `guard`, so it cannot have dropped the writer yet: the sender
+        // is still alive and the channel cannot be observed closed. Correct
+        // production ordering guarantees `Pending` here; reversed ordering
+        // would let the worker drop the sender before ever reaching this
+        // seam, exposing `Ready(None)` instead.
         assert!(
             matches!(Pin::new(&mut stream).poll_next(&mut context), Poll::Pending),
             "the channel must still be open while the error mutex is held, proving the \
-             worker has not yet reclaimed (and dropped) the writer's sender"
+             worker has not yet dropped the writer's sender"
         );
 
         drop(guard);
-        let recycled = worker
+        worker
             .join()
             .unwrap_or_else(|error| std::panic::resume_unwind(error));
-        assert!(
-            recycled.is_empty(),
-            "a failed job's scratch buffer must be cleared before reuse"
-        );
 
         match Pin::new(&mut stream).poll_next(&mut context) {
             Poll::Ready(Some(Err(error))) => {
@@ -2111,59 +2019,6 @@ mod tests {
             }
             other => panic!("expected the failed render's error, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn render_worker_reclamation_never_leaks_a_failed_jobs_output_into_the_next_job() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
-
-        // --- Job 1: writes a partial, unflushed segment and then fails. ---
-        let (sender, _receiver) = tokio::sync::mpsc::channel(4);
-        let job_error = Arc::new(Mutex::new(None));
-        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
-        writer
-            .write("partial-output-from-a-failed-render")
-            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
-        // Go through the exact same reclamation helper `RenderWorker` calls
-        // in production, so this test exercises the real path rather than a
-        // hand-rolled stand-in for it.
-        let recycled = finish_render_job(&job_error, writer, Err(anyhow!("render failed")));
-        assert!(
-            recycled.is_empty(),
-            "a failed job's scratch buffer must be cleared before reuse"
-        );
-
-        // --- Job 2: reuses job 1's reclaimed scratch and succeeds. -------
-        let (next_sender, mut next_receiver) = tokio::sync::mpsc::channel(4);
-        let mut next_writer =
-            ChannelWriter::with_trace(next_sender, None, runtime.handle().clone(), None, recycled);
-        next_writer
-            .write("next-request")
-            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
-        next_writer
-            .flush()
-            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
-        let next_job_error = Arc::new(Mutex::new(None));
-        let recycled_again = finish_render_job(&next_job_error, next_writer, Ok(()));
-        assert!(recycled_again.is_empty());
-
-        let chunk = runtime
-            .block_on(next_receiver.recv())
-            .unwrap_or_else(|| panic!("stream chunk should be available"))
-            .unwrap_or_else(|error| panic!("stream chunk should succeed: {error}"));
-        assert_eq!(
-            chunk,
-            web::Bytes::from_static(b"next-request"),
-            "the recycled scratch buffer must contain only the second job's output, with \
-             no bytes leaked from the failed first job"
-        );
-        assert!(
-            runtime.block_on(next_receiver.recv()).is_none(),
-            "the second job's stream must end after its single chunk"
-        );
     }
 
     #[test]
