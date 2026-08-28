@@ -1871,10 +1871,10 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 mod tests {
     use super::{
         current_request_timestamp, finish_render_job, html_response, load_browser_route_assets,
-        materialize_request_state, parse_states, publish_render_error, reclaim_render_buffer,
-        rewrite_request_state, rewrite_webui_request_state, stream_timing_header,
-        webui_render_state, ChannelStream, ChannelWriter, CACHED_CACHE_CONTROL,
-        DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        materialize_request_state, parse_states, rewrite_request_state,
+        rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
+        ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
+        STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
@@ -1887,6 +1887,7 @@ mod tests {
     use std::sync::atomic::AtomicI64;
     use std::sync::{Arc, Mutex};
     use std::task::{Context as TaskContext, Poll, Waker};
+    use std::thread;
     use webui_handler::{FlushWriter, ResponseWriter};
 
     #[derive(Serialize)]
@@ -1988,11 +1989,21 @@ mod tests {
 
     #[test]
     fn render_error_publication_never_races_a_polling_channel_stream_to_a_clean_eof() {
-        // This exercises the exact two sub-steps `finish_render_job` calls,
-        // in the same order, so it proves the ordering guarantee `RenderWorker`
-        // depends on rather than merely asserting the end state (which would
-        // pass regardless of order, since both operations still happen —
-        // just not necessarily before a concurrent poll can observe them).
+        // Drives the real production path — `finish_render_job`, the exact
+        // helper `RenderWorker` calls — from another thread, while this
+        // thread holds the job's error mutex locked. `finish_render_job`
+        // must lock that same mutex (inside `publish_render_error`) before
+        // it can reach `reclaim_render_buffer`, which drops the writer's
+        // `mpsc::Sender` and closes the response channel. So as long as we
+        // hold the lock, the other thread is deterministically blocked
+        // *before* it can close the channel — no sleeps or timing needed.
+        //
+        // This is exactly the invariant that makes the ordering mandatory:
+        // if production ever reclaimed the buffer before publishing the
+        // error, the sender would be dropped without ever needing this
+        // mutex, and the channel could close — surfacing a clean
+        // `Ready(None)` — while the mutex, and this test's lock on it, are
+        // still held.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -2009,25 +2020,37 @@ mod tests {
         };
         let mut context = TaskContext::from_waker(Waker::noop());
 
-        // Step 1: publish the error. The writer's sender is still alive, so
-        // the channel is not yet closed — a concurrent poll right now must
-        // see `Pending`, never a clean `Ready(None)`, no matter how it is
-        // scheduled relative to this thread.
-        publish_render_error(&job_error, Err(anyhow!("render failed")));
+        let guard = job_error
+            .lock()
+            .unwrap_or_else(|error| panic!("mutex should not be poisoned: {error}"));
+
+        let job_error_for_worker = Arc::clone(&job_error);
+        let worker = thread::spawn(move || {
+            finish_render_job(&job_error_for_worker, writer, Err(anyhow!("render failed")))
+        });
+
+        // The worker cannot get past `publish_render_error`'s lock
+        // acquisition while we hold `guard`, so it cannot have reached
+        // `reclaim_render_buffer` yet: the sender is still alive and the
+        // channel cannot be observed closed. Correct production ordering
+        // guarantees `Pending` here; reversed ordering would let the worker
+        // drop the sender without ever touching this mutex, exposing
+        // `Ready(None)` instead.
         assert!(
             matches!(Pin::new(&mut stream).poll_next(&mut context), Poll::Pending),
-            "the channel must still be open while the writer's sender is alive"
+            "the channel must still be open while the error mutex is held, proving the \
+             worker has not yet reclaimed (and dropped) the writer's sender"
         );
 
-        // Step 2: only now does reclaiming the buffer drop the sender and
-        // close the channel. Because the error was published first, this is
-        // the earliest point a poll could observe the channel closed — and
-        // by then the error is already visible, never a clean EOF.
-        let recycled = reclaim_render_buffer(writer);
+        drop(guard);
+        let recycled = worker
+            .join()
+            .unwrap_or_else(|error| std::panic::resume_unwind(error));
         assert!(
             recycled.is_empty(),
             "a failed job's scratch buffer must be cleared before reuse"
         );
+
         match Pin::new(&mut stream).poll_next(&mut context) {
             Poll::Ready(Some(Err(error))) => {
                 assert!(error.to_string().contains("render failed"));
