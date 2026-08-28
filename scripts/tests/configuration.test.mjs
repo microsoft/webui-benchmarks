@@ -9,6 +9,7 @@ import {
   REPOSITORY_ROOT,
   webuiCargoArguments,
   webuiReleaseVersion,
+  webuiSupportsOptimizedWriter,
 } from "../../todo/shared/webui-dependency.mjs";
 
 async function json(path) {
@@ -25,6 +26,7 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   assert.equal(root.dependencies["@microsoft/webui"], "0.0.27");
   assert.equal(root.dependencies["@microsoft/webui-framework"], "0.0.27");
   assert.equal(root.dependencies["@microsoft/webui-router"], "0.0.27");
+  assert.equal(webuiSupportsOptimizedWriter(null), true);
   assert.equal(root.devDependencies.typescript, "6.0.3");
   assert.equal(fast.dependencies["@microsoft/webui"], "0.0.27");
   assert.equal(fast.dependencies["@microsoft/webui-router"], "0.0.27");

@@ -83,7 +83,10 @@ export function webuiSupportsOptimizedWriter(
   checkout = configuredWebuiCheckout(),
 ) {
   if (checkout === null) {
-    return false;
+    const [major, minor, patch] = webuiReleaseVersion()
+      .split(".")
+      .map(Number);
+    return major > 0 || minor > 0 || patch >= 27;
   }
   const source = readFileSync(
     resolve(checkout, "crates", "webui-handler", "src", "lib.rs"),

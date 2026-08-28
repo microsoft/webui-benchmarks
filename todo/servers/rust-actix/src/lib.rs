@@ -51,6 +51,7 @@ const REQUEST_TIMESTAMP_FORMAT: &[BorrowedFormatItem<'static>] =
 const STREAM_CHUNK_SIZE: usize = 16 * 1024;
 const STREAM_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
 const STREAM_RENDER_QUEUE_CAPACITY: usize = 128;
+const STREAM_RESPONSE_CHANNEL_CAPACITY: usize = 8;
 
 struct MemoryWriter {
     output: String,
@@ -246,7 +247,7 @@ impl RenderWorker {
     }
 
     fn stream(&self, render_state: Value, request_path: String) -> Result<ChannelStream> {
-        let (sender, receiver) = mpsc::channel(1);
+        let (sender, receiver) = mpsc::channel(STREAM_RESPONSE_CHANNEL_CAPACITY);
         let error = Arc::new(Mutex::new(None));
         self.sender
             .as_ref()
@@ -966,7 +967,9 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 }),
         };
     }
-    let render_state = render_state.clone();
+    let render_state = scoped_state
+        .or(projected_state)
+        .unwrap_or_else(|| request_state.clone());
     let request_path = request_path.to_owned();
     let variant = state.variant_headers[index].clone();
     drop(states);
