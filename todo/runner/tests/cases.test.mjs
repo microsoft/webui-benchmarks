@@ -273,13 +273,9 @@ test("build plan deduplicates exact production and release commands", () => {
 
 test("local WebUI builds are explicit build-plan dependencies", () => {
   const selected = filterCases(createCaseMatrix(), ["webui-node-http"]);
-  const commands = createBuildPlan(selected, { localWebui: true })
-    .map((entry) => entry.display);
-  assert.ok(
-    commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
-    ),
-  );
+  const plan = createBuildPlan(selected, { localWebui: true });
+  const commands = plan.map((entry) => entry.display);
+  assert.ok(plan.some(({ id }) => id === "webui-package"));
   assert.ok(
     commands.includes("cargo build --release -p microsoft-webui-node"),
   );

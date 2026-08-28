@@ -18,7 +18,7 @@ use std::io;
 use std::mem;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context as TaskContext, Poll};
 use std::thread::{self, JoinHandle};
@@ -28,7 +28,7 @@ use time::format_description::BorrowedFormatItem;
 use time::macros::format_description;
 use time::OffsetDateTime;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::SendTimeoutError;
+use tokio::sync::mpsc::error::{SendTimeoutError, TrySendError};
 use webui_handler::plugin::fast_v3::FastV3HydrationPlugin;
 use webui_handler::plugin::webui::WebUIHydrationPlugin;
 use webui_handler::{FlushWriter, Protocol, RenderOptions, ResponseWriter, WebUIHandler};
@@ -121,14 +121,28 @@ impl ChannelWriter {
             sender,
         }
     }
-}
 
-impl ResponseWriter for ChannelWriter {
-    fn write(&mut self, content: &str) -> webui_handler::Result<()> {
-        if self.sender.is_closed() {
-            return Err(webui_handler::HandlerError::ClientDisconnected);
+    fn send(&mut self, chunk: StreamChunk) -> webui_handler::Result<()> {
+        let chunk = match self.sender.try_send(chunk) {
+            Ok(()) => return Ok(()),
+            Err(TrySendError::Closed(_)) => {
+                return Err(webui_handler::HandlerError::ClientDisconnected);
+            }
+            Err(TrySendError::Full(chunk)) => chunk,
+        };
+        match self
+            .runtime
+            .block_on(self.sender.send_timeout(chunk, STREAM_FLUSH_TIMEOUT))
+        {
+            Ok(()) => Ok(()),
+            Err(SendTimeoutError::Closed(_)) => {
+                Err(webui_handler::HandlerError::ClientDisconnected)
+            }
+            Err(SendTimeoutError::Timeout(_)) => Err(webui_handler::HandlerError::StreamTimeout),
         }
-        self.buffer.push_str(content);
+    }
+
+    fn flush_if_needed(&mut self) -> webui_handler::Result<()> {
         if self
             .flush_threshold
             .is_some_and(|threshold| self.buffer.len() >= threshold)
@@ -137,6 +151,40 @@ impl ResponseWriter for ChannelWriter {
         } else {
             Ok(())
         }
+    }
+
+}
+
+impl ResponseWriter for ChannelWriter {
+    fn write(&mut self, content: &str) -> webui_handler::Result<()> {
+        if self.sender.is_closed() {
+            return Err(webui_handler::HandlerError::ClientDisconnected);
+        }
+        self.buffer.push_str(content);
+        self.flush_if_needed()
+    }
+
+    #[cfg(feature = "optimized-webui-writer")]
+    fn write_attribute(&mut self, name: &str, value: &str) -> webui_handler::Result<()> {
+        if self.sender.is_closed() {
+            return Err(webui_handler::HandlerError::ClientDisconnected);
+        }
+        self.buffer.push(' ');
+        self.buffer.push_str(name);
+        self.buffer.push_str("=\"");
+        self.buffer.push_str(value);
+        self.buffer.push('"');
+        self.flush_if_needed()
+    }
+
+    #[cfg(feature = "optimized-webui-writer")]
+    fn write_boolean_attribute(&mut self, name: &str) -> webui_handler::Result<()> {
+        if self.sender.is_closed() {
+            return Err(webui_handler::HandlerError::ClientDisconnected);
+        }
+        self.buffer.push(' ');
+        self.buffer.push_str(name);
+        self.flush_if_needed()
     }
 
     fn end(&mut self) -> webui_handler::Result<()> {
@@ -150,16 +198,7 @@ impl FlushWriter for ChannelWriter {
             return Ok(());
         }
         let bytes = web::Bytes::from(mem::take(&mut self.buffer));
-        match self
-            .runtime
-            .block_on(self.sender.send_timeout(Ok(bytes), STREAM_FLUSH_TIMEOUT))
-        {
-            Ok(()) => Ok(()),
-            Err(SendTimeoutError::Closed(_)) => {
-                Err(webui_handler::HandlerError::ClientDisconnected)
-            }
-            Err(SendTimeoutError::Timeout(_)) => Err(webui_handler::HandlerError::StreamTimeout),
-        }
+        self.send(Ok(bytes))
     }
 }
 
@@ -182,7 +221,6 @@ impl Stream for ChannelStream {
                 let error = self.error.lock().ok().and_then(|mut error| error.take());
                 Poll::Ready(error.map(Err))
             }
-
             result => result,
         }
     }
@@ -190,9 +228,17 @@ impl Stream for ChannelStream {
 
 struct RenderJob {
     error: Arc<Mutex<Option<io::Error>>>,
-    render_state: Value,
+    input: RenderInput,
     request_path: String,
     sender: mpsc::Sender<StreamChunk>,
+}
+
+enum RenderInput {
+    Prepared(Value),
+    WebUi {
+        index: usize,
+        request_timestamp: String,
+    },
 }
 
 struct RenderWorker {
@@ -205,6 +251,7 @@ impl RenderWorker {
         handler: Arc<WebUIHandler>,
         protocol: Arc<Protocol>,
         progressive_boundaries: bool,
+        mut webui_states: Option<StatePool>,
     ) -> Result<Self> {
         let (sender, mut receiver) = mpsc::channel::<RenderJob>(STREAM_RENDER_QUEUE_CAPACITY);
         let runtime = tokio::runtime::Handle::current();
@@ -221,17 +268,54 @@ impl RenderWorker {
                         runtime.clone(),
                     );
                     let options = RenderOptions::new(ENTRY_ID, &job.request_path);
-                    let result = if progressive_boundaries {
-                        drive_streaming_response(
-                            &handler,
-                            &protocol,
-                            &job.render_state,
-                            &options,
-                            &mut writer,
-                        )
-                    } else {
-                        handler.render(&protocol, &job.render_state, &options, &mut writer)
-                    };
+                    let result = (|| -> Result<()> {
+                        let render_state = match job.input {
+                            RenderInput::Prepared(render_state) => render_state,
+                            RenderInput::WebUi {
+                                index,
+                                request_timestamp,
+                            } => {
+                                let states = webui_states
+                                    .as_mut()
+                                    .context("WebUI render state pool is unavailable")?;
+                                let render_state = states
+                                    .variants
+                                    .get_mut(index)
+                                    .context("WebUI render state variant is unavailable")?;
+                                rewrite_webui_request_state(
+                                    render_state,
+                                    &request_timestamp,
+                                )?;
+                                return drive_streaming_response(
+                                    &handler,
+                                    &protocol,
+                                    render_state,
+                                    &options,
+                                    &mut writer,
+                                )
+                                .context("WebUI streaming render failed");
+                            }
+                        };
+                        if progressive_boundaries {
+                            drive_streaming_response(
+                                &handler,
+                                &protocol,
+                                &render_state,
+                                &options,
+                                &mut writer,
+                            )
+                            .context("WebUI streaming render failed")
+                        } else {
+                            handler
+                                .render(
+                                    &protocol,
+                                    &render_state,
+                                    &options,
+                                    &mut writer,
+                                )
+                                .context("WebUI render failed")
+                        }
+                    })();
                     if let Err(error) = result {
                         if let Ok(mut render_error) = job.error.lock() {
                             *render_error = Some(io::Error::other(error));
@@ -247,6 +331,25 @@ impl RenderWorker {
     }
 
     fn stream(&self, render_state: Value, request_path: String) -> Result<ChannelStream> {
+        self.stream_input(RenderInput::Prepared(render_state), request_path)
+    }
+
+    fn stream_webui(
+        &self,
+        index: usize,
+        request_timestamp: String,
+        request_path: String,
+    ) -> Result<ChannelStream> {
+        self.stream_input(
+            RenderInput::WebUi {
+                index,
+                request_timestamp,
+            },
+            request_path,
+        )
+    }
+
+    fn stream_input(&self, input: RenderInput, request_path: String) -> Result<ChannelStream> {
         let (sender, receiver) = mpsc::channel(STREAM_RESPONSE_CHANNEL_CAPACITY);
         let error = Arc::new(Mutex::new(None));
         self.sender
@@ -254,7 +357,7 @@ impl RenderWorker {
             .context("WebUI streaming render worker is closed")?
             .try_send(RenderJob {
                 error: Arc::clone(&error),
-                render_state,
+                input,
                 request_path,
                 sender,
             })
@@ -299,6 +402,7 @@ pub fn local_http2_tls_config() -> Result<rustls::ServerConfig> {
     Ok(config)
 }
 
+#[derive(Clone)]
 struct StatePool {
     variants: Box<[Value]>,
     next_variant: usize,
@@ -342,6 +446,7 @@ struct AppState {
     protocol: Arc<Protocol>,
     render_worker: RenderWorker,
     states: Mutex<StatePool>,
+    next_variant: AtomicUsize,
     last_timestamp_micros: AtomicI64,
     variant_headers: Box<[HeaderValue]>,
     cached_timestamp_header: HeaderValue,
@@ -424,6 +529,12 @@ fn current_request_timestamp(last_timestamp_micros: &AtomicI64) -> Result<String
 fn materialize_request_state(base: &Value, request_timestamp: &str) -> Result<Value> {
     let mut state = base.clone();
     rewrite_request_state(&mut state, request_timestamp)?;
+    Ok(state)
+}
+
+fn materialize_webui_request_state(base: &Value, request_timestamp: &str) -> Result<Value> {
+    let mut state = base.clone();
+    rewrite_webui_request_state(&mut state, request_timestamp)?;
     Ok(state)
 }
 
@@ -538,6 +649,46 @@ fn rewrite_request_state(state: &mut Value, request_timestamp: &str) -> Result<(
     Ok(())
 }
 
+fn rewrite_webui_request_state(state: &mut Value, request_timestamp: &str) -> Result<()> {
+    let variant_index = state
+        .get("variantIndex")
+        .and_then(Value::as_u64)
+        .context("Prepared WebUI state is missing variantIndex")?;
+    let root = state
+        .as_object_mut()
+        .context("Prepared WebUI request state must be an object")?;
+    let timestamp = string_field_mut_or_insert(root, "requestTimestamp")?;
+    timestamp.clear();
+    timestamp.push_str(request_timestamp);
+    let todos = root
+        .get_mut("todos")
+        .and_then(Value::as_array_mut)
+        .context("Prepared WebUI request state must contain todos")?;
+    for (index, todo) in todos.iter_mut().enumerate() {
+        rewrite_webui_todo(todo, index, variant_index, request_timestamp)?;
+    }
+    let intelligence = root
+        .get_mut("intelligence")
+        .and_then(Value::as_object_mut)
+        .context("Prepared WebUI request state must contain workspace intelligence")?;
+    let preview_rows = intelligence
+        .get_mut("previewRows")
+        .and_then(Value::as_array_mut)
+        .context("WebUI workspace intelligence must contain previewRows")?;
+    for row in preview_rows {
+        rewrite_workspace_row_title(row, request_timestamp)?;
+    }
+    let footer = root
+        .get_mut("footer")
+        .and_then(Value::as_object_mut)
+        .context("Prepared WebUI request state must contain footer")?;
+    let label = string_field_mut_or_insert(footer, "requestTimestampLabel")?;
+    label.clear();
+    label.push_str("Rendered ");
+    label.push_str(request_timestamp);
+    Ok(())
+}
+
 fn rewrite_workspace_titles(root: &mut Map<String, Value>, request_timestamp: &str) -> Result<()> {
     let intelligence = root
         .get_mut("intelligence")
@@ -617,6 +768,32 @@ fn rewrite_todo_timestamp(
     Ok(())
 }
 
+fn rewrite_webui_todo(
+    todo: &mut Value,
+    index: usize,
+    variant_index: u64,
+    request_timestamp: &str,
+) -> Result<()> {
+    let todo = todo
+        .as_object_mut()
+        .context("Every projected WebUI todo must be an object")?;
+    let item_number = index + 1;
+    let title = string_field_mut(todo, "title")?;
+    title.clear();
+    write!(title, "Todo {item_number:04} · ")?;
+    title.push_str(request_timestamp);
+    let description = string_field_mut(todo, "description")?;
+    description.clear();
+    write!(
+        description,
+        "Dynamic request variant {:02} item {item_number:04} rendered at ",
+        variant_index + 1
+    )?;
+    description.push_str(request_timestamp);
+    description.push('.');
+    Ok(())
+}
+
 fn string_field_mut<'a>(object: &'a mut Map<String, Value>, key: &str) -> Result<&'a mut String> {
     object
         .get_mut(key)
@@ -646,11 +823,10 @@ fn response_sizes(
     let mut lengths = Vec::with_capacity(states.len());
     let mut capacity = INITIAL_CAPACITY;
     for state in states {
-        let request_state = materialize_request_state(state, PROFILE_TIMESTAMP)?;
         let request_state = if project_webui {
-            webui_render_state(&request_state)?
+            materialize_webui_request_state(state, PROFILE_TIMESTAMP)?
         } else {
-            request_state
+            materialize_request_state(state, PROFILE_TIMESTAMP)?
         };
         let output = if project_webui {
             render_streaming_html(handler, protocol, &request_state, capacity, DYNAMIC_PATH)?
@@ -683,17 +859,21 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
     );
     let state_bytes = std::fs::read(&config.states_path)
         .with_context(|| format!("Failed to read {}", config.states_path.display()))?;
-    let states = parse_states(&state_bytes)?;
+    let mut states = parse_states(&state_bytes)?;
     let handler = Arc::new(create_handler(config.plugin));
     let project_webui = config.plugin == HydrationPlugin::WebUi;
+    if project_webui {
+        for state in &mut states.variants {
+            *state = webui_render_state(state)?;
+        }
+    }
     let (lengths, dynamic_capacity) =
         response_sizes(&handler, &protocol, &states.variants, project_webui)?;
     let cached_timestamp = current_request_timestamp(&AtomicI64::new(0))?;
-    let cached_state = materialize_request_state(&states.variants[0], &cached_timestamp)?;
     let cached_state = if project_webui {
-        webui_render_state(&cached_state)?
+        materialize_webui_request_state(&states.variants[0], &cached_timestamp)?
     } else {
-        cached_state
+        materialize_request_state(&states.variants[0], &cached_timestamp)?
     };
     let cached_body = web::Bytes::from(if project_webui {
         render_streaming_html(
@@ -715,8 +895,12 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
     let browser_assets = load_browser_assets()?;
     let metadata = build_metadata(lengths, cached_body.len(), config.plugin.app_id());
     let metadata_body = web::Bytes::from(serde_json::to_vec(&metadata)?);
-    let render_worker =
-        RenderWorker::new(Arc::clone(&handler), Arc::clone(&protocol), project_webui)?;
+    let render_worker = RenderWorker::new(
+        Arc::clone(&handler),
+        Arc::clone(&protocol),
+        project_webui,
+        project_webui.then(|| states.clone()),
+    )?;
     let variant_headers = (0..STATE_VARIANT_COUNT)
         .map(|index| HeaderValue::from_str(&index.to_string()))
         .collect::<std::result::Result<Vec<_>, _>>()?
@@ -730,6 +914,7 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
             protocol,
             render_worker,
             states: Mutex::new(states),
+            next_variant: AtomicUsize::new(0),
             last_timestamp_micros: AtomicI64::new(0),
             variant_headers,
             cached_timestamp_header: HeaderValue::from_str(&cached_timestamp)?,
@@ -861,6 +1046,67 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 });
         }
     };
+    let request_path = request.path();
+    let accepts_partial = request
+        .headers()
+        .get("accept")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+                value.contains("application/json") || value.contains("application/x-ndjson")
+        });
+    if !state.fast_routes && !accepts_partial {
+        let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
+        let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
+                Ok(header) => header,
+                Err(error) => {
+                    return HttpResponse::InternalServerError()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "timestamp-header-failed",
+                            message: error.to_string(),
+                        });
+                }
+        };
+        let stream = match state.render_worker.stream_webui(
+                index,
+                request_timestamp,
+                request_path.to_owned(),
+        ) {
+                Ok(stream) => stream,
+                Err(error) => {
+                    return HttpResponse::ServiceUnavailable()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "render-queue-unavailable",
+                            message: error.to_string(),
+                        });
+                }
+        };
+        let server_timing = match started {
+                Some(started) => match stream_timing_header(started.elapsed().as_secs_f64() * 1_000.0) {
+                    Ok(value) => Some(value),
+                    Err(error) => {
+                        return HttpResponse::InternalServerError()
+                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                            .json(ErrorBody {
+                                code: "timing-header-failed",
+                                message: error.to_string(),
+                            });
+                    }
+                },
+                None => None,
+        };
+        return dynamic_stream_response(
+                stream,
+                HTML_CONTENT_TYPE,
+                state.variant_headers[index].clone(),
+                request_timestamp_header,
+                server_timing,
+        );
+    }
     let mut states = match state.states.lock() {
         Ok(states) => states,
         Err(error) => {
@@ -873,8 +1119,18 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 });
         }
     };
-    let (index, request_state) = states.next_mut();
-    if let Err(error) = rewrite_request_state(request_state, &request_timestamp) {
+    let (index, request_state) = if state.fast_routes {
+        states.next_mut()
+    } else {
+        let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
+        (index, &mut states.variants[index])
+    };
+    let rewrite_result = if state.fast_routes {
+        rewrite_request_state(request_state, &request_timestamp)
+    } else {
+        rewrite_webui_request_state(request_state, &request_timestamp)
+    };
+    if let Err(error) = rewrite_result {
         return HttpResponse::InternalServerError()
             .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
             .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
@@ -883,7 +1139,6 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 message: error.to_string(),
             });
     }
-    let request_path = request.path();
     let scoped_state = if state.fast_routes {
         match fast_route_state(request_state, request_path) {
             Ok(value) => value,
@@ -900,33 +1155,7 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
     } else {
         None
     };
-    let projected_state = if state.fast_routes {
-        None
-    } else {
-        match webui_render_state(request_state) {
-            Ok(value) => Some(value),
-            Err(error) => {
-                return HttpResponse::InternalServerError()
-                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                    .json(ErrorBody {
-                        code: "state-projection-failed",
-                        message: error.to_string(),
-                    });
-            }
-        }
-    };
-    let render_state = scoped_state
-        .as_ref()
-        .or(projected_state.as_ref())
-        .unwrap_or(request_state);
-    let accepts_partial = request
-        .headers()
-        .get("accept")
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| {
-            value.contains("application/json") || value.contains("application/x-ndjson")
-        });
+    let render_state = scoped_state.as_ref().unwrap_or(request_state);
     if accepts_partial {
         let inventory = request
             .headers()
@@ -967,9 +1196,7 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 }),
         };
     }
-    let render_state = scoped_state
-        .or(projected_state)
-        .unwrap_or_else(|| request_state.clone());
+    let render_state = scoped_state.unwrap_or_else(|| request_state.clone());
     let request_path = request_path.to_owned();
     let variant = state.variant_headers[index].clone();
     drop(states);
@@ -1035,7 +1262,8 @@ async fn dynamic_head(request: HttpRequest, state: web::Data<AppState>) -> HttpR
         }
     };
     let index = match state.states.lock() {
-        Ok(mut states) => states.next_mut().0,
+        Ok(mut states) if state.fast_routes => states.next_mut().0,
+        Ok(_) => state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT,
         Err(error) => {
             return HttpResponse::InternalServerError()
                 .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
@@ -1170,8 +1398,18 @@ async fn route_state(state: web::Data<AppState>) -> HttpResponse {
                 });
         }
     };
-    let (index, request_state) = states.next_mut();
-    if let Err(error) = rewrite_request_state(request_state, &request_timestamp) {
+    let (index, request_state) = if state.fast_routes {
+        states.next_mut()
+    } else {
+        let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
+        (index, &mut states.variants[index])
+    };
+    let rewrite_result = if state.fast_routes {
+        rewrite_request_state(request_state, &request_timestamp)
+    } else {
+        rewrite_webui_request_state(request_state, &request_timestamp)
+    };
+    if let Err(error) = rewrite_result {
         return HttpResponse::InternalServerError()
             .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
             .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
@@ -1180,22 +1418,7 @@ async fn route_state(state: web::Data<AppState>) -> HttpResponse {
                 message: error.to_string(),
             });
     }
-    let work_state = if state.fast_routes {
-        request_state.clone()
-    } else {
-        match webui_render_state(request_state) {
-            Ok(value) => value,
-            Err(error) => {
-                return HttpResponse::InternalServerError()
-                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                    .json(ErrorBody {
-                        code: "state-projection-failed",
-                        message: error.to_string(),
-                    });
-            }
-        }
-    };
+    let work_state = request_state.clone();
     HttpResponse::Ok()
         .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
         .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
@@ -1294,9 +1517,10 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 mod tests {
     use super::{
         current_request_timestamp, html_response, load_browser_route_assets,
-        materialize_request_state, parse_states, rewrite_request_state, stream_timing_header,
-        webui_render_state, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
-        STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        materialize_request_state, parse_states, rewrite_request_state,
+        rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelWriter,
+        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE, STATE_VARIANT_COUNT,
+        WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
@@ -1304,6 +1528,7 @@ mod tests {
     use serde::Serialize;
     use serde_json::{json, Map, Value};
     use std::sync::atomic::AtomicI64;
+    use webui_handler::{FlushWriter, ResponseWriter};
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -1325,6 +1550,42 @@ mod tests {
         let header = stream_timing_header(0.125)
             .unwrap_or_else(|error| panic!("timing header should encode: {error}"));
         assert_eq!(header, "webui-stream-setup;dur=0.125");
+    }
+
+    #[test]
+    fn stream_flush_avoids_waiting_when_channel_has_capacity() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        writer
+            .write("ready")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let chunk = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("stream chunk should succeed: {error}"));
+        assert_eq!(chunk, web::Bytes::from_static(b"ready"));
+    }
+
+    #[test]
+    fn stream_writer_detects_a_closed_client_on_its_first_write() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, receiver) = tokio::sync::mpsc::channel(1);
+        drop(receiver);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        assert!(matches!(
+            writer.write("disconnected"),
+            Err(webui_handler::HandlerError::ClientDisconnected)
+        ));
     }
 
     #[test]
@@ -1438,6 +1699,39 @@ mod tests {
     }
 
     #[test]
+    fn projected_webui_state_updates_without_omitted_fields() {
+        let state = json!({
+            "variantIndex": 0,
+            "todos": [{
+                "description": "old",
+                "title": "old"
+            }],
+            "intelligence": {
+                "previewRows": [{
+                    "id": "todo-0001",
+                    "title": "old"
+                }]
+            },
+            "footer": {}
+        });
+        let mut state = state;
+        rewrite_webui_request_state(&mut state, "2026-08-28T00:00:00.000000Z")
+            .unwrap_or_else(|error| panic!("projected state should update: {error}"));
+        assert_eq!(
+            state["todos"][0]["title"],
+            "Todo 0001 · 2026-08-28T00:00:00.000000Z"
+        );
+        assert_eq!(
+            state["intelligence"]["previewRows"][0]["title"],
+            "Todo 0001 · 2026-08-28T00:00:00.000000Z"
+        );
+        assert_eq!(
+            state["footer"]["requestTimestampLabel"],
+            "Rendered 2026-08-28T00:00:00.000000Z"
+        );
+    }
+
+    #[test]
     fn html_responses_have_equivalent_explicit_headers() {
         let timestamp = HeaderValue::from_static("2026-08-22T00:00:00.000000Z");
         let response = html_response(
@@ -1538,4 +1832,5 @@ mod tests {
         assert!(first.ends_with('Z'));
         assert!(second > first);
     }
+
 }

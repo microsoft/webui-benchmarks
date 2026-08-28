@@ -17,7 +17,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { arch, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -354,6 +354,39 @@ function snapshotSourcePackages(checkout) {
     }
     packages[name] = relative(repositoryRoot, target).replaceAll("\\", "/");
   }
+  const platformDirectory = {
+    "darwin-arm64": "webui-darwin-arm64",
+    "darwin-x64": "webui-darwin-x64",
+    "linux-arm64": "webui-linux-arm64",
+    "linux-x64": "webui-linux-x64",
+    "win32-arm64": "webui-win32-arm64",
+    "win32-x64": "webui-win32-x64",
+  }[`${process.platform}-${arch()}`];
+  const addon = addonPath(checkout);
+  if (platformDirectory === undefined || addon === null || !existsSync(addon)) {
+    throw new Error("The current platform WebUI addon was not built");
+  }
+  const platformSource = resolve(
+    checkout,
+    "packages",
+    platformDirectory,
+    "package.json",
+  );
+  const platformTarget = resolve(
+    snapshotPath,
+    "webui",
+    "node_modules",
+    "@microsoft",
+    platformDirectory,
+  );
+  mkdirSync(resolve(platformTarget, "bin"), { recursive: true });
+  copyFileSync(platformSource, resolve(platformTarget, "package.json"));
+  copyFileSync(addon, resolve(platformTarget, "webui.node"));
+  const cliName = process.platform === "win32" ? "webui.exe" : "webui";
+  copyFileSync(
+    resolve(checkout, "target", "release", cliName),
+    resolve(platformTarget, "bin", cliName),
+  );
   return packages;
 }
 
