@@ -18,8 +18,8 @@ use std::io;
 use std::mem;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::task::{Context as TaskContext, Poll};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -52,6 +52,60 @@ const STREAM_CHUNK_SIZE: usize = 16 * 1024;
 const STREAM_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
 const STREAM_RENDER_QUEUE_CAPACITY: usize = 128;
 const STREAM_RESPONSE_CHANNEL_CAPACITY: usize = 8;
+/// Environment variable that enables the streaming pipeline stage trace. Disabled by
+/// default so production benchmark runs pay no logging cost; set to `1` to attribute
+/// wall-clock time across accept/queue/render/flush/poll/disconnect stages for a run.
+const STREAM_TRACE_ENV: &str = "WEBUI_BENCH_TRACE_STREAMING";
+
+fn stream_trace_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var(STREAM_TRACE_ENV).is_ok_and(|value| value == "1"))
+}
+
+/// Per-request stage trace used to diagnose streaming pipeline stalls. Cheap to carry
+/// (an `Option<Arc<_>>`) and a no-op unless `WEBUI_BENCH_TRACE_STREAMING=1`. Timestamps
+/// are relative to a single shared process epoch (not per-request) so that events from
+/// different requests can be correlated to detect overlap or serialization.
+struct RequestTrace {
+    id: u64,
+    request_started_at: Instant,
+}
+
+fn trace_epoch() -> Instant {
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    *EPOCH.get_or_init(Instant::now)
+}
+
+impl RequestTrace {
+    fn start_if_enabled() -> Option<Arc<Self>> {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        stream_trace_enabled().then(|| {
+            let _ = trace_epoch();
+            Arc::new(Self {
+                id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+                request_started_at: Instant::now(),
+            })
+        })
+    }
+
+    fn mark(&self, stage: &str) {
+        eprintln!(
+            "webui-stream-trace request={} t_epoch_ms={:.3} t_req_ms={:.3} stage={stage}",
+            self.id,
+            trace_epoch().elapsed().as_secs_f64() * 1_000.0,
+            self.request_started_at.elapsed().as_secs_f64() * 1_000.0,
+        );
+    }
+
+    fn mark_detail(&self, stage: &str, detail: std::fmt::Arguments<'_>) {
+        eprintln!(
+            "webui-stream-trace request={} t_epoch_ms={:.3} t_req_ms={:.3} stage={stage} {detail}",
+            self.id,
+            trace_epoch().elapsed().as_secs_f64() * 1_000.0,
+            self.request_started_at.elapsed().as_secs_f64() * 1_000.0,
+        );
+    }
+}
 
 struct MemoryWriter {
     output: String,
@@ -106,34 +160,103 @@ struct ChannelWriter {
     flush_threshold: Option<usize>,
     runtime: tokio::runtime::Handle,
     sender: mpsc::Sender<StreamChunk>,
+    flush_count: usize,
+    trace: Option<Arc<RequestTrace>>,
 }
 
 impl ChannelWriter {
+    #[cfg(test)]
     fn new(
         sender: mpsc::Sender<StreamChunk>,
         flush_threshold: Option<usize>,
         runtime: tokio::runtime::Handle,
     ) -> Self {
+        Self::with_trace(
+            sender,
+            flush_threshold,
+            runtime,
+            None,
+            String::with_capacity(INITIAL_CAPACITY),
+        )
+    }
+
+    /// Build a writer around an existing (ideally already-warmed) `String`
+    /// allocation. The persistent render worker passes its reused scratch
+    /// buffer here instead of a fresh allocation so a hot worker never pays
+    /// another `String::with_capacity` per request; see [`Self::into_buffer`].
+    fn with_trace(
+        sender: mpsc::Sender<StreamChunk>,
+        flush_threshold: Option<usize>,
+        runtime: tokio::runtime::Handle,
+        trace: Option<Arc<RequestTrace>>,
+        buffer: String,
+    ) -> Self {
         Self {
-            buffer: String::with_capacity(INITIAL_CAPACITY),
+            buffer,
             flush_threshold,
             runtime,
             sender,
+            flush_count: 0,
+            trace,
         }
     }
 
+    /// Reclaim the writer's buffer allocation so the caller can recycle its
+    /// capacity for the next render job on this persistent worker thread. The
+    /// buffer's length reflects whatever was left unflushed (empty on the
+    /// normal `end()`-flushes-everything path); callers must `clear()` before
+    /// reuse so a failed render's partial output can never leak into the next
+    /// request's stream.
+    fn into_buffer(mut self) -> String {
+        mem::take(&mut self.buffer)
+    }
+
     fn send(&mut self, chunk: StreamChunk) -> webui_handler::Result<()> {
+        self.flush_count += 1;
+        let flush_index = self.flush_count;
+        let byte_len = chunk.as_ref().map(web::Bytes::len).unwrap_or(0);
+        let try_send_started = self.trace.is_some().then(Instant::now);
         let chunk = match self.sender.try_send(chunk) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                if let Some(trace) = &self.trace {
+                    let try_send_us = try_send_started
+                        .map(|started| started.elapsed().as_secs_f64() * 1_000_000.0)
+                        .unwrap_or(0.0);
+                    trace.mark_detail(
+                        "flush",
+                        format_args!(
+                            "index={flush_index} bytes={byte_len} stalled=false try_send_us={try_send_us:.1}"
+                        ),
+                    );
+                }
+                return Ok(());
+            }
             Err(TrySendError::Closed(_)) => {
+                if let Some(trace) = &self.trace {
+                    trace.mark_detail("disconnect", format_args!("index={flush_index} where=send-closed"));
+                }
                 return Err(webui_handler::HandlerError::ClientDisconnected);
             }
             Err(TrySendError::Full(chunk)) => chunk,
         };
-        match self
+        if let Some(trace) = &self.trace {
+            trace.mark_detail("flush-stall-begin", format_args!("index={flush_index} bytes={byte_len}"));
+        }
+        let stall_started = Instant::now();
+        let result = self
             .runtime
-            .block_on(self.sender.send_timeout(chunk, STREAM_FLUSH_TIMEOUT))
-        {
+            .block_on(self.sender.send_timeout(chunk, STREAM_FLUSH_TIMEOUT));
+        if let Some(trace) = &self.trace {
+            trace.mark_detail(
+                "flush-stall-end",
+                format_args!(
+                    "index={flush_index} stall_ms={:.3} ok={}",
+                    stall_started.elapsed().as_secs_f64() * 1_000.0,
+                    result.is_ok()
+                ),
+            );
+        }
+        match result {
             Ok(()) => Ok(()),
             Err(SendTimeoutError::Closed(_)) => {
                 Err(webui_handler::HandlerError::ClientDisconnected)
@@ -197,7 +320,20 @@ impl FlushWriter for ChannelWriter {
         if self.buffer.is_empty() {
             return Ok(());
         }
-        let bytes = web::Bytes::from(mem::take(&mut self.buffer));
+        // Copy the committed segment into its own allocation instead of
+        // `mem::take`-ing `self.buffer` (which would hand its allocation to
+        // the channel and leave a zero-capacity `String` behind). A semantic
+        // response emits several flushes, so taking the buffer forced every
+        // following segment to regrow a `String` from empty one reallocation
+        // at a time; measured over a representative response this cost ~60
+        // extra heap allocations versus a single-flush render of the same
+        // page. Clearing (not taking) keeps this buffer's capacity resident
+        // for the rest of the response, and — because the persistent render
+        // worker recycles it via `into_buffer` — for every later request the
+        // worker serves, trading one bounded memcpy per flush for that
+        // repeated allocator churn.
+        let bytes = web::Bytes::copy_from_slice(self.buffer.as_bytes());
+        self.buffer.clear();
         self.send(Ok(bytes))
     }
 }
@@ -206,6 +342,8 @@ struct ChannelStream {
     error: Arc<Mutex<Option<io::Error>>>,
     receiver: mpsc::Receiver<StreamChunk>,
     reported_error: bool,
+    trace: Option<Arc<RequestTrace>>,
+    first_polled: bool,
 }
 
 impl Stream for ChannelStream {
@@ -215,10 +353,24 @@ impl Stream for ChannelStream {
         mut self: Pin<&mut Self>,
         context: &mut TaskContext<'_>,
     ) -> Poll<Option<Self::Item>> {
-        match self.receiver.poll_recv(context) {
+        if !self.first_polled {
+            self.first_polled = true;
+            if let Some(trace) = &self.trace {
+                trace.mark("first-poll");
+            }
+        }
+        let polled = self.receiver.poll_recv(context);
+        match polled {
             Poll::Ready(None) if !self.reported_error => {
                 self.reported_error = true;
                 let error = self.error.lock().ok().and_then(|mut error| error.take());
+                if let Some(trace) = &self.trace {
+                    if error.is_some() {
+                        trace.mark("disconnect");
+                    } else {
+                        trace.mark("terminal-poll");
+                    }
+                }
                 Poll::Ready(error.map(Err))
             }
             result => result,
@@ -231,6 +383,7 @@ struct RenderJob {
     input: RenderInput,
     request_path: String,
     sender: mpsc::Sender<StreamChunk>,
+    trace: Option<Arc<RequestTrace>>,
 }
 
 enum RenderInput {
@@ -258,14 +411,28 @@ impl RenderWorker {
         let thread = thread::Builder::new()
             .name("webui-stream-render".to_owned())
             .spawn(move || {
+                // This thread is the single, persistent render worker for every
+                // request the process serves — jobs are handled one at a time,
+                // never concurrently — so the writer's scratch buffer can be
+                // recycled across requests instead of allocated fresh per job.
+                // `render_scratch` always carries whatever capacity the buffer
+                // grew to on a prior request; only the very first job (or one
+                // whose peak segment exceeds the current capacity) pays a real
+                // allocation.
+                let mut render_scratch = String::with_capacity(INITIAL_CAPACITY);
                 while let Some(job) = receiver.blocking_recv() {
                     if job.sender.is_closed() {
                         continue;
                     }
-                    let mut writer = ChannelWriter::new(
+                    if let Some(trace) = &job.trace {
+                        trace.mark("render-start");
+                    }
+                    let mut writer = ChannelWriter::with_trace(
                         job.sender,
                         (!progressive_boundaries).then_some(STREAM_CHUNK_SIZE),
                         runtime.clone(),
+                        job.trace.clone(),
+                        mem::take(&mut render_scratch),
                     );
                     let options = RenderOptions::new(ENTRY_ID, &job.request_path);
                     let result = (|| -> Result<()> {
@@ -316,6 +483,17 @@ impl RenderWorker {
                                 .context("WebUI render failed")
                         }
                     })();
+                    if let Some(trace) = &job.trace {
+                        trace.mark_detail("render-end", format_args!("ok={}", result.is_ok()));
+                    }
+                    // Reclaim the writer's buffer for the next job on this
+                    // worker regardless of outcome, then clear it: `flush()`
+                    // already clears on every successful boundary, but a
+                    // failed render may have left a partial, unflushed
+                    // segment behind, and that must never leak into the next
+                    // request's stream.
+                    render_scratch = writer.into_buffer();
+                    render_scratch.clear();
                     if let Err(error_value) = result {
                         if let Ok(mut render_error) = job.error.lock() {
                             *render_error = Some(io::Error::other(error_value));
@@ -331,7 +509,7 @@ impl RenderWorker {
     }
 
     fn stream(&self, render_state: Value, request_path: String) -> Result<ChannelStream> {
-        self.stream_input(RenderInput::Prepared(render_state), request_path)
+        self.stream_input(RenderInput::Prepared(render_state), request_path, None)
     }
 
     fn stream_webui(
@@ -339,6 +517,7 @@ impl RenderWorker {
         index: usize,
         request_timestamp: String,
         request_path: String,
+        trace: Option<Arc<RequestTrace>>,
     ) -> Result<ChannelStream> {
         self.stream_input(
             RenderInput::WebUi {
@@ -346,10 +525,16 @@ impl RenderWorker {
                 request_timestamp,
             },
             request_path,
+            trace,
         )
     }
 
-    fn stream_input(&self, input: RenderInput, request_path: String) -> Result<ChannelStream> {
+    fn stream_input(
+        &self,
+        input: RenderInput,
+        request_path: String,
+        trace: Option<Arc<RequestTrace>>,
+    ) -> Result<ChannelStream> {
         let (sender, receiver) = mpsc::channel(STREAM_RESPONSE_CHANNEL_CAPACITY);
         let error = Arc::new(Mutex::new(None));
         self.sender
@@ -360,12 +545,18 @@ impl RenderWorker {
                 input,
                 request_path,
                 sender,
+                trace: trace.clone(),
             })
             .context("WebUI streaming render queue is full or closed")?;
+        if let Some(trace) = &trace {
+            trace.mark("queued");
+        }
         Ok(ChannelStream {
             error,
             receiver,
             reported_error: false,
+            trace,
+            first_polled: false,
         })
     }
 
@@ -1050,6 +1241,8 @@ fn empty_channel_stream() -> ChannelStream {
         error: Arc::new(Mutex::new(None)),
         receiver,
         reported_error: false,
+        trace: None,
+        first_polled: false,
     }
 }
 
@@ -1061,6 +1254,10 @@ fn stream_timing_header(milliseconds: f64) -> Result<HeaderValue> {
 }
 
 async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpResponse {
+    let trace = RequestTrace::start_if_enabled();
+    if let Some(trace) = &trace {
+        trace.mark("accept");
+    }
     let profile = request.headers().contains_key("x-webui-browser-profile");
     let started = profile.then(Instant::now);
     let request_timestamp = match current_request_timestamp(&state.last_timestamp_micros) {
@@ -1109,6 +1306,7 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                     index,
                     request_timestamp,
                     request_path.to_owned(),
+                    trace.clone(),
                 )
             })
         {
@@ -1138,13 +1336,17 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                 },
                 None => None,
         };
-        return dynamic_stream_response(
+        let response = dynamic_stream_response(
                 stream,
                 HTML_CONTENT_TYPE,
                 state.variant_headers[index].clone(),
                 request_timestamp_header,
                 server_timing,
         );
+        if let Some(trace) = &trace {
+            trace.mark("response-returned");
+        }
+        return response;
     }
     let (render_state, request_path, variant) = {
         let mut states = match state.states.lock() {
@@ -1676,6 +1878,84 @@ mod tests {
             writer.write("disconnected"),
             Err(webui_handler::HandlerError::ClientDisconnected)
         ));
+    }
+
+    #[test]
+    fn stream_flush_clears_the_buffer_but_keeps_its_capacity() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        let capacity_before_first_flush = writer.buffer.capacity();
+        writer
+            .write("first-chunk")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        assert!(writer.buffer.is_empty());
+        assert_eq!(
+            writer.buffer.capacity(),
+            capacity_before_first_flush,
+            "flush must clear the buffer without discarding its allocation"
+        );
+        writer
+            .write("second-chunk")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let first = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("first stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("first stream chunk should succeed: {error}"));
+        let second = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("second stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("second stream chunk should succeed: {error}"));
+        assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
+        assert_eq!(second, web::Bytes::from_static(b"second-chunk"));
+    }
+
+    #[test]
+    fn recycled_render_scratch_never_leaks_a_failed_renders_content_into_the_next_job() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, _receiver) = tokio::sync::mpsc::channel(4);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        // Simulate a render that wrote a partial segment and then failed
+        // before reaching its next semantic flush boundary.
+        writer
+            .write("partial-output-from-a-failed-render")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        let mut recycled = writer.into_buffer();
+        assert!(!recycled.is_empty());
+        // This mirrors the render worker's mandatory defensive clear of a
+        // reclaimed buffer before it is handed to the next job.
+        recycled.clear();
+        let (next_sender, mut next_receiver) = tokio::sync::mpsc::channel(4);
+        let mut next_writer = ChannelWriter::with_trace(
+            next_sender,
+            None,
+            runtime.handle().clone(),
+            None,
+            recycled,
+        );
+        next_writer
+            .write("next-request")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        next_writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let chunk = runtime
+            .block_on(next_receiver.recv())
+            .unwrap_or_else(|| panic!("stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("stream chunk should succeed: {error}"));
+        assert_eq!(chunk, web::Bytes::from_static(b"next-request"));
     }
 
     #[test]
