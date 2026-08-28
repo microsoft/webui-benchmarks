@@ -10,6 +10,7 @@ import {
   OFFICIAL_MATRIX_ID,
   createCaseMatrix,
   filterCases,
+  requiredServerCoreCount,
 } from "./cases.mjs";
 import {
   assertBuildArtifacts,
@@ -223,6 +224,7 @@ async function launchValidatedCase({
     const affinity = applyProcessAffinity(
       server.child.pid,
       options.serverCpu,
+      { coreCount: requiredServerCoreCount(benchmarkCase) },
     );
     if (
       affinity.status === "unavailable"
