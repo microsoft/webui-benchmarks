@@ -7,6 +7,7 @@ mod metadata;
 use actix_web::http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{Context, Result};
+use bytes::{BufMut, BytesMut};
 use config::{HydrationPlugin, ResponseMode};
 use futures_core::Stream;
 use metadata::{build_metadata, Announcement, ReadyMetadata};
@@ -15,7 +16,6 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io;
-use std::mem;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
@@ -156,7 +156,7 @@ impl FlushWriter for MemoryWriter {
 type StreamChunk = std::result::Result<web::Bytes, io::Error>;
 
 struct ChannelWriter {
-    buffer: String,
+    buffer: BytesMut,
     flush_threshold: Option<usize>,
     runtime: tokio::runtime::Handle,
     sender: mpsc::Sender<StreamChunk>,
@@ -181,7 +181,7 @@ impl ChannelWriter {
         trace: Option<Arc<RequestTrace>>,
     ) -> Self {
         Self {
-            buffer: String::with_capacity(INITIAL_CAPACITY),
+            buffer: BytesMut::with_capacity(INITIAL_CAPACITY),
             flush_threshold,
             runtime,
             sender,
@@ -267,7 +267,7 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push_str(content);
+        self.buffer.put_slice(content.as_bytes());
         self.flush_if_needed()
     }
 
@@ -276,11 +276,11 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push(' ');
-        self.buffer.push_str(name);
-        self.buffer.push_str("=\"");
-        self.buffer.push_str(value);
-        self.buffer.push('"');
+        self.buffer.put_u8(b' ');
+        self.buffer.put_slice(name.as_bytes());
+        self.buffer.put_slice(b"=\"");
+        self.buffer.put_slice(value.as_bytes());
+        self.buffer.put_u8(b'"');
         self.flush_if_needed()
     }
 
@@ -289,8 +289,8 @@ impl ResponseWriter for ChannelWriter {
         if self.sender.is_closed() {
             return Err(webui_handler::HandlerError::ClientDisconnected);
         }
-        self.buffer.push(' ');
-        self.buffer.push_str(name);
+        self.buffer.put_u8(b' ');
+        self.buffer.put_slice(name.as_bytes());
         self.flush_if_needed()
     }
 
@@ -304,7 +304,18 @@ impl FlushWriter for ChannelWriter {
         if self.buffer.is_empty() {
             return Ok(());
         }
-        let bytes = web::Bytes::from(mem::take(&mut self.buffer));
+        // `split()` carves off exactly the written bytes `[0, len)` as an
+        // independent, immutably-shared `Bytes` (a cheap refcount bump on
+        // the same underlying allocation, no copy). `self.buffer` is left
+        // empty but retains the unused *tail* capacity from that same
+        // allocation, so the next semantic flush's writes reuse it instead
+        // of starting from a zero-capacity buffer (as `mem::take` on a
+        // `String` would). If that tail capacity is ever exhausted while
+        // this split-off chunk (or any earlier one) is still alive, `bytes`
+        // guarantees `reserve`/`put_slice` allocate a fresh buffer rather
+        // than mutating memory a live `Bytes` still points at — see the
+        // `flush_does_not_mutate_earlier_split_chunks_on_reserve` test.
+        let bytes = self.buffer.split().freeze();
         self.send(Ok(bytes))
     }
 }
@@ -1805,25 +1816,29 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        current_request_timestamp, finish_render_job_inner, html_response,
-        load_browser_route_assets, materialize_request_state, parse_states, rewrite_request_state,
-        rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
-        ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
-        INITIAL_CAPACITY, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        create_handler, current_request_timestamp, drive_streaming_response,
+        finish_render_job_inner, html_response, load_browser_route_assets,
+        materialize_request_state, materialize_webui_request_state, parse_states,
+        rewrite_request_state, rewrite_webui_request_state, stream_timing_header,
+        webui_render_state, ChannelStream, ChannelWriter, HydrationPlugin, ServerConfig,
+        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, DYNAMIC_PATH, ENTRY_ID, HTML_CONTENT_TYPE,
+        INITIAL_CAPACITY, PROFILE_TIMESTAMP, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
     use actix_web::web;
     use anyhow::anyhow;
+    use bytes::{BufMut, BytesMut};
     use futures_core::Stream as _;
     use serde::Serialize;
     use serde_json::{json, Map, Value};
+    use std::alloc::{GlobalAlloc, Layout, System};
     use std::pin::Pin;
-    use std::sync::atomic::AtomicI64;
+    use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::task::{Context as TaskContext, Poll, Waker};
     use std::thread;
-    use webui_handler::{FlushWriter, ResponseWriter};
+    use webui_handler::{FlushWriter, Protocol, RenderOptions, ResponseWriter};
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -1884,7 +1899,9 @@ mod tests {
     }
 
     #[test]
-    fn stream_flush_transfers_the_buffer_without_copying() {
+    fn stream_flush_transfers_bytes_without_copying_and_retains_tail_capacity() {
+        // Byte identity: each flushed chunk must contain exactly and only the
+        // bytes written since the previous flush, in order.
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -1895,14 +1912,17 @@ mod tests {
         writer
             .write("first-chunk")
             .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        // Capture the address of the writer's own allocation before the
+        // split so we can prove the flushed `Bytes` shares it (no copy).
+        let allocation_ptr = writer.buffer.as_ptr();
         writer
             .flush()
             .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
         assert!(writer.buffer.is_empty());
-        assert_eq!(
-            writer.buffer.capacity(),
-            0,
-            "flush must transfer ownership of the allocation to the stream chunk"
+        assert!(
+            writer.buffer.capacity() > 0,
+            "flush must retain the unused tail capacity from the same allocation for reuse, \
+             not drop to a zero-capacity buffer"
         );
         writer
             .write("second-chunk")
@@ -1920,6 +1940,145 @@ mod tests {
             .unwrap_or_else(|error| panic!("second stream chunk should succeed: {error}"));
         assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
         assert_eq!(second, web::Bytes::from_static(b"second-chunk"));
+        assert_eq!(
+            first.as_ptr(),
+            allocation_ptr,
+            "the first flushed chunk must be a zero-copy split of the writer's own allocation"
+        );
+    }
+
+    #[test]
+    fn flush_does_not_mutate_earlier_split_chunks_when_a_later_write_forces_reserve() {
+        // The key `bytes` invariant this prototype depends on: once a chunk
+        // has been split off (and is therefore shared, refcount > 1), any
+        // later growth of the writer's own tail (`reserve`/`put_slice`
+        // needing more capacity than remains) must allocate a fresh buffer
+        // instead of mutating memory the earlier split chunk still points
+        // at. This test forces exactly that by writing far more than the
+        // writer's initial capacity while the first chunk is still alive.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        writer
+            .write("first-chunk")
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let first = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("first stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("first stream chunk should succeed: {error}"));
+        assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
+
+        // Overflow the writer's remaining tail capacity by a wide margin so
+        // `BytesMut` is forced to grow while `first` is still outstanding.
+        let overflow = "y".repeat(INITIAL_CAPACITY * 2);
+        writer
+            .write(&overflow)
+            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+
+        // `first` must be byte-for-byte unchanged after the forced reserve.
+        assert_eq!(
+            first,
+            web::Bytes::from_static(b"first-chunk"),
+            "reserve on the writer's own tail must never mutate an already-split chunk"
+        );
+
+        writer
+            .flush()
+            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        let second = runtime
+            .block_on(receiver.recv())
+            .unwrap_or_else(|| panic!("second stream chunk should be available"))
+            .unwrap_or_else(|error| panic!("second stream chunk should succeed: {error}"));
+        assert_eq!(second, web::Bytes::from(overflow));
+        // Re-check `first` again after the second chunk has also been
+        // observed, in case anything aliased the two chunks together.
+        assert_eq!(first, web::Bytes::from_static(b"first-chunk"));
+    }
+
+    #[test]
+    fn stream_preserves_exactly_seven_nonempty_ordered_chunks() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+        let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+        let expected: Vec<String> = (0..7).map(|index| format!("chunk-{index}")).collect();
+        for chunk in &expected {
+            writer
+                .write(chunk)
+                .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+            writer
+                .flush()
+                .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+        }
+        drop(writer);
+        let mut received = Vec::new();
+        while let Some(chunk) = runtime.block_on(receiver.recv()) {
+            received.push(
+                chunk.unwrap_or_else(|error| panic!("stream chunk should succeed: {error}")),
+            );
+        }
+        assert_eq!(received.len(), 7, "exactly seven chunks must be observed");
+        for (chunk, expected_content) in received.iter().zip(expected.iter()) {
+            assert!(!chunk.is_empty(), "every published chunk must be nonempty");
+            assert_eq!(chunk, expected_content.as_bytes());
+        }
+    }
+
+    #[test]
+    fn concurrent_writers_do_not_corrupt_each_others_buffers() {
+        // 320 requests worth of independent `ChannelWriter`s running across
+        // real OS threads concurrently, each writing distinct, per-writer
+        // content. Proves the `BytesMut`-backed writer has no shared state
+        // (allocator/global buffer aliasing, etc.) that could let one
+        // request's flush corrupt or observe another's bytes.
+        const CONCURRENT_REQUESTS: usize = 320;
+        let handles: Vec<thread::JoinHandle<()>> = (0..CONCURRENT_REQUESTS)
+            .map(|request_index| {
+                thread::spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_time()
+                        .build()
+                        .unwrap_or_else(|error| panic!("runtime should build: {error}"));
+                    let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+                    let mut writer = ChannelWriter::new(sender, None, runtime.handle().clone());
+                    let payload = format!("request-{request_index}-chunk");
+                    for _ in 0..3 {
+                        writer
+                            .write(&payload)
+                            .unwrap_or_else(|error| panic!("stream write should succeed: {error}"));
+                        writer
+                            .flush()
+                            .unwrap_or_else(|error| panic!("stream flush should succeed: {error}"));
+                    }
+                    drop(writer);
+                    let mut observed = 0;
+                    while let Some(chunk) = runtime.block_on(receiver.recv()) {
+                        let chunk = chunk
+                            .unwrap_or_else(|error| panic!("stream chunk should succeed: {error}"));
+                        assert_eq!(
+                            chunk.as_ref(),
+                            payload.as_bytes(),
+                            "request {request_index} observed a chunk that did not match its own payload"
+                        );
+                        observed += 1;
+                    }
+                    assert_eq!(observed, 3);
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle
+                .join()
+                .unwrap_or_else(|_| panic!("concurrent writer thread should not panic"));
+        }
     }
 
     #[test]
@@ -2264,5 +2423,304 @@ mod tests {
         assert_eq!(first.as_bytes()[19], b'.');
         assert!(first.ends_with('Z'));
         assert!(second > first);
+    }
+
+    // --- Deterministic ChannelWriter allocation-strategy comparison -------
+    //
+    // Compares the current `String` + `mem::take` flush strategy against a
+    // `bytes::BytesMut` + `split().freeze()` prototype using the *real*
+    // production WebUI 19c Light DOM protocol/state fixtures already built
+    // on disk (`todo/apps/webui-lightdom/dist/protocol.bin` and
+    // `todo/servers/generated/todo-states.json`), replaying the exact
+    // semantic-flush segments the render engine produces for a real
+    // request. This is a deterministic allocation *count* comparison, not a
+    // throughput measurement, so it is unaffected by host CPU noise.
+
+    struct CountingAllocator;
+
+    static ALLOCATOR_ACTIVE: AtomicBool = AtomicBool::new(false);
+    static ALLOC_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static REALLOC_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static REALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
+    static DEALLOC_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    // SAFETY: every operation forwards the original pointer/layout
+    // unchanged to the system allocator; the atomics only observe call
+    // counts and never alter allocation semantics. `unsafe_code` is denied
+    // workspace-wide for production code; this test-only allocator is the
+    // one deliberate, narrowly-scoped exception needed to count real
+    // allocator calls, exactly like `todo/profile/rust/allocation_probe.rs`
+    // does in its own standalone crate.
+    #[allow(unsafe_code)]
+    unsafe impl GlobalAlloc for CountingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            if ALLOCATOR_ACTIVE.load(Ordering::Relaxed) {
+                ALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+            }
+            // SAFETY: `layout` is forwarded unchanged from the caller.
+            unsafe { System.alloc(layout) }
+        }
+
+        unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+            if ALLOCATOR_ACTIVE.load(Ordering::Relaxed) {
+                DEALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+            }
+            // SAFETY: the pointer/layout came from the matching system call.
+            unsafe { System.dealloc(pointer, layout) }
+        }
+
+        unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            if ALLOCATOR_ACTIVE.load(Ordering::Relaxed) {
+                REALLOC_CALLS.fetch_add(1, Ordering::Relaxed);
+                REALLOCATED_BYTES.fetch_add(new_size, Ordering::Relaxed);
+            }
+            // SAFETY: all arguments are forwarded unchanged from the caller.
+            unsafe { System.realloc(pointer, layout, new_size) }
+        }
+    }
+
+    #[global_allocator]
+    static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator;
+
+    #[derive(Clone, Copy, Debug)]
+    struct AllocationSnapshot {
+        alloc_calls: usize,
+        realloc_calls: usize,
+        reallocated_bytes: usize,
+        dealloc_calls: usize,
+    }
+
+    impl AllocationSnapshot {
+        fn reset() {
+            ALLOC_CALLS.store(0, Ordering::Relaxed);
+            REALLOC_CALLS.store(0, Ordering::Relaxed);
+            REALLOCATED_BYTES.store(0, Ordering::Relaxed);
+            DEALLOC_CALLS.store(0, Ordering::Relaxed);
+        }
+
+        fn capture() -> Self {
+            Self {
+                alloc_calls: ALLOC_CALLS.load(Ordering::Relaxed),
+                realloc_calls: REALLOC_CALLS.load(Ordering::Relaxed),
+                reallocated_bytes: REALLOCATED_BYTES.load(Ordering::Relaxed),
+                dealloc_calls: DEALLOC_CALLS.load(Ordering::Relaxed),
+            }
+        }
+    }
+
+    fn measured<T>(operation: impl FnOnce() -> T) -> (T, AllocationSnapshot) {
+        AllocationSnapshot::reset();
+        ALLOCATOR_ACTIVE.store(true, Ordering::SeqCst);
+        let result = operation();
+        ALLOCATOR_ACTIVE.store(false, Ordering::SeqCst);
+        (result, AllocationSnapshot::capture())
+    }
+
+    /// Mirrors the *current* (`String` + `mem::take`) `ChannelWriter` flush
+    /// strategy, recording each semantic-flush segment instead of sending it
+    /// over a channel, so it can be driven through a real render under the
+    /// counting allocator.
+    struct OldStringChannelWriter {
+        buffer: String,
+        segments: Vec<String>,
+    }
+
+    impl OldStringChannelWriter {
+        fn with_capacity(capacity: usize) -> Self {
+            Self {
+                buffer: String::with_capacity(capacity),
+                segments: Vec::new(),
+            }
+        }
+    }
+
+    impl ResponseWriter for OldStringChannelWriter {
+        fn write(&mut self, content: &str) -> webui_handler::Result<()> {
+            self.buffer.push_str(content);
+            Ok(())
+        }
+
+        #[cfg(feature = "optimized-webui-writer")]
+        fn write_attribute(&mut self, name: &str, value: &str) -> webui_handler::Result<()> {
+            self.buffer.push(' ');
+            self.buffer.push_str(name);
+            self.buffer.push_str("=\"");
+            self.buffer.push_str(value);
+            self.buffer.push('"');
+            Ok(())
+        }
+
+        #[cfg(feature = "optimized-webui-writer")]
+        fn write_boolean_attribute(&mut self, name: &str) -> webui_handler::Result<()> {
+            self.buffer.push(' ');
+            self.buffer.push_str(name);
+            Ok(())
+        }
+
+        fn end(&mut self) -> webui_handler::Result<()> {
+            self.flush()
+        }
+    }
+
+    impl FlushWriter for OldStringChannelWriter {
+        fn flush(&mut self) -> webui_handler::Result<()> {
+            if !self.buffer.is_empty() {
+                self.segments.push(std::mem::take(&mut self.buffer));
+            }
+            Ok(())
+        }
+    }
+
+    /// Mirrors the `BytesMut` + `split().freeze()` prototype flush strategy
+    /// under the same conditions.
+    struct NewBytesMutChannelWriter {
+        buffer: BytesMut,
+        segments: Vec<web::Bytes>,
+    }
+
+    impl NewBytesMutChannelWriter {
+        fn with_capacity(capacity: usize) -> Self {
+            Self {
+                buffer: BytesMut::with_capacity(capacity),
+                segments: Vec::new(),
+            }
+        }
+    }
+
+    impl ResponseWriter for NewBytesMutChannelWriter {
+        fn write(&mut self, content: &str) -> webui_handler::Result<()> {
+            self.buffer.put_slice(content.as_bytes());
+            Ok(())
+        }
+
+        #[cfg(feature = "optimized-webui-writer")]
+        fn write_attribute(&mut self, name: &str, value: &str) -> webui_handler::Result<()> {
+            self.buffer.put_u8(b' ');
+            self.buffer.put_slice(name.as_bytes());
+            self.buffer.put_slice(b"=\"");
+            self.buffer.put_slice(value.as_bytes());
+            self.buffer.put_u8(b'"');
+            Ok(())
+        }
+
+        #[cfg(feature = "optimized-webui-writer")]
+        fn write_boolean_attribute(&mut self, name: &str) -> webui_handler::Result<()> {
+            self.buffer.put_u8(b' ');
+            self.buffer.put_slice(name.as_bytes());
+            Ok(())
+        }
+
+        fn end(&mut self) -> webui_handler::Result<()> {
+            self.flush()
+        }
+    }
+
+    impl FlushWriter for NewBytesMutChannelWriter {
+        fn flush(&mut self) -> webui_handler::Result<()> {
+            if !self.buffer.is_empty() {
+                self.segments.push(self.buffer.split().freeze());
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn channel_writer_bytesmut_prototype_reduces_reallocations_on_real_light_dom() {
+        let config = ServerConfig::from_args(std::iter::empty::<String>())
+            .unwrap_or_else(|error| panic!("default config should parse: {error}"));
+        let protocol_bytes = std::fs::read(&config.protocol_path).unwrap_or_else(|error| {
+            panic!(
+                "real Light DOM protocol at {} should be readable (run `pnpm run webui:local` \
+                 build steps first if missing): {error}",
+                config.protocol_path.display()
+            )
+        });
+        let protocol = Protocol::from_protobuf(&protocol_bytes)
+            .unwrap_or_else(|error| panic!("protocol should decode: {error}"));
+        let state_bytes = std::fs::read(&config.states_path).unwrap_or_else(|error| {
+            panic!(
+                "real state pool at {} should be readable: {error}",
+                config.states_path.display()
+            )
+        });
+        let states = parse_states(&state_bytes)
+            .unwrap_or_else(|error| panic!("state pool should parse: {error}"));
+        let projected_state = webui_render_state(&states.variants[0])
+            .unwrap_or_else(|error| panic!("state should project for the WebUI plugin: {error}"));
+        let request_state = materialize_webui_request_state(&projected_state, PROFILE_TIMESTAMP)
+            .unwrap_or_else(|error| panic!("state should materialize: {error}"));
+
+        let handler = create_handler(HydrationPlugin::WebUi);
+        let options = RenderOptions::new(ENTRY_ID, DYNAMIC_PATH);
+
+        // Drive two independent real renders of the exact same request
+        // through the real render engine (`handler.render_streaming`, via
+        // `drive_streaming_response`) — one per writer strategy — under the
+        // counting allocator, exactly reproducing the many small
+        // `write`/`write_attribute` calls per semantic-flush segment that
+        // production issues, not a synthetic single-shot replay.
+        let (old_segments, string_snapshot) = measured(|| {
+            let mut writer = OldStringChannelWriter::with_capacity(INITIAL_CAPACITY);
+            drive_streaming_response(&handler, &protocol, &request_state, &options, &mut writer)
+                .unwrap_or_else(|error| {
+                    panic!("streaming render (String writer) should succeed: {error}")
+                });
+            writer.segments
+        });
+
+        let (new_segments, bytes_snapshot) = measured(|| {
+            let mut writer = NewBytesMutChannelWriter::with_capacity(INITIAL_CAPACITY);
+            drive_streaming_response(&handler, &protocol, &request_state, &options, &mut writer)
+                .unwrap_or_else(|error| {
+                    panic!("streaming render (BytesMut writer) should succeed: {error}")
+                });
+            writer.segments
+        });
+
+        assert_eq!(
+            old_segments.len(),
+            7,
+            "production Light DOM stream must publish exactly seven semantic flushes \
+             (String writer)"
+        );
+        assert_eq!(
+            new_segments.len(),
+            7,
+            "production Light DOM stream must publish exactly seven semantic flushes \
+             (BytesMut writer)"
+        );
+        for (old_segment, new_segment) in old_segments.iter().zip(&new_segments) {
+            assert!(!old_segment.is_empty(), "every semantic flush must be nonempty");
+            assert_eq!(
+                old_segment.as_bytes(),
+                new_segment.as_ref(),
+                "both writer strategies must render byte-identical chunks for the same request"
+            );
+        }
+
+        eprintln!(
+            "channel-writer-allocation-comparison (real WebUI 19c Light DOM, {} segments, {} \
+             total bytes): string_writer alloc_calls={} realloc_calls={} realloc_bytes={} \
+             dealloc_calls={} | bytes_mut_writer alloc_calls={} realloc_calls={} \
+             realloc_bytes={} dealloc_calls={}",
+            old_segments.len(),
+            old_segments.iter().map(String::len).sum::<usize>(),
+            string_snapshot.alloc_calls,
+            string_snapshot.realloc_calls,
+            string_snapshot.reallocated_bytes,
+            string_snapshot.dealloc_calls,
+            bytes_snapshot.alloc_calls,
+            bytes_snapshot.realloc_calls,
+            bytes_snapshot.reallocated_bytes,
+            bytes_snapshot.dealloc_calls,
+        );
+
+        assert!(
+            bytes_snapshot.realloc_calls <= string_snapshot.realloc_calls,
+            "BytesMut prototype must not regress realloc call count versus the String writer \
+             (string={}, bytes={})",
+            string_snapshot.realloc_calls,
+            bytes_snapshot.realloc_calls
+        );
     }
 }

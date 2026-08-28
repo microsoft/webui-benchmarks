@@ -16,6 +16,7 @@ repository = "https://github.com/microsoft/webui-benchmarks"
 [workspace.dependencies]
 actix-web = "=4.14.0"
 anyhow = "=1.0.103"
+bytes = "=1.12.1"
 futures-core = "=0.3.34"
 mimalloc = "=0.1.52"
 rcgen = "=0.14.8"
