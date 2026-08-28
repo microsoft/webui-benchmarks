@@ -86,36 +86,62 @@ The canonical manifests benchmark the released WebUI `0.0.27` npm packages
 and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
-To benchmark an existing WebUI checkout without editing tracked manifests:
+Use source-link mode for the fastest development loop. It builds WebUI,
+WebUI Framework, and WebUI Router from any checkout, mirrors their publishable
+outputs into an ignored same-volume snapshot, and redirects only those package
+links without changing pnpm's canonical dependency graph or lockfile. The
+same-volume snapshot also supports checkouts on another drive. Cargo commands
+patch the local Rust handler directly, and protocol builds use the checkout's
+native addon:
 
-```bash
-pnpm run webui:configure -- --path ../webui
-pnpm install --force --no-frozen-lockfile --lockfile=false
+```powershell
+pnpm run webui:local -- --path E:\path\to\webui
 pnpm run build
 ```
 
-To benchmark a tag, branch, or commit, let the configuration script create an
-untracked shallow checkout:
+`pnpm run build` refreshes the source snapshot automatically. It can also be
+refreshed explicitly with `pnpm run webui:sync`.
+
+Use `--ref` instead of `--path` to create an untracked shallow checkout:
 
 ```bash
-pnpm run webui:configure -- --ref v0.0.27
-pnpm install --force --no-frozen-lockfile --lockfile=false
+pnpm run webui:local -- --ref v0.0.27
 pnpm run build
 ```
 
-`.pnpmfile.cjs` links the two npm packages from that checkout. Cargo receives a
-per-command crates.io patch for `microsoft-webui-handler`, and the build plan
-builds the checkout's npm packages and Node-API addon before the benchmark.
-The local install leaves the canonical release lockfile untouched. Reports
-record the checkout commit and dirty state. Return to released dependencies
-with:
+Packed mode builds those three npm packages and installs immutable tarballs.
+It is slower but exercises the package contents that would be published while
+continuing to patch the Rust handler from the same checkout:
+
+```powershell
+pnpm run webui:packed -- --path E:\path\to\webui
+pnpm run build
+```
+
+Inspect the active checkout, commit, dirty state, package sources, Cargo patch,
+native addon, and whether a packed snapshot is stale with:
+
+```bash
+pnpm run webui:status
+```
+
+Run an arbitrary benchmark-workspace Cargo command with the same local patch:
+
+```bash
+pnpm run webui:cargo -- test --workspace
+```
+
+Both local modes leave the canonical release manifests and lockfiles untouched.
+Reports record the checkout commit, mode, artifacts, and dirty state. Return to
+released dependencies and restore the frozen lockfile with:
 
 ```bash
 pnpm run webui:release
-pnpm install --force --frozen-lockfile
 ```
 
-`WEBUI_CHECKOUT` may be set instead of creating `.webui-local.json`.
+`pnpm run webui:configure -- --path <checkout>` remains available as the
+lower-level configuration-only operation. Existing `WEBUI_CHECKOUT` workflows
+remain supported when the caller manages its pnpm links.
 
 ## Run the benchmark
 

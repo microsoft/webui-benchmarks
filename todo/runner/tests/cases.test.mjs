@@ -247,11 +247,11 @@ test("build plan deduplicates exact production and release commands", () => {
     "webui-fast-rust-actix",
     "next",
   ]);
-  const plan = createBuildPlan(selected);
+  const plan = createBuildPlan(selected, { localWebui: false });
   const commands = plan.map((entry) => entry.display);
   assert.equal(
     commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework run build",
+      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
     ),
     false,
   );
@@ -277,12 +277,23 @@ test("local WebUI builds are explicit build-plan dependencies", () => {
     .map((entry) => entry.display);
   assert.ok(
     commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework run build",
+      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
     ),
   );
   assert.ok(
     commands.includes("cargo build --release -p microsoft-webui-node"),
   );
+});
+
+test("packed WebUI builds consume artifacts without rebuilding package sources", () => {
+  const selected = filterCases(createCaseMatrix(), ["webui-node-http"]);
+  const ids = createBuildPlan(selected, {
+    localWebui: true,
+    localWebuiSource: false,
+  }).map(({ id }) => id);
+  assert.equal(ids.includes("webui-package"), false);
+  assert.equal(ids.includes("native-addon"), true);
+  assert.equal(ids.includes("webui"), true);
 });
 
 test("browser build plan always includes native TLS material", () => {

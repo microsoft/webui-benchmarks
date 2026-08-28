@@ -250,8 +250,8 @@ export async function runBenchmark(options, {
     createCaseMatrix(),
     options.caseFilters,
   );
-  const fixtureBefore = computeFixtureHash();
-  const sourceRevision = collectSourceRevision(fixtureBefore.value);
+  let fixtureBefore;
+  let sourceRevision;
   const requiredRuntimes = [
     "node",
     ...selectedCases
@@ -294,6 +294,8 @@ export async function runBenchmark(options, {
     if (options.build || !options.quick) {
       await assertBuildArtifacts(selectedCases);
     }
+    fixtureBefore = computeFixtureHash();
+    sourceRevision = collectSourceRevision(fixtureBefore.value);
 
     for (const benchmarkCase of selectedCases) {
       const decision = decisions.get(benchmarkCase.runtimeId);

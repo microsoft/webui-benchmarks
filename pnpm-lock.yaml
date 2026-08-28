@@ -7,7 +7,7 @@ settings:
 overrides:
   babel-preset-solid: 1.9.12
 
-pnpmfileChecksum: sha256-smYhXmd7RyHImUTT84EP5tRuelnSutUAEe3HveJaAuA=
+pnpmfileChecksum: sha256-SPv6BwWhw3t4yGM5pgkIywCUAOaWl4RRJBby7wJzpkA=
 
 importers:
 

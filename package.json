@@ -41,7 +41,12 @@
     "profile:prepare": "node todo/profile/prepare.mjs",
     "verify:runtimes": "node todo/servers/verify-runtimes.mjs --official",
     "webui:configure": "node scripts/configure-webui.mjs",
-    "webui:release": "node scripts/configure-webui.mjs --release"
+    "webui:local": "node scripts/configure-webui.mjs --prepare --install",
+    "webui:packed": "node scripts/configure-webui.mjs --packed --install",
+    "webui:sync": "node scripts/configure-webui.mjs --sync",
+    "webui:status": "node scripts/configure-webui.mjs --status",
+    "webui:cargo": "node scripts/webui-cargo.mjs",
+    "webui:release": "node scripts/configure-webui.mjs --release --install"
   },
   "engines": {
     "node": "24.19.0"
