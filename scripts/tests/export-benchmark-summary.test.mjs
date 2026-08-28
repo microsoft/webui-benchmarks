@@ -127,6 +127,7 @@ function rawRound(benchmarkCase, round, orderIndex) {
     responseBytes: 10_065.5 + orderIndex,
     round,
     serverMetrics: { status: "available" },
+    streaming: benchmarkCase.streaming,
     throughputBytesPerSecond: 10_000_000,
     warmup: {
       durationSeconds: DEFAULT_PROTOCOL.warmupSeconds,
@@ -165,6 +166,7 @@ function report() {
       responseMode: benchmarkCase.responseMode,
       responseByteProfile: profile,
       responseBytes: profile.dynamic.mean,
+      streaming: benchmarkCase.streaming,
       transport: benchmarkCase.transport,
       workerCount: 1,
       ...summarizeRounds(rounds),
@@ -255,6 +257,9 @@ function report() {
 }
 
 function setReportResponseMode(report, responseMode) {
+  const expectedCases = new Map(
+    createCaseMatrix({ responseMode }).map((entry) => [entry.id, entry]),
+  );
   report.config.responseMode = responseMode;
   report.policies.responseMode = responseMode;
   for (const collection of [
@@ -264,7 +269,14 @@ function setReportResponseMode(report, responseMode) {
     report.matrix.summaries,
   ]) {
     for (const entry of collection) {
+      const expected = expectedCases.get(entry.id ?? entry.caseId);
       entry.responseMode = responseMode;
+      if (expected !== undefined) {
+        if ("renderer" in entry) {
+          entry.renderer = expected.renderer;
+        }
+        entry.streaming = expected.streaming;
+      }
     }
   }
   report.capabilities = responseMode === "progressive"

@@ -233,14 +233,20 @@ impl ChannelWriter {
             }
             Err(TrySendError::Closed(_)) => {
                 if let Some(trace) = &self.trace {
-                    trace.mark_detail("disconnect", format_args!("index={flush_index} where=send-closed"));
+                    trace.mark_detail(
+                        "disconnect",
+                        format_args!("index={flush_index} where=send-closed"),
+                    );
                 }
                 return Err(webui_handler::HandlerError::ClientDisconnected);
             }
             Err(TrySendError::Full(chunk)) => chunk,
         };
         if let Some(trace) = &self.trace {
-            trace.mark_detail("flush-stall-begin", format_args!("index={flush_index} bytes={byte_len}"));
+            trace.mark_detail(
+                "flush-stall-begin",
+                format_args!("index={flush_index} bytes={byte_len}"),
+            );
         }
         let stall_started = Instant::now();
         let result = self
@@ -275,7 +281,6 @@ impl ChannelWriter {
             Ok(())
         }
     }
-
 }
 
 impl ResponseWriter for ChannelWriter {
@@ -519,10 +524,7 @@ impl RenderWorker {
                                     .variants
                                     .get_mut(index)
                                     .context("WebUI render state variant is unavailable")?;
-                                rewrite_webui_request_state(
-                                    render_state,
-                                    &request_timestamp,
-                                )?;
+                                rewrite_webui_request_state(render_state, &request_timestamp)?;
                                 return drive_streaming_response(
                                     &handler,
                                     &protocol,
@@ -544,12 +546,7 @@ impl RenderWorker {
                             .context("WebUI streaming render failed")
                         } else {
                             handler
-                                .render(
-                                    &protocol,
-                                    &render_state,
-                                    &options,
-                                    &mut writer,
-                                )
+                                .render(&protocol, &render_state, &options, &mut writer)
                                 .context("WebUI render failed")
                         }
                     })();
@@ -621,7 +618,6 @@ impl RenderWorker {
             first_polled: false,
         })
     }
-
 }
 
 impl Drop for RenderWorker {
@@ -1130,8 +1126,7 @@ fn load_app_state(config: &ServerConfig) -> Result<(web::Data<AppState>, ReadyMe
     // the pre-rendered /cached body) must reflect that too, independent of
     // whichever streaming strategy the render worker uses for the (separate,
     // progressive-suite-only) Stream completion path below.
-    let use_streaming_render =
-        project_webui && config.response_mode == ResponseMode::Progressive;
+    let use_streaming_render = project_webui && config.response_mode == ResponseMode::Progressive;
     let (lengths, dynamic_capacity) = response_sizes(
         &handler,
         &protocol,
@@ -1340,24 +1335,21 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
         .get("accept")
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| {
-                value.contains("application/json") || value.contains("application/x-ndjson")
+            value.contains("application/json") || value.contains("application/x-ndjson")
         });
-    if state.response_mode == ResponseMode::Progressive
-        && !state.fast_routes
-        && !accepts_partial
-    {
+    if state.response_mode == ResponseMode::Progressive && !state.fast_routes && !accepts_partial {
         let index = state.next_variant.fetch_add(1, Ordering::Relaxed) % STATE_VARIANT_COUNT;
         let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
-                Ok(header) => header,
-                Err(error) => {
-                    return HttpResponse::InternalServerError()
-                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                        .json(ErrorBody {
-                            code: "timestamp-header-failed",
-                            message: error.to_string(),
-                        });
-                }
+            Ok(header) => header,
+            Err(error) => {
+                return HttpResponse::InternalServerError()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "timestamp-header-failed",
+                        message: error.to_string(),
+                    });
+            }
         };
         let stream = match state
             .render_worker
@@ -1370,21 +1362,21 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                     request_path.to_owned(),
                     trace.clone(),
                 )
-            })
-        {
-                Ok(stream) => stream,
-                Err(error) => {
-                    return HttpResponse::ServiceUnavailable()
-                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                        .json(ErrorBody {
-                            code: "render-queue-unavailable",
-                            message: error.to_string(),
-                        });
-                }
+            }) {
+            Ok(stream) => stream,
+            Err(error) => {
+                return HttpResponse::ServiceUnavailable()
+                    .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                    .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                    .json(ErrorBody {
+                        code: "render-queue-unavailable",
+                        message: error.to_string(),
+                    });
+            }
         };
         let server_timing = match started {
-                Some(started) => match stream_timing_header(started.elapsed().as_secs_f64() * 1_000.0) {
+            Some(started) => {
+                match stream_timing_header(started.elapsed().as_secs_f64() * 1_000.0) {
                     Ok(value) => Some(value),
                     Err(error) => {
                         return HttpResponse::InternalServerError()
@@ -1395,15 +1387,16 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                                 message: error.to_string(),
                             });
                     }
-                },
-                None => None,
+                }
+            }
+            None => None,
         };
         let response = dynamic_stream_response(
-                stream,
-                HTML_CONTENT_TYPE,
-                state.variant_headers[index].clone(),
-                request_timestamp_header,
-                server_timing,
+            stream,
+            HTML_CONTENT_TYPE,
+            state.variant_headers[index].clone(),
+            request_timestamp_header,
+            server_timing,
         );
         if let Some(trace) = &trace {
             trace.mark("response-returned");
@@ -1478,10 +1471,12 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                         });
                 }
             };
-            return match state
-                .protocol
-                .render_partial(&state_json, ENTRY_ID, request_path, inventory)
-            {
+            return match state.protocol.render_partial(
+                &state_json,
+                ENTRY_ID,
+                request_path,
+                inventory,
+            ) {
                 Ok(output) => HttpResponse::Ok()
                     .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
                     .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
@@ -1502,41 +1497,41 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
         }
         if state.response_mode == ResponseMode::Complete {
             let output = match render_html(
-                    &state.handler,
-                    &state.protocol,
-                    render_state,
-                    state.dynamic_capacity,
-                    request_path,
+                &state.handler,
+                &state.protocol,
+                render_state,
+                state.dynamic_capacity,
+                request_path,
             ) {
-                    Ok(output) => output,
-                    Err(error) => {
-                        return HttpResponse::InternalServerError()
-                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                            .json(ErrorBody {
-                                code: "render-failed",
-                                message: error.to_string(),
-                            });
-                    }
+                Ok(output) => output,
+                Err(error) => {
+                    return HttpResponse::InternalServerError()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "render-failed",
+                            message: error.to_string(),
+                        });
+                }
             };
             let request_timestamp_header = match HeaderValue::from_str(&request_timestamp) {
-                    Ok(header) => header,
-                    Err(error) => {
-                        return HttpResponse::InternalServerError()
-                            .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
-                            .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
-                            .json(ErrorBody {
-                                code: "timestamp-header-failed",
-                                message: error.to_string(),
-                            });
-                    }
+                Ok(header) => header,
+                Err(error) => {
+                    return HttpResponse::InternalServerError()
+                        .insert_header((CONTENT_TYPE, JSON_CONTENT_TYPE))
+                        .insert_header((CACHE_CONTROL, DYNAMIC_CACHE_CONTROL))
+                        .json(ErrorBody {
+                            code: "timestamp-header-failed",
+                            message: error.to_string(),
+                        });
+                }
             };
             return html_response(
-                    web::Bytes::from(output),
-                    DYNAMIC_CACHE_CONTROL,
-                    "dynamic",
-                    state.variant_headers[index].clone(),
-                    request_timestamp_header,
+                web::Bytes::from(output),
+                DYNAMIC_CACHE_CONTROL,
+                "dynamic",
+                state.variant_headers[index].clone(),
+                request_timestamp_header,
             );
         }
         let render_state = scoped_state.unwrap_or_else(|| request_state.clone());
@@ -2356,5 +2351,4 @@ mod tests {
         assert!(first.ends_with('Z'));
         assert!(second > first);
     }
-
 }

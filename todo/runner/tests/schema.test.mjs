@@ -3,7 +3,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ASYNC_DATA_BOUNDARY_CAPABILITY } from "../lib/cases.mjs";
+import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
+  createCaseMatrix,
+} from "../lib/cases.mjs";
 import {
   REPORT_SCHEMA,
   assertReportSchema,
@@ -61,15 +64,26 @@ function validReport() {
 }
 
 function setResponseMode(report, responseMode) {
+  const expectedCases = new Map(
+    createCaseMatrix({ responseMode }).map((entry) => [entry.id, entry]),
+  );
   report.config = { responseMode };
   report.policies.responseMode = responseMode;
-  for (const collection of [
-    report.cases,
-    report.rawRounds,
-    report.summaries,
-  ]) {
+  for (const collection of [report.cases, report.summaries]) {
     for (const entry of collection) {
+      const expected = expectedCases.get(entry.id ?? entry.caseId);
       entry.responseMode = responseMode;
+      if (expected !== undefined) {
+        entry.renderer = expected.renderer;
+        entry.streaming = expected.streaming;
+      }
+    }
+  }
+  for (const round of report.rawRounds) {
+    const expected = expectedCases.get(round.caseId);
+    round.responseMode = responseMode;
+    if (expected !== undefined) {
+      round.streaming = expected.streaming;
     }
   }
   report.capabilities = responseMode === "progressive"
@@ -207,6 +221,21 @@ test("schema validates matrix modes and progressive capability disclosure", () =
   assert.match(
     validateReportSchema(missingCapability).errors.join("\n"),
     /must disclose.*async data-boundary capability/u,
+  );
+});
+
+test("schema rejects relabeling progressive renderer evidence as complete", () => {
+  const relabeled = validReport();
+  setResponseMode(relabeled, "progressive");
+  relabeled.config.responseMode = "complete";
+  relabeled.policies.responseMode = "complete";
+  relabeled.capabilities = {};
+  for (const entry of relabeled.cases) {
+    entry.responseMode = "complete";
+  }
+  assert.match(
+    validateReportSchema(relabeled).errors.join("\n"),
+    /does not match the complete suite renderer\/streaming contract/u,
   );
 });
 

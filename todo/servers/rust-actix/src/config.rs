@@ -145,18 +145,16 @@ mod tests {
 
     #[test]
     fn config_defaults_to_progressive_and_parses_complete_response_mode() {
-        let result =
-            ServerConfig::from_args(["--response-mode".to_owned(), "complete".to_owned()]);
+        let result = ServerConfig::from_args(["--response-mode".to_owned(), "complete".to_owned()]);
         let Ok(config) = result else {
             panic!("complete response mode should parse");
         };
         assert_eq!(config.response_mode, ResponseMode::Complete);
         assert_eq!(config.response_mode.as_str(), "complete");
         assert_eq!(ResponseMode::Progressive.as_str(), "progressive");
-        assert!(ServerConfig::from_args([
-            "--response-mode".to_owned(),
-            "eventual".to_owned(),
-        ])
-        .is_err());
+        assert!(
+            ServerConfig::from_args(["--response-mode".to_owned(), "eventual".to_owned(),])
+                .is_err()
+        );
     }
 }

@@ -5,6 +5,7 @@ import {
   ASYNC_DATA_BOUNDARY_CAPABILITY,
   OFFICIAL_CASE_COUNT,
   RESPONSE_MODES,
+  createCaseMatrix,
 } from "./cases.mjs";
 
 export const REPORT_SCHEMA = "webui.ssr-todo-benchmark/v1";
@@ -188,6 +189,51 @@ export function validateReportSchema(report) {
     errors.push(
       "complete reports must not claim progressive async data-boundary evidence",
     );
+  }
+  if (responseModeValues.includes(report.policies?.responseMode)) {
+    const expectedCases = new Map(
+      createCaseMatrix({ responseMode: report.policies.responseMode })
+        .map((entry) => [entry.id, entry]),
+    );
+    for (const [collectionName, collection] of [
+      ["cases", report.cases],
+      ["summaries", report.summaries],
+      ["matrix.summaries", report.matrix?.summaries],
+    ]) {
+      if (!Array.isArray(collection)) {
+        continue;
+      }
+      for (const [index, entry] of collection.entries()) {
+        const expected = expectedCases.get(entry.id ?? entry.caseId);
+        if (
+          expected !== undefined
+          && (
+            entry.renderer !== undefined
+              && entry.renderer !== expected.renderer
+            || entry.streaming !== undefined
+              && entry.streaming !== expected.streaming
+          )
+        ) {
+          errors.push(
+            `${collectionName}[${index}] does not match the ${report.policies.responseMode} suite renderer/streaming contract`,
+          );
+        }
+      }
+    }
+    if (Array.isArray(report.rawRounds)) {
+      for (const [index, round] of report.rawRounds.entries()) {
+        const expected = expectedCases.get(round.caseId);
+        if (
+          expected !== undefined
+          && round.streaming !== undefined
+          && round.streaming !== expected.streaming
+        ) {
+          errors.push(
+            `rawRounds[${index}] does not match the ${report.policies.responseMode} suite streaming contract`,
+          );
+        }
+      }
+    }
   }
   if (Array.isArray(report.cases)) {
     const ids = report.cases
