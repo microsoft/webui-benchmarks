@@ -57,6 +57,8 @@ test("official workflow emits raw evidence and copy-ready summaries for both sui
       OFFICIAL_BENCHMARK_OUTPUTS.ssr,
       "--browser-input",
       OFFICIAL_BENCHMARK_OUTPUTS.browser,
+      "--complete-input",
+      OFFICIAL_BENCHMARK_OUTPUTS.ssrComplete,
       "--output",
       OFFICIAL_BENCHMARK_OUTPUTS.summary,
     ],

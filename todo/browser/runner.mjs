@@ -489,6 +489,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     ]),
   );
   const frameworkVersions = collectFrameworkVersions();
+  const webuiDependency = collectWebuiDependency();
   const registry = new ProcessRegistry();
   const disposeSignals = installProcessCleanup(registry);
   let builds = Object.freeze([]);
@@ -561,7 +562,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
           serverRenderer: clients.serverRenderers.get(browserCase.appId),
           verifiedRuntimes,
           viewport: options.viewport,
-          webuiDependency: collectWebuiDependency(),
+          webuiDependency,
         });
         browserVersion ??= rawRound.browserVersion ?? null;
         rawRounds.push(rawRound);
@@ -634,6 +635,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     environment: Object.freeze({
       machine: collectMachineMetadata(),
       tools: collectToolVersions(),
+      webuiDependency,
     }),
     fixture: Object.freeze({ hash: fixtureBefore }),
     mode: options.mode,

@@ -159,7 +159,7 @@ It writes:
 - `results/ssr-todo-official.json` - complete raw progressive-suite SSR/RPS evidence
 - `results/ssr-todo-official-complete.json` - complete raw complete-suite SSR/RPS evidence
 - `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence (progressive)
-- `results/benchmark-summary.json` - copy-ready WebUI homepage state (progressive SSR + browser)
+- `results/benchmark-summary.json` - copy-ready WebUI homepage state (complete and progressive RPS + essential browser metrics)
 - `results/benchmark-summary-complete.json` - copy-ready homepage state for the complete suite (SSR only)
 
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
@@ -294,6 +294,7 @@ the homepage should include browser metrics:
 ```bash
 pnpm run export:summary -- \
   --input results/ssr-todo-2026-08-25-windows-285k.json \
+  --complete-input results/ssr-todo-2026-08-25-windows-285k-complete.json \
   --browser-input results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json \
   --output results/benchmark-summary.json
 ```
@@ -304,11 +305,12 @@ here. On Windows, an otherwise complete official report is intentionally marked
 `partial` because synchronous process sampling would perturb load measurements.
 The exporter accepts that status only when every case and round is complete and
 all unavailable telemetry has the runner's documented Windows sampler reason.
-When `--browser-input` is present, the exporter also requires matching source
-and fixture digests, the canonical 1,440×900 headed Chromium methodology, ten
-successful rounds for every product, and verified pinned runtimes. It adds FCP,
-LCP, JavaScript heap, and renderer-private-memory metrics without retaining
-stale browser data. Without that option, the DTO contains SSR throughput only.
+When `--browser-input` is present, the exporter also requires the same clean
+source commit, independently verified fixture integrity, the canonical
+1,440×900 headed Chromium methodology, ten successful rounds for every product,
+and verified pinned runtimes. With `--complete-input`, the homepage DTO exposes
+exactly five selectors: No Streaming RPS, Streaming RPS, LCP, JavaScript heap,
+and renderer-private memory. Without it, the DTO remains a single-suite export.
 
 Derive a WebUI-only state file from that compact summary with:
 
