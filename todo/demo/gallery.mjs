@@ -84,7 +84,7 @@ a { color: var(--demo-accent); }
 
 function variantMarkup(product) {
   return [
-    `<a class="demo-variant" href="${escapeHtml(product.basePath)}${ENTRY_ROUTE}">`,
+    `<a class="demo-variant" href="${escapeHtml(product.launchPath)}${ENTRY_ROUTE}">`,
     "<span>",
     `<span class="demo-variant-name">${escapeHtml(product.responseModeLabel)}</span><br>`,
     `<span class="demo-variant-detail">${escapeHtml(product.streaming)}</span>`,
@@ -126,6 +126,10 @@ export function renderGallery(products) {
     } times and hosted ${products.length} times: every application runs in both response-mode variants. `,
     "<strong>Streaming</strong> keeps each product's native progressive boundaries; ",
     "<strong>No streaming</strong> publishes exactly one fully collected HTML response.</p>",
+    '<p class="demo-lede">Opening a product hands it the root of this origin so it runs '
+      + "exactly as it does in the benchmark, with its own routes and asset URLs. One "
+      + "product is active per browser session: use the back button to return here and "
+      + "pick another.</p>",
     '<div class="demo-grid">',
     groups.map(cardMarkup).join(""),
     "</div>",
@@ -150,8 +154,9 @@ export function renderNotFound() {
     "</head>",
     "<body><main>",
     "<h1>Not found</h1>",
-    '<p class="demo-lede">This demo hosts each todo application under its own '
-      + '<code>/app/{product}</code> prefix. Pick one from the gallery.</p>',
+    '<p class="demo-lede">Every product is opened from <code>/app/{product}</code>, '
+      + "which hands that product the root of this origin for the rest of the session. "
+      + "Pick one from the gallery to start.</p>",
     '<p><a href="/">Back to the gallery</a></p>',
     "</main></body>",
     "</html>",
@@ -165,7 +170,7 @@ export function registryDocument(products) {
       Object.freeze({
         application: product.application,
         caseId: product.caseId,
-        entry: `${product.basePath}${ENTRY_ROUTE}`,
+        entry: `${product.launchPath}${ENTRY_ROUTE}`,
         id: product.id,
         label: product.label,
         renderer: product.renderer,

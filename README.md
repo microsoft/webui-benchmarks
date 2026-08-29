@@ -210,6 +210,16 @@ pnpm run preview:all
 
 The command prints each HTTPS URL and keeps every server alive until Ctrl+C.
 
+Host all 24 demo products (12 applications × both response modes) behind a
+single port, which is what the container image deploys:
+
+```bash
+pnpm run demo
+```
+
+See [`todo/demo/README.md`](todo/demo/README.md) for the routing model, the
+hardening the gateway applies, and the Docker/Azure Container App image.
+
 Browser outcomes are never folded into headline SSR scoring. Every official
 browser row uses HTTPS/HTTP2, real framework hydration, a fresh Chromium
 process/context/page, and the shared interaction sequence.
@@ -358,7 +368,8 @@ keeps `benchmarksJson` synchronized with `benchmarks`.
 
 See [`todo/shared/README.md`](./todo/shared/README.md) for the semantic fixture,
 [`todo/browser/README.md`](./todo/browser/README.md) for browser methodology,
-[`todo/servers/README.md`](./todo/servers/README.md) for runtime servers, and
+[`todo/servers/README.md`](./todo/servers/README.md) for runtime servers,
+[`todo/demo/README.md`](./todo/demo/README.md) for the hosted demo site, and
 [`todo/profile/README.md`](./todo/profile/README.md) for Rust renderer
 decomposition.
 
@@ -371,6 +382,7 @@ decomposition.
 └── todo/
     ├── apps/                   # WebUI and production framework apps
     ├── browser/                # Hydration and interaction measurements
+    ├── demo/                   # Single-container demo site for all 24 products
     ├── profile/                # Rust profiling harness and methodology
     ├── runner/                 # Build graph, RPS runner, schema, reporting
     ├── servers/                # Node, Bun, Deno, and Rust/Actix servers

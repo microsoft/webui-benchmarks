@@ -129,7 +129,7 @@ function demoProduct(benchmarkCase) {
   return Object.freeze({
     appId: benchmarkCase.appId,
     application: presentation.application,
-    basePath: `/app/${id}`,
+    launchPath: `/app/${id}`,
     caseId: benchmarkCase.id,
     family: presentation.family,
     id,
@@ -179,7 +179,7 @@ export function assertDemoRegistry(products) {
     if (!DEMO_RESPONSE_MODES.includes(product.responseMode)) {
       throw new Error(`${product.id} has an unknown response mode`);
     }
-    if (!/^\/app\/[\w.-]+$/u.test(product.basePath)) {
+    if (!/^\/app\/[\w.-]+$/u.test(product.launchPath)) {
       throw new Error(`${product.id} has an unsafe base path`);
     }
   }

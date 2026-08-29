@@ -1,0 +1,22 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+.git
+.github
+.tmp-verify
+**/node_modules
+**/target
+results
+coverage
+playwright-report
+test-results
+**/*.log
+todo/apps/*/dist
+todo/apps/*/.astro
+todo/apps/*/.next
+todo/apps/*/.nuxt
+todo/apps/*/.output
+todo/apps/*/.svelte-kit
+todo/apps/*/build
+todo/servers/generated
+.webui-local.json

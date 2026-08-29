@@ -59,10 +59,11 @@ export function splitBasePath(pathname) {
   if (!PRODUCT_ID_PATTERN.test(productId)) {
     return null;
   }
-  return Object.freeze({
-    path: boundary === -1 ? "" : remainder.slice(boundary),
-    productId,
-  });
+  const path = boundary === -1 ? "" : remainder.slice(boundary);
+  if (path.split("/").includes("..")) {
+    return null;
+  }
+  return Object.freeze({ path, productId });
 }
 
 export function pinnedProductId(cookieHeader) {

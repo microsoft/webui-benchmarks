@@ -38,14 +38,9 @@ export function parseDemoArgs(argv, environment = process.env) {
       "--rate-limit",
       environment.WEBUI_DEMO_RATE_LIMIT ?? "600",
     ),
-    skipClientBuild: environment.WEBUI_DEMO_SKIP_CLIENT_BUILD === "1",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--skip-client-build") {
-      options.skipClientBuild = true;
-      continue;
-    }
     const value = argv[index + 1];
     if (value === undefined) {
       throw new Error(`${argument} requires a value`);
@@ -78,9 +73,7 @@ export async function runDemo({
   const registry = new ProcessRegistry();
   const removeCleanup = installProcessCleanup(registry);
   progress(`Preparing ${products.length} demo products`);
-  const clients = await buildDemoClients({
-    progress: options.skipClientBuild ? () => {} : progress,
-  });
+  const clients = await buildDemoClients({ progress });
   const launched = await launchDemoProducts({
     clients,
     concurrency: options.concurrency,
