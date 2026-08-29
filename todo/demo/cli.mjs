@@ -15,6 +15,10 @@ import {
 } from "../runner/lib/process-tree.mjs";
 import { isMainModule } from "../servers/lib/cli.mjs";
 
+const KNOWN_OPTIONS = Object.freeze(
+  new Set(["--concurrency", "--host", "--port", "--rate-limit"]),
+);
+
 function parsePositiveInteger(name, value) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 0) {
@@ -41,6 +45,9 @@ export function parseDemoArgs(argv, environment = process.env) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (!KNOWN_OPTIONS.has(argument)) {
+      throw new Error(`Unknown option '${argument}'`);
+    }
     const value = argv[index + 1];
     if (value === undefined) {
       throw new Error(`${argument} requires a value`);
@@ -52,10 +59,8 @@ export function parseDemoArgs(argv, environment = process.env) {
       options.host = value;
     } else if (argument === "--concurrency") {
       options.concurrency = parsePositiveInteger("--concurrency", value);
-    } else if (argument === "--rate-limit") {
-      options.rateLimit = parsePositiveInteger("--rate-limit", value);
     } else {
-      throw new Error(`Unknown option '${argument}'`);
+      options.rateLimit = parsePositiveInteger("--rate-limit", value);
     }
   }
   if (options.port > 65_535) {

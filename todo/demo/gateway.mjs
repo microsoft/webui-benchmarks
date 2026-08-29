@@ -199,7 +199,6 @@ async function proxyRequest({
       abort.abort(new Error("The demo client disconnected"));
     }
   };
-  request.once("aborted", onClose);
   response.once("close", onClose);
   let upstream;
   try {
