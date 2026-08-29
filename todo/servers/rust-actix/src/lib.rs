@@ -1816,19 +1816,16 @@ pub async fn run(config: ServerConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_handler, current_request_timestamp, drive_streaming_response,
-        finish_render_job_inner, html_response, load_browser_route_assets,
-        materialize_request_state, materialize_webui_request_state, parse_states,
-        rewrite_request_state, rewrite_webui_request_state, stream_timing_header,
-        webui_render_state, ChannelStream, ChannelWriter, HydrationPlugin, ServerConfig,
-        CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, DYNAMIC_PATH, ENTRY_ID, HTML_CONTENT_TYPE,
-        INITIAL_CAPACITY, PROFILE_TIMESTAMP, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
+        current_request_timestamp, finish_render_job_inner, html_response,
+        load_browser_route_assets, materialize_request_state, parse_states, rewrite_request_state,
+        rewrite_webui_request_state, stream_timing_header, webui_render_state, ChannelStream,
+        ChannelWriter, CACHED_CACHE_CONTROL, DYNAMIC_CACHE_CONTROL, HTML_CONTENT_TYPE,
+        INITIAL_CAPACITY, STATE_VARIANT_COUNT, WEBUI_TODO_FIELDS,
     };
     use actix_web::body::MessageBody;
     use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE};
     use actix_web::web;
     use anyhow::anyhow;
-    use bytes::{BufMut, BytesMut};
     use futures_core::Stream as _;
     use serde::Serialize;
     use serde_json::{json, Map, Value};
@@ -1948,7 +1945,7 @@ mod tests {
 
     #[test]
     fn flush_does_not_mutate_earlier_split_chunks_when_a_later_write_forces_reserve() {
-        // The key `bytes` invariant this prototype depends on: once a chunk
+        // The key `bytes` invariant this writer depends on: once a chunk
         // has been split off (and is therefore shared, refcount > 1), any
         // later growth of the writer's own tail (`reserve`/`put_slice`
         // needing more capacity than remains) must allocate a fresh buffer
@@ -2020,9 +2017,8 @@ mod tests {
         drop(writer);
         let mut received = Vec::new();
         while let Some(chunk) = runtime.block_on(receiver.recv()) {
-            received.push(
-                chunk.unwrap_or_else(|error| panic!("stream chunk should succeed: {error}")),
-            );
+            received
+                .push(chunk.unwrap_or_else(|error| panic!("stream chunk should succeed: {error}")));
         }
         assert_eq!(received.len(), 7, "exactly seven chunks must be observed");
         for (chunk, expected_content) in received.iter().zip(expected.iter()) {
@@ -2036,8 +2032,8 @@ mod tests {
         // 320 requests worth of independent `ChannelWriter`s running across
         // real OS threads concurrently, each writing distinct, per-writer
         // content. Proves the `BytesMut`-backed writer has no shared state
-        // (allocator/global buffer aliasing, etc.) that could let one
-        // request's flush corrupt or observe another's bytes.
+        // that could let one request's flush corrupt or observe another's
+        // bytes.
         const CONCURRENT_REQUESTS: usize = 320;
         let handles: Vec<thread::JoinHandle<()>> = (0..CONCURRENT_REQUESTS)
             .map(|request_index| {
@@ -2423,5 +2419,4 @@ mod tests {
         assert!(first.ends_with('Z'));
         assert!(second > first);
     }
-
 }
