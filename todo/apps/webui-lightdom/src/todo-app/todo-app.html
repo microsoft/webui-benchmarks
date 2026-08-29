@@ -7,6 +7,7 @@
   data-route-page="work"
   @click="{onClick(e)}"
 >
+  <boundary name="workbench-ready" key="{{variantLabel}}">
   <todo-header
     :app="{{app}}"
     :variantlabel="{{variantLabel}}"
@@ -22,6 +23,7 @@
     @workspace-change="{onWorkspaceChange(e)}"
     data-component="workspace-intelligence"
   ></workspace-intelligence>
+  </boundary>
   <todo-toolbar
     :selection="{{selection}}"
     :toolbar="{{toolbar}}"

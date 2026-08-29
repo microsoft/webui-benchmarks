@@ -11,26 +11,33 @@ it.
 
 | # | Case id | Product SSR renderer | HTTP transport |
 | --- | --- | --- | --- |
-| 1 | `webui-rust-actix` | `webui-handler` `WebUIHandler` (Rust) | `actix-web` |
-| 2 | `webui-shadowdom-rust-actix` | `WebUIHandler` (Rust, Shadow DOM) | `actix-web` |
-| 3 | `webui-fast-rust-actix` | `WebUIHandler` (Rust, FAST V3) | `actix-web` |
-| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.render` | `Bun.serve` |
-| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.render` | `Deno.serve` |
-| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.render` | `node:http` |
+| 1 | `webui-rust-actix` | `webui-handler` `StreamingResponse` (Rust) | `actix-web` |
+| 2 | `webui-shadowdom-rust-actix` | `StreamingResponse` (Rust, Shadow DOM) | `actix-web` |
+| 3 | `webui-fast-rust-actix` | chunked `ResponseWriter` (Rust, FAST V3) | `actix-web` |
+| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Bun.serve` |
+| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Deno.serve` |
+| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` | `node:http` |
 | 7 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
 | 8 | `nuxt` | Nuxt production SSR | nitro node-server |
 | 9 | `next` | Next.js production App Router SSR | `next start` |
 | 10 | `astro` | Astro production SSR + hydrated Preact island | `@astrojs/node` |
-| 11 | `vue` | `@vue/server-renderer` `renderToString` | `node:http` |
-| 12 | `preact` | `preact-render-to-string` `renderToString` | `node:http` |
-| 13 | `react` | `react-dom/server` `renderToString` | `node:http` |
-| 14 | `react-tanstack` | React SSR + TanStack Router | `node:http` |
-| 15 | `solid` | `solid-js/web` `renderToString` | `node:http` |
+| 11 | `vue` | `@vue/server-renderer` `renderToWebStream` | `node:http` |
+| 12 | `preact` | `preact-render-to-string` `renderToReadableStream` | `node:http` |
+| 13 | `react` | `react-dom/server` `renderToReadableStream` | `node:http` |
+| 14 | `react-tanstack` | React stream + TanStack Router `renderRouterToStream` | `node:http` |
+| 15 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
 
 The WebUI rows isolate Light DOM, Shadow DOM, FAST V3 hydration, and four
 runtime hosts. The production framework rows use their real production build
 and server adapters. Product renderers without a canonical server share the
 same minimal `node:http` transport.
+
+Dynamic responses use each renderer's native streaming surface. WebUI Light
+and Shadow use semantic streaming boundaries; FAST uses a chunked writer;
+React, Preact, Vue, Solid, and TanStack use their native stream renderers.
+Next.js and Astro stream through their production servers. The synchronous
+SvelteKit and Nuxt routes retain their production servers' buffered
+`Content-Length` responses rather than simulating application suspension.
 
 Every browser product exposes the same three-page workspace:
 
@@ -75,40 +82,66 @@ and `node_modules` trees are intentionally untracked.
 
 ## WebUI dependency strategy
 
-The canonical manifests benchmark the released WebUI `0.0.26` npm packages
+The canonical manifests benchmark the released WebUI `0.0.27` npm packages
 and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
-To benchmark an existing WebUI checkout without editing tracked manifests:
+Use source-link mode for the fastest development loop. It builds WebUI,
+WebUI Framework, and WebUI Router from any checkout, mirrors their publishable
+outputs into an ignored same-volume snapshot, and redirects only those package
+links without changing pnpm's canonical dependency graph or lockfile. The
+same-volume snapshot also supports checkouts on another drive. Cargo commands
+patch the local Rust handler directly, and protocol builds use the checkout's
+native addon:
 
-```bash
-pnpm run webui:configure -- --path ../webui
-pnpm install --force --no-frozen-lockfile --lockfile=false
+```powershell
+pnpm run webui:local -- --path E:\path\to\webui
 pnpm run build
 ```
 
-To benchmark a tag, branch, or commit, let the configuration script create an
-untracked shallow checkout:
+`pnpm run build` refreshes the source snapshot automatically. It can also be
+refreshed explicitly with `pnpm run webui:sync`.
+
+Use `--ref` instead of `--path` to create an untracked shallow checkout:
 
 ```bash
-pnpm run webui:configure -- --ref v0.0.26
-pnpm install --force --no-frozen-lockfile --lockfile=false
+pnpm run webui:local -- --ref v0.0.27
 pnpm run build
 ```
 
-`.pnpmfile.cjs` links the two npm packages from that checkout. Cargo receives a
-per-command crates.io patch for `microsoft-webui-handler`, and the build plan
-builds the checkout's npm packages and Node-API addon before the benchmark.
-The local install leaves the canonical release lockfile untouched. Reports
-record the checkout commit and dirty state. Return to released dependencies
-with:
+Packed mode builds those three npm packages and installs immutable tarballs.
+It is slower but exercises the package contents that would be published while
+continuing to patch the Rust handler from the same checkout:
+
+```powershell
+pnpm run webui:packed -- --path E:\path\to\webui
+pnpm run build
+```
+
+Inspect the active checkout, commit, dirty state, package sources, Cargo patch,
+native addon, and whether a packed snapshot is stale with:
+
+```bash
+pnpm run webui:status
+```
+
+Run an arbitrary benchmark-workspace Cargo command with the same local patch:
+
+```bash
+pnpm run webui:cargo -- test --workspace
+```
+
+Both local modes leave the canonical release manifests and lockfiles untouched.
+Reports record the checkout commit, mode, artifacts, and dirty state. Return to
+released dependencies and restore the frozen lockfile with:
 
 ```bash
 pnpm run webui:release
-pnpm install --force --frozen-lockfile
 ```
 
-`WEBUI_CHECKOUT` may be set instead of creating `.webui-local.json`.
+`pnpm run webui:configure -- --path <checkout>` remains available as the
+lower-level configuration-only operation. Existing `WEBUI_CHECKOUT` workflows
+remain supported when the caller manages its pnpm links.
 
 ## Run the benchmark
 
@@ -118,12 +151,16 @@ Run the complete publication workflow from a clean commit:
 pnpm run bench:official
 ```
 
-This runs the official SSR matrix and ten-round headed browser matrix from the
-same source snapshot, then writes:
+This runs the official SSR matrix in **both** response-mode suites (see
+[Response-mode suites](#response-mode-suites) below), the ten-round headed
+browser matrix, and both summary exports, all from the same source snapshot.
+It writes:
 
-- `results/ssr-todo-official.json` - complete raw SSR/RPS evidence
-- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence
-- `results/benchmark-summary.json` - copy-ready WebUI homepage state
+- `results/ssr-todo-official.json` - complete raw progressive-suite SSR/RPS evidence
+- `results/ssr-todo-official-complete.json` - complete raw complete-suite SSR/RPS evidence
+- `results/ssr-todo-browser-outcomes-official.json` - complete raw browser evidence (progressive)
+- `results/benchmark-summary.json` - copy-ready WebUI homepage state (complete and progressive RPS + essential browser metrics)
+- `results/benchmark-summary-complete.json` - copy-ready homepage state for the complete suite (SSR only)
 
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
 wildcard:
@@ -143,13 +180,27 @@ pnpm run bench:ssr:save -- \
   --save-baseline 2026-08-25-windows-285k
 ```
 
+Run only one response-mode suite explicitly:
+
+```bash
+pnpm run bench:ssr:streaming:official   # progressive suite (native streaming, unchanged)
+pnpm run bench:ssr:complete:official    # complete suite (one buffered HTML response)
+```
+
 Run the separate browser outcome tier or the one-round hydration gate:
 
 ```bash
 pnpm run bench:browser:official -- \
   --output results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json
+pnpm run bench:browser:streaming:official
 pnpm run bench:hydration-gate
 ```
+
+`bench:browser:streaming:official` is an explicit alias for
+`bench:browser:official`: the browser suite always measures a product's real
+page load, so it always exercises native progressive/streaming boundaries
+end to end. There is no separate buffered-complete browser variant yet (see
+[Response-mode suites](#response-mode-suites)).
 
 Launch every built production browser product concurrently for manual testing:
 
@@ -162,6 +213,73 @@ The command prints each HTTPS URL and keeps every server alive until Ctrl+C.
 Browser outcomes are never folded into headline SSR scoring. Every official
 browser row uses HTTPS/HTTP2, real framework hydration, a fresh Chromium
 process/context/page, and the shared interaction sequence.
+
+## Response-mode suites
+
+The official 15-row product matrix is measured in two response-mode suites.
+Product identity (case id, app id, transport, runtime) never changes between
+them: only the response contract does. Every case exposes a `responseMode`
+field (`complete` or `progressive`), and reports never mix the two: a report's
+`policies.responseMode` and every one of its `cases[].responseMode` must
+agree, or `assertReportSchema`/`assertCaseMatrix` reject it.
+
+### Complete suite (`bench:ssr:complete:official`)
+
+All data is ready before the response starts; every product publishes exactly
+one fully collected HTML response. Primary metrics: completion
+requests/second, p95 latency, render CPU, response bytes, and memory.
+
+- **WebUI Rust (Light DOM, Shadow DOM, FAST V3)** always calls
+  `WebUIHandler::render` -- never `render_streaming` -- directly in the single
+  Actix worker and answers with one `Content-Length` response. It does not
+  allocate the progressive suite's render thread or projected worker-state
+  clone (`todo/servers/rust-actix/src/lib.rs`).
+- **WebUI JS runtimes (Bun/Deno/Node) and the controlled renderer tier**
+  (React, Vue, Preact, Solid, React + TanStack Router) call each app's own
+  `render()` adapter -- the same complete-response API (`renderToString`,
+  `renderRouterToString`, ...) they already shipped alongside `renderStream()`
+  -- instead of collecting the native stream (`todo/servers/lib/contract.mjs`).
+- **SvelteKit and Nuxt** were already buffered in the progressive suite (their
+  production adapters have no native streaming path), so both suites measure
+  the identical mechanism for them.
+- **Next.js and Astro** own their entire production HTTP server; there is no
+  in-repo request handler to call directly. The complete suite loads
+  `todo/runner/lib/response-buffer-preload.cjs` in that same process (via
+  `NODE_OPTIONS=--require`, never an external reverse proxy) to buffer every
+  `http.ServerResponse` write and publish the body in one piece, honestly
+  labeled `"...fully collected at the framework's own Node http.Server
+  response boundary..."` in the case's `renderer` string.
+
+### Progressive suite (`bench:ssr:streaming:official`, the historical default)
+
+Preserves every product's existing native streaming/progressive-boundary
+behavior unchanged: WebUI Light/Shadow DOM progressive boundaries, FAST V3
+native chunked delivery, React/Preact/Vue/Solid/TanStack native streams,
+Next/Astro native streaming, SvelteKit/Nuxt buffered (they have no native
+stream to preserve). Primary metrics: time to first meaningful boundary,
+FCP/LCP (browser suite), tail completion, and occupied render/CPU time.
+Completion RPS, bytes, and disclosed chunk/flush counts are secondary,
+disclosed costs -- not the primary ranking -- for this suite.
+
+Running `pnpm run bench:ssr:official` (no `--response-mode`) or calling
+`createCaseMatrix()` with no arguments is exactly this suite: response-mode
+selection is fully opt-in and changes nothing by default.
+
+### Async data-boundary follow-up (not yet active)
+
+The approved design also calls for a deterministic async data-boundary
+workload in the progressive suite: an above-the-fold shell/workbench that
+renders immediately, with the below-the-fold todo list resolving later through
+a shared, configured async readiness delay, driven for WebUI by its
+resumable `StreamingSession` boundary API. That API is not part of the
+canonical WebUI dependency pinned by this repository
+(`@microsoft/webui@0.0.27`; see `todo/runner/lib/cases.mjs`'s
+`ASYNC_DATA_BOUNDARY_CAPABILITY`). Rather than fake that workload against an
+unreleased API, this capability gap is disclosed as metadata
+(`status: "deferred-pending-webui-release"`) and the progressive suite
+continues to measure each product's existing native streaming boundaries
+unchanged. Implementing the async data-boundary workload is a version-gated
+follow-up once a WebUI release exposes that API.
 
 ## Result ownership and publishing
 
@@ -176,6 +294,7 @@ the homepage should include browser metrics:
 ```bash
 pnpm run export:summary -- \
   --input results/ssr-todo-2026-08-25-windows-285k.json \
+  --complete-input results/ssr-todo-2026-08-25-windows-285k-complete.json \
   --browser-input results/ssr-todo-browser-outcomes-2026-08-25-windows-285k.json \
   --output results/benchmark-summary.json
 ```
@@ -186,11 +305,12 @@ here. On Windows, an otherwise complete official report is intentionally marked
 `partial` because synchronous process sampling would perturb load measurements.
 The exporter accepts that status only when every case and round is complete and
 all unavailable telemetry has the runner's documented Windows sampler reason.
-When `--browser-input` is present, the exporter also requires matching source
-and fixture digests, the canonical 1,440×900 headed Chromium methodology, ten
-successful rounds for every product, and verified pinned runtimes. It adds FCP,
-LCP, JavaScript heap, and renderer-private-memory metrics without retaining
-stale browser data. Without that option, the DTO contains SSR throughput only.
+When `--browser-input` is present, the exporter also requires the same clean
+source commit, independently verified fixture integrity, the canonical
+1,440×900 headed Chromium methodology, ten successful rounds for every product,
+and verified pinned runtimes. With `--complete-input`, the homepage DTO exposes
+exactly five selectors: No Streaming RPS, Streaming RPS, LCP, JavaScript heap,
+and renderer-private memory. Without it, the DTO remains a single-suite export.
 
 Derive a WebUI-only state file from that compact summary with:
 

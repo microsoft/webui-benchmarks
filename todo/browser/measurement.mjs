@@ -578,6 +578,9 @@ function timingMetrics(raw, readiness) {
   const controlledRender = raw.serverTiming.find(
     ({ name }) => name === "browser-render",
   )?.duration;
+  const controlledStreamSetup = raw.serverTiming.find(
+    ({ name }) => name === "browser-stream-setup",
+  )?.duration;
   const requestToFirstByte = Number.isFinite(raw.requestStartMs)
       && Number.isFinite(raw.responseStartMs)
     ? raw.responseStartMs - raw.requestStartMs
@@ -613,6 +616,8 @@ function timingMetrics(raw, readiness) {
         ? "Server-Timing browser-render for an in-process controlled renderer"
         : Number.isFinite(adapterBackendHeaders)
           ? "Server-Timing browser-backend-headers; excludes the controlled document adapter"
+          : Number.isFinite(controlledStreamSetup)
+            ? "PerformanceNavigationTiming responseStart - requestStart for a controlled native stream; Server-Timing exposes setup separately"
           : "PerformanceNavigationTiming.responseStart - requestStart on the direct framework server",
       navigationReason,
     ),
@@ -942,9 +947,17 @@ export async function measureBrowserRound({
     }
     const responseBody = await response.body();
     const navigationCompletedAt = Date.now();
-    const sourceBytes = Number(
+    const explicitSourceBytes = Number(
       response.headers()["x-webui-browser-source-bytes"],
     );
+    const wrapperBytes = Number(
+      response.headers()["x-webui-browser-wrapper-bytes"],
+    );
+    const sourceBytes = Number.isFinite(explicitSourceBytes)
+      ? explicitSourceBytes
+      : Number.isFinite(wrapperBytes)
+        ? responseBody.byteLength - wrapperBytes
+        : undefined;
     const readiness = await waitForReadiness(page, browserCase);
     const initialJavascript = network.javascript();
     const fullHydration = await waitForFullHydration(page, browserCase);

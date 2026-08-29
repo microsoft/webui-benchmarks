@@ -27,12 +27,17 @@ export function build() {
 
 export function createRenderer() {
   rendererPromise ??= build().then(async ({ artifactPath, css }) => {
-    const { renderTodo } = await import(pathToFileURL(artifactPath).href);
+    const { renderTodo, renderTodoStream } = await import(
+      pathToFileURL(artifactPath).href
+    );
     return Object.freeze({
       ...metadata,
       css,
       render(state = defaultState, requestPath = "/dynamic") {
         return renderTodo(state, requestPath);
+      },
+      renderStream(state = defaultState, requestPath = "/dynamic", options) {
+        return renderTodoStream(state, requestPath, options);
       },
     });
   });

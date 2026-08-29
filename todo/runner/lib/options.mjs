@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { RESPONSE_MODES } from "./cases.mjs";
+
 const BASELINE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const RUNTIME_MODES = new Set(["local", "official"]);
 
@@ -79,6 +81,8 @@ export function parseOptions(argv, environment = process.env) {
   let saveBaseline = environment.WEBUI_BENCH_SAVE?.trim() || null;
   let runtimeMode =
     environment.WEBUI_BENCH_RUNTIME_MODE?.trim() || "local";
+  let responseMode =
+    environment.WEBUI_BENCH_RESPONSE_MODE?.trim() || RESPONSE_MODES.progressive;
   let serverCpu = environment.WEBUI_BENCH_SERVER_CPU === undefined
     ? null
     : positiveInteger(
@@ -105,6 +109,7 @@ export function parseOptions(argv, environment = process.env) {
     } else if (
       name === "--save-baseline"
       || name === "--runtime-mode"
+      || name === "--response-mode"
       || name === "--case"
       || name === "--connections"
       || name === "--duration"
@@ -123,6 +128,8 @@ export function parseOptions(argv, environment = process.env) {
         saveBaseline = parsed.value;
       } else if (name === "--runtime-mode") {
         runtimeMode = parsed.value;
+      } else if (name === "--response-mode") {
+        responseMode = parsed.value;
       } else if (name === "--case") {
         caseFilters.push(
           ...parsed.value
@@ -162,6 +169,9 @@ export function parseOptions(argv, environment = process.env) {
   if (!RUNTIME_MODES.has(runtimeMode)) {
     throw new Error("--runtime-mode must be 'local' or 'official'");
   }
+  if (!Object.values(RESPONSE_MODES).includes(responseMode)) {
+    throw new Error("--response-mode must be 'complete' or 'progressive'");
+  }
   if (saveBaseline !== null && !BASELINE_PATTERN.test(saveBaseline)) {
     throw new Error("--save-baseline has an invalid baseline name");
   }
@@ -179,6 +189,7 @@ export function parseOptions(argv, environment = process.env) {
     json,
     protocol,
     quick,
+    responseMode,
     runtimeMode,
     saveBaseline,
     scalingCores,

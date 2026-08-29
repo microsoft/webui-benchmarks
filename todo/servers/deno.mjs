@@ -15,6 +15,7 @@ import { createWebuiRouteController } from "./lib/webui-engine.mjs";
 export async function startDenoWebuiServer(options) {
   const controller = await createWebuiRouteController({
     addonPath: options.addonPath,
+    responseMode: options.responseMode,
     runtimeId: "deno",
     serverId: "deno-serve",
   });
@@ -30,7 +31,12 @@ export async function startDenoWebuiServer(options) {
     async (request) => {
       try {
         return toFetchResponse(
-          await dispatch(request.url, request.method, request.headers),
+          await dispatch(
+            request.url,
+            request.method,
+            request.headers,
+            { signal: request.signal },
+          ),
         );
       } catch (error) {
         return toFetchResponse(internalErrorResponse(error));

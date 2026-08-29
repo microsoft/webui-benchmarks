@@ -2,21 +2,69 @@
 // Licensed under the MIT license.
 
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { createRequestDispatcher, internalErrorResponse } from "./dispatch.mjs";
 import { serverAnnouncement } from "./cli.mjs";
 
-function writeResponse(response, result) {
+async function writeResponse(response, result) {
   response.writeHead(result.status, result.headers);
-  response.end(result.headOnly ? undefined : result.body);
+  if (result.headOnly) {
+    if (result.body instanceof ReadableStream) {
+      await result.body.cancel(
+        new Error("HEAD requests do not consume renderer streams"),
+      );
+    }
+    response.end();
+    return;
+  }
+  if (!(result.body instanceof ReadableStream)) {
+    response.end(result.headOnly ? undefined : result.body);
+    return;
+  }
+  await pipeline(Readable.fromWeb(result.body), response);
 }
 
 export async function startNodeHttp(controller, { host, port }) {
   const dispatch = createRequestDispatcher(controller);
   const server = createServer((request, response) => {
-    void dispatch(request.url ?? "/", request.method, request.headers).then(
-      (result) => writeResponse(response, result),
-      (error) => writeResponse(response, internalErrorResponse(error)),
-    );
+    void (async () => {
+      const abort = new AbortController();
+      let completed = false;
+      const onClose = () => {
+        if (!completed && !response.writableEnded) {
+          abort.abort(new Error("node:http response closed before rendering"));
+        }
+      };
+      response.once("close", onClose);
+      try {
+        const result = await dispatch(
+          request.url ?? "/",
+          request.method,
+          request.headers,
+          { signal: abort.signal },
+        );
+        if (abort.signal.aborted) {
+          if (result.body instanceof ReadableStream) {
+            await result.body.cancel(abort.signal.reason);
+          }
+          return;
+        }
+        await writeResponse(response, result);
+        completed = true;
+      } catch (error) {
+        if (response.destroyed) {
+          return;
+        }
+        if (response.headersSent) {
+          response.destroy(error);
+        } else {
+          await writeResponse(response, internalErrorResponse(error));
+        }
+      } finally {
+        response.off("close", onClose);
+      }
+    })();
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);

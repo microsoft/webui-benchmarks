@@ -7,7 +7,10 @@ import { join, win32 as windowsPath } from "node:path";
 import { runManagedCommand } from "./process-tree.mjs";
 import { BENCHMARK_ROOT, REPOSITORY_ROOT } from "./paths.mjs";
 import {
+  configuredWebuiAddonPath,
   configuredWebuiCheckout,
+  configuredWebuiConfiguration,
+  configuredWebuiMode,
   webuiCargoArguments,
   webuiSupportsOptimizedWriter,
 } from "../../shared/webui-dependency.mjs";
@@ -35,7 +38,12 @@ const pnpmCommand = process.platform === "win32"
   ? resolveWindowsCommand("pnpm")
   : "pnpm";
 const cargoCommand = process.platform === "win32" ? "cargo.exe" : "cargo";
+const webuiConfiguration = configuredWebuiConfiguration();
 const webuiCheckout = configuredWebuiCheckout();
+const webuiMode = configuredWebuiMode();
+const synchronizedSourcePackages = webuiConfiguration?.mode === "source"
+  && webuiConfiguration.packages !== null;
+const webuiAddonPath = configuredWebuiAddonPath(webuiCheckout);
 const optimizedWriter = webuiSupportsOptimizedWriter(webuiCheckout);
 
 function benchmarkCargoArguments(args) {
@@ -45,6 +53,21 @@ function benchmarkCargoArguments(args) {
       : args,
     webuiCheckout,
   );
+}
+
+function benchmarkCargoInvocation(args) {
+  const benchmarkArgs = optimizedWriter
+    ? [...args, "--features", "optimized-webui-writer"]
+    : args;
+  return webuiCheckout === null
+    ? {
+        args: benchmarkCargoArguments(args),
+        command: cargoCommand,
+      }
+    : {
+        args: [join("scripts", "webui-cargo.mjs"), ...benchmarkArgs],
+        command: process.execPath,
+      };
 }
 
 function quoteCommandArgument(argument) {
@@ -75,19 +98,26 @@ export function portableBuildDefinition(
 
 const definitions = Object.freeze({
   "webui-package": Object.freeze({
-    args: [
-      "--filter",
-      "@microsoft/webui",
-      "--filter",
-      "@microsoft/webui-framework",
-      "run",
-      "build",
-    ],
-    command: pnpmCommand,
-    cwd: webuiCheckout ?? REPOSITORY_ROOT,
+    args: synchronizedSourcePackages
+      ? [join("scripts", "configure-webui.mjs"), "--sync"]
+      : [
+          "--filter",
+          "@microsoft/webui",
+          "--filter",
+          "@microsoft/webui-framework",
+          "--filter",
+          "@microsoft/webui-router",
+          "run",
+          "build",
+        ],
+    command: synchronizedSourcePackages ? process.execPath : pnpmCommand,
+    cwd: synchronizedSourcePackages
+      ? REPOSITORY_ROOT
+      : webuiCheckout ?? REPOSITORY_ROOT,
     dependsOn: Object.freeze([]),
-    display:
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework run build",
+    display: synchronizedSourcePackages
+      ? "node scripts/configure-webui.mjs --sync"
+      : "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
     id: "webui-package",
   }),
   "native-addon": Object.freeze({
@@ -183,13 +213,12 @@ const definitions = Object.freeze({
     id: "state-pool",
   }),
   "rust-actix": Object.freeze({
-    args: benchmarkCargoArguments([
+    ...benchmarkCargoInvocation([
       "build",
       "--release",
       "-p",
       "ssr-framework-bench-todo-actix",
     ]),
-    command: cargoCommand,
     cwd: REPOSITORY_ROOT,
     dependsOn: Object.freeze(["webui", "state-pool"]),
     display:
@@ -197,7 +226,7 @@ const definitions = Object.freeze({
     id: "rust-actix",
   }),
   "tls-material": Object.freeze({
-    args: benchmarkCargoArguments([
+    ...benchmarkCargoInvocation([
       "build",
       "--release",
       "-p",
@@ -205,7 +234,6 @@ const definitions = Object.freeze({
       "--bin",
       "tls_material",
     ]),
-    command: cargoCommand,
     cwd: REPOSITORY_ROOT,
     dependsOn: Object.freeze([]),
     display:
@@ -266,10 +294,10 @@ const BUILD_ORDER = Object.freeze([
   "full-stack-astro",
 ]);
 
-function addWithDependencies(id, selected, localWebui) {
+function addWithDependencies(id, selected, localWebui, localWebuiSource) {
   if (
-    !localWebui
-    && (id === "webui-package" || id === "native-addon")
+    (!localWebui && (id === "webui-package" || id === "native-addon"))
+    || (!localWebuiSource && id === "webui-package")
   ) {
     return;
   }
@@ -278,15 +306,23 @@ function addWithDependencies(id, selected, localWebui) {
     throw new Error(`Unknown benchmark build '${id}'`);
   }
   const localDependencies = id === "webui"
-    ? ["webui-package", "native-addon"]
+    ? [
+        ...(localWebuiSource ? ["webui-package"] : []),
+        "native-addon",
+      ]
     : id === "webui-shadowdom"
-      ? ["webui-package"]
+      ? localWebuiSource ? ["webui-package"] : []
       : [];
   const dependencies = localWebui
     ? [...localDependencies, ...definition.dependsOn]
     : definition.dependsOn;
   for (const dependency of dependencies) {
-    addWithDependencies(dependency, selected, localWebui);
+    addWithDependencies(
+      dependency,
+      selected,
+      localWebui,
+      localWebuiSource,
+    );
   }
   selected.add(id);
 }
@@ -297,6 +333,7 @@ export function createBuildPlan(
     all = false,
     browser = false,
     localWebui = webuiCheckout !== null,
+    localWebuiSource = localWebui && webuiMode !== "packed",
   } = {},
 ) {
   const selected = new Set();
@@ -304,8 +341,8 @@ export function createBuildPlan(
   if (all) {
     for (const id of BUILD_ORDER) {
       if (
-        !localWebui
-        && (id === "webui-package" || id === "native-addon")
+        (!localWebui && (id === "webui-package" || id === "native-addon"))
+        || (!localWebuiSource && id === "webui-package")
       ) {
         continue;
       }
@@ -314,7 +351,12 @@ export function createBuildPlan(
   } else {
     for (const benchmarkCase of cases) {
       for (const buildId of benchmarkCase.buildIds) {
-        addWithDependencies(buildId, selected, localWebui);
+        addWithDependencies(
+          buildId,
+          selected,
+          localWebui,
+          localWebuiSource,
+        );
       }
     }
   }
@@ -336,6 +378,9 @@ export async function runBuildPlan(plan, { registry, progress = () => {} }) {
         env: {
           ...process.env,
           NODE_ENV: "production",
+          ...(webuiAddonPath === null
+            ? {}
+            : { WEBUI_ADDON_PATH: webuiAddonPath }),
         },
         registry,
       },

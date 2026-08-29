@@ -406,6 +406,8 @@ async function runCaseRound({
                   backend.announcement.browserSsrBundleBytes ?? null,
                 command: backend.command,
                 serverId: backend.announcement.serverId,
+                streaming: backend.announcement.streaming
+                  ?? browserCase.sourceCase.streaming,
                 workerCount: backend.announcement.workerCount,
               }),
               semanticValidation: measured.semanticValidation,
@@ -487,6 +489,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     ]),
   );
   const frameworkVersions = collectFrameworkVersions();
+  const webuiDependency = collectWebuiDependency();
   const registry = new ProcessRegistry();
   const disposeSignals = installProcessCleanup(registry);
   let builds = Object.freeze([]);
@@ -559,7 +562,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
           serverRenderer: clients.serverRenderers.get(browserCase.appId),
           verifiedRuntimes,
           viewport: options.viewport,
-          webuiDependency: collectWebuiDependency(),
+          webuiDependency,
         });
         browserVersion ??= rawRound.browserVersion ?? null;
         rawRounds.push(rawRound);
@@ -632,10 +635,15 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     environment: Object.freeze({
       machine: collectMachineMetadata(),
       tools: collectToolVersions(),
+      webuiDependency,
     }),
     fixture: Object.freeze({ hash: fixtureBefore }),
     mode: options.mode,
     rawRounds: Object.freeze(rawRounds),
+    // The browser suite always measures each product's real page load, so it
+    // always exercises native progressive/streaming boundaries end to end;
+    // there is no buffered-complete browser variant yet (see README.md).
+    responseMode: "progressive",
     roundOrder: Object.freeze(roundOrder),
     roundsPerApp: options.rounds,
     runtimePolicy,

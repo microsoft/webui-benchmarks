@@ -205,6 +205,40 @@ async function waitForHttp(url, launched, timeoutMilliseconds) {
   );
 }
 
+const RESPONSE_BUFFER_PRELOAD = resolve(
+  BENCHMARK_ROOT,
+  "todo",
+  "runner",
+  "lib",
+  "response-buffer-preload.cjs",
+);
+
+function withResponseModeEnv(env, responseMode, appId) {
+  if (
+    responseMode !== "complete"
+    || (appId !== "next" && appId !== "astro")
+  ) {
+    return env;
+  }
+  // Full-stack production servers (Next.js, Astro) own their HTTP server
+  // process end-to-end; there is no in-repo request handler to call
+  // render()/renderStream() on directly the way the controlled renderer and
+  // WebUI runtime tiers do. The complete suite instead loads a preload
+  // module inside that *same* process (never an external proxy) that
+  // buffers the framework's own Node http.ServerResponse writes and hands
+  // the fully collected body to the socket in one piece. See
+  // response-buffer-preload.cjs for the full rationale.
+  const existingRequire = env.NODE_OPTIONS?.trim();
+  const preload = RESPONSE_BUFFER_PRELOAD.replaceAll("\\", "/");
+  return {
+    ...env,
+    NODE_OPTIONS: existingRequire
+      ? `${existingRequire} --require "${preload}"`
+      : `--require "${preload}"`,
+    WEBUI_BENCH_RESPONSE_MODE: responseMode,
+  };
+}
+
 async function fullStackServer(benchmarkCase, options) {
   const app = loadFullStackMetadata(benchmarkCase.appId);
   const browserTls = options.browserTls === true;
@@ -225,17 +259,22 @@ async function fullStackServer(benchmarkCase, options) {
     : app.metadata.productionArgs.map((argument) =>
       argument.replace("{host}", "127.0.0.1").replace("{port}", String(port))
     );
+  const responseMode = browserTls ? "progressive" : benchmarkCase.responseMode;
   const launched = launchRaw(process.execPath, [entryPath, ...args], {
     cwd: app.appRoot,
-    env: {
-      ...process.env,
-      HOST: "127.0.0.1",
-      HOSTNAME: "127.0.0.1",
-      NITRO_HOST: "127.0.0.1",
-      NITRO_PORT: String(port),
-      NODE_ENV: "production",
-      PORT: String(port),
-    },
+    env: withResponseModeEnv(
+      {
+        ...process.env,
+        HOST: "127.0.0.1",
+        HOSTNAME: "127.0.0.1",
+        NITRO_HOST: "127.0.0.1",
+        NITRO_PORT: String(port),
+        NODE_ENV: "production",
+        PORT: String(port),
+      },
+      responseMode,
+      benchmarkCase.appId,
+    ),
     registry: options.registry,
   });
   const url = `${browserTls ? "https" : "http"}://127.0.0.1:${port}`;
@@ -259,6 +298,7 @@ async function fullStackServer(benchmarkCase, options) {
     appId: benchmarkCase.appId,
     cacheMode: "dynamic-and-cached",
     compression: false,
+    responseMode,
     routes: app.metadata.routes,
     runtimeId: "node",
     runtimeVersion: process.versions.node,
@@ -358,7 +398,11 @@ export async function launchCaseServer(
       ],
       {
         cwd: BENCHMARK_ROOT,
-        env: { ...process.env, NODE_ENV: "production" },
+        env: {
+          ...process.env,
+          NODE_ENV: "production",
+          WEBUI_BENCH_RESPONSE_MODE: benchmarkCase.responseMode,
+        },
         registry,
         timeoutMilliseconds,
       },
@@ -375,6 +419,9 @@ export async function launchCaseServer(
     }
     if (benchmarkCase.launcher.plugin !== undefined) {
       args.push("--plugin", benchmarkCase.launcher.plugin);
+    }
+    if (!browserTls && benchmarkCase.responseMode !== undefined) {
+      args.push("--response-mode", benchmarkCase.responseMode);
     }
     return announcedServer(
       rustBinaryPath(),
@@ -393,7 +440,11 @@ export async function launchCaseServer(
     );
   }
   const runtime = runtimeCommand(benchmarkCase);
-  const env = { ...process.env, NODE_ENV: "production" };
+  const env = {
+    ...process.env,
+    NODE_ENV: "production",
+    WEBUI_BENCH_RESPONSE_MODE: benchmarkCase.responseMode,
+  };
   if (benchmarkCase.appId === "webui") {
     env.WEBUI_ADDON_PATH = (await resolveNativeAddon()).path;
   }
@@ -422,6 +473,15 @@ export function assertServerMetadata(benchmarkCase, metadata) {
         `${benchmarkCase.id} metadata ${name} expected ${expected}, received ${metadata[name]}`,
       );
     }
+  }
+  if (
+    benchmarkCase.responseMode !== undefined
+    && metadata.responseMode !== undefined
+    && metadata.responseMode !== benchmarkCase.responseMode
+  ) {
+    throw new Error(
+      `${benchmarkCase.id} launched in response mode '${metadata.responseMode}', expected '${benchmarkCase.responseMode}'`,
+    );
   }
   if (metadata.workerCount !== 1) {
     throw new Error(`${benchmarkCase.id} must run exactly one server worker`);

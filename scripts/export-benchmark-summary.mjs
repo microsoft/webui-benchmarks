@@ -9,7 +9,6 @@ import {
   createCaseMatrix,
   OFFICIAL_CASE_COUNT,
 } from "../todo/runner/lib/cases.mjs";
-import { createBuildPlan } from "../todo/runner/lib/builds.mjs";
 import {
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../todo/runner/lib/metrics.mjs";
@@ -26,13 +25,11 @@ import { isMainModule } from "../todo/servers/lib/cli.mjs";
 import { loadRuntimePins } from "../todo/servers/verify-runtimes.mjs";
 import {
   createBrowserSummaryEvidence,
+  expectedOfficialBuildIds,
 } from "./lib/browser-benchmark-summary.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const officialCases = createCaseMatrix();
-const officialBuildIds = Object.freeze(
-  createBuildPlan(officialCases, { localWebui: false }).map(({ id }) => id),
-);
 const officialCaseIds = Object.freeze(
   officialCases.map((benchmarkCase) => benchmarkCase.id),
 );
@@ -120,8 +117,10 @@ function responseByteProfilesEqual(actual, expected) {
 }
 
 function hasCanonicalProtocol(report) {
+  const expectedBuildIds = expectedOfficialBuildIds(report);
   const config = report.config;
-  return config?.build === true
+  return expectedBuildIds !== null
+    && config?.build === true
     && config.connections === DEFAULT_PROTOCOL.connections
     && config.durationSeconds === DEFAULT_PROTOCOL.durationSeconds
     && config.loadWorkers === DEFAULT_PROTOCOL.loadWorkers
@@ -135,7 +134,7 @@ function hasCanonicalProtocol(report) {
     && config.warmupSeconds === DEFAULT_PROTOCOL.warmupSeconds
     && arraysEqual(config.scalingCores, [1])
     && config.serverCpu === 0
-    && hasExactIds(report.builds, officialBuildIds, ({ id }) => id)
+    && hasExactIds(report.builds, expectedBuildIds, ({ id }) => id)
     && report.builds.every(({ status }) => status === "ok");
 }
 
@@ -687,7 +686,7 @@ function renderRows(rows, browserEvidence, warnings) {
   });
 }
 
-export function buildBenchmarkSummary(report, browserReport = null) {
+function buildSingleBenchmarkSummary(report, browserReport = null) {
   assertReportSchema(report);
   if (
     !isCanonicalOfficialReport(report)
@@ -698,6 +697,12 @@ export function buildBenchmarkSummary(report, browserReport = null) {
   ) {
     throw new Error(
       "Summary export requires a clean, complete, unfiltered canonical official report; partial reports are allowed only for documented process telemetry or disclosed fixed-load saturation warnings",
+    );
+  }
+  const responseMode = report.policies?.responseMode ?? "progressive";
+  if (responseMode === "complete" && browserReport !== null) {
+    throw new Error(
+      "Do not merge browser-derived progressive UX evidence into a complete-suite (buffered, one-response) summary; export them as separate result files",
     );
   }
   const browserEvidence = createBrowserSummaryEvidence(report, browserReport);
@@ -712,9 +717,13 @@ export function buildBenchmarkSummary(report, browserReport = null) {
   const method = methodology(report);
   const rpsLabel = `${report.config.connections}-connection RPS`;
   const benchmarks = {
+    asyncDataBoundary:
+      report.capabilities?.asyncDataBoundary ?? null,
     description:
       browserEvidence?.description
-      ?? "Compare the complete product matrix by single-core server throughput.",
+      ?? (responseMode === "complete"
+        ? "Compare the complete product matrix by single-core completion throughput: every product publishes exactly one fully collected HTML response."
+        : "Compare the complete product matrix by single-core server throughput."),
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: method,
@@ -736,12 +745,15 @@ export function buildBenchmarkSummary(report, browserReport = null) {
       ...(browserEvidence?.metrics ?? []),
     ],
     rows: renderRows(rows, browserEvidence, warnings),
+    responseMode,
     saturationWarnings: warnings,
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription:
       "Dynamic SSR throughput from one timeboxed 20-second measured round.",
     selectedMetricLabel: rpsLabel,
-    title: "Same workload. Choose the metric.",
+    title: responseMode === "complete"
+      ? "Same workload, one complete response. Choose the metric."
+      : "Same workload. Choose the metric.",
   };
   return {
     benchmarks,
@@ -749,16 +761,178 @@ export function buildBenchmarkSummary(report, browserReport = null) {
   };
 }
 
+function matchingResponseModeReports(progressiveReport, completeReport) {
+  const fields = [
+    "connections",
+    "durationSeconds",
+    "loadWorkers",
+    "rounds",
+    "runtimeMode",
+    "saturationDurationSeconds",
+    "serverCpu",
+    "warmupSeconds",
+  ];
+  const machineFields = [
+    "architecture",
+    "cpuCount",
+    "cpuModel",
+    "hostname",
+    "osPlatform",
+    "osRelease",
+    "processPlatform",
+    "totalMemoryBytes",
+  ];
+  return progressiveReport.policies?.responseMode === "progressive"
+    && completeReport.policies?.responseMode === "complete"
+    && progressiveReport.sourceRevision?.commit
+      === completeReport.sourceRevision?.commit
+    && progressiveReport.fixture?.stateVariants
+      === completeReport.fixture?.stateVariants
+    && fields.every((field) =>
+      progressiveReport.config?.[field] === completeReport.config?.[field]
+    )
+    && machineFields.every((field) =>
+      progressiveReport.machine?.[field] === completeReport.machine?.[field]
+    )
+    && arraysEqual(
+      progressiveReport.config?.saturationConnections,
+      completeReport.config?.saturationConnections,
+    )
+    && arraysEqual(
+      progressiveReport.config?.scalingCores,
+      completeReport.config?.scalingCores,
+    )
+    && JSON.stringify(progressiveReport.versions?.webuiDependency ?? null)
+      === JSON.stringify(completeReport.versions?.webuiDependency ?? null);
+}
+
+function combinedBenchmarkSummary(progressive, complete) {
+  const progressiveRps = progressive.benchmarks.metrics.find(
+    ({ id }) => id === "requestsPerSecond",
+  );
+  const completeRps = complete.benchmarks.metrics.find(
+    ({ id }) => id === "requestsPerSecond",
+  );
+  if (progressiveRps === undefined || completeRps === undefined) {
+    throw new Error("Both response modes must include requests-per-second data");
+  }
+  const browserMetricIds = new Set([
+    "largestContentfulPaintMs",
+    "jsHeapUsedBytes",
+    "rendererPrivateBytes",
+  ]);
+  const browserMetrics = progressive.benchmarks.metrics.filter(({ id }) =>
+    browserMetricIds.has(id)
+  );
+  if (browserMetrics.length !== browserMetricIds.size) {
+    throw new Error("Combined benchmark summary requires LCP, JS heap, and renderer private bytes");
+  }
+
+  const progressiveRows = new Map(
+    progressive.benchmarks.rows.map((row) => [row.caseId, row]),
+  );
+  const rows = complete.benchmarks.rows.map((completeRow) => {
+    const progressiveRow = progressiveRows.get(completeRow.caseId);
+    if (progressiveRow === undefined) {
+      throw new Error(`Progressive summary is missing ${completeRow.caseId}`);
+    }
+    return {
+      ...completeRow,
+      metrics: {
+        noStreamingRequestsPerSecond:
+          completeRow.metrics.requestsPerSecond,
+        streamingRequestsPerSecond:
+          progressiveRow.metrics.requestsPerSecond,
+        ...Object.fromEntries(
+          browserMetrics.map(({ id }) => [id, progressiveRow.metrics[id]]),
+        ),
+      },
+    };
+  });
+  const metrics = [
+    {
+      ...completeRps,
+      description:
+        "Dynamic SSR throughput when each framework sends one fully collected HTML response without progressive boundaries.",
+      id: "noStreamingRequestsPerSecond",
+      label: "No Streaming RPS",
+      selected: true,
+    },
+    {
+      ...progressiveRps,
+      description:
+        "Dynamic SSR throughput while native progressive or streaming boundaries remain enabled.",
+      id: "streamingRequestsPerSecond",
+      label: "Streaming RPS",
+      selected: false,
+    },
+    ...browserMetrics.map((metric) => ({ ...metric, selected: false })),
+  ];
+  const benchmarks = {
+    ...progressive.benchmarks,
+    description:
+      "Compare the same product workload in complete and progressive response modes, then inspect the three browser cost metrics that matter most.",
+    hasUnavailable: rows.some(({ metrics: rowMetrics }) =>
+      metrics.some(({ id }) => !rowMetrics[id]?.available)
+    ),
+    methodology: completeRps.methodology,
+    metricSummary: completeRps.summary,
+    metrics,
+    responseMode: "comparison",
+    responseModes: ["complete", "progressive"],
+    rows,
+    saturationWarnings: {
+      noStreaming: complete.benchmarks.saturationWarnings,
+      streaming: progressive.benchmarks.saturationWarnings,
+    },
+    selectedMetric: "noStreamingRequestsPerSecond",
+    selectedMetricDescription:
+      "Dynamic SSR throughput when each framework sends one fully collected HTML response without progressive boundaries.",
+    selectedMetricLabel: "No Streaming RPS",
+    title: "Complete response or streaming boundaries. Choose the metric.",
+  };
+  return {
+    benchmarks,
+    benchmarksJson: JSON.stringify(benchmarks),
+  };
+}
+
+export function buildBenchmarkSummary(
+  report,
+  browserReport = null,
+  completeReport = null,
+) {
+  const progressive = buildSingleBenchmarkSummary(report, browserReport);
+  if (completeReport === null) {
+    return progressive;
+  }
+  const complete = buildSingleBenchmarkSummary(completeReport);
+  if (!matchingResponseModeReports(report, completeReport)) {
+    throw new Error(
+      "Combined benchmark summary requires matching progressive and complete official reports",
+    );
+  }
+  return combinedBenchmarkSummary(progressive, complete);
+}
+
 export async function exportBenchmarkSummary(
   inputPath,
   outputPath,
   browserInputPath = undefined,
+  completeInputPath = undefined,
 ) {
   const report = JSON.parse(await readFile(inputPath, "utf8"));
   const browserReport = browserInputPath === undefined
     ? null
     : JSON.parse(await readFile(browserInputPath, "utf8"));
-  const summary = buildBenchmarkSummary(report, browserReport);
+  const completeReport = completeInputPath === undefined
+    ? null
+    : JSON.parse(await readFile(completeInputPath, "utf8"));
+  const summary = buildBenchmarkSummary(
+    report,
+    browserReport,
+    completeReport,
+  );
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   return summary;
@@ -779,7 +953,7 @@ function option(argv, name) {
 export async function main(argv = process.argv.slice(2)) {
   if (argv.includes("--help")) {
     process.stdout.write(
-      "Usage: node scripts/export-benchmark-summary.mjs --input <report.json> [--browser-input <browser-report.json>] [--output <benchmark-summary.json>]\n",
+      "Usage: node scripts/export-benchmark-summary.mjs --input <progressive-report.json> [--complete-input <complete-report.json>] [--browser-input <browser-report.json>] [--output <benchmark-summary.json>]\n",
     );
     return null;
   }
@@ -792,11 +966,20 @@ export async function main(argv = process.argv.slice(2)) {
   const browserInputPath = browserInput === undefined
     ? undefined
     : resolve(repositoryRoot, browserInput);
+  const completeInput = option(argv, "--complete-input");
+  const completeInputPath = completeInput === undefined
+    ? undefined
+    : resolve(repositoryRoot, completeInput);
   const outputPath = resolve(
     repositoryRoot,
     option(argv, "--output") ?? defaultOutputPath,
   );
-  await exportBenchmarkSummary(inputPath, outputPath, browserInputPath);
+  await exportBenchmarkSummary(
+    inputPath,
+    outputPath,
+    browserInputPath,
+    completeInputPath,
+  );
   process.stdout.write(`${outputPath}\n`);
   return outputPath;
 }

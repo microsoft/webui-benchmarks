@@ -4,7 +4,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { controlledDocument } from "../controlled-browser-server.mjs";
+import {
+  controlledDocument,
+  controlledDocumentStream,
+} from "../controlled-browser-server.mjs";
+import { controlledDocumentWrapperBytes } from "../../shared/document.mjs";
+import { collectByteStream } from "../../shared/streaming.mjs";
 
 const options = {
   appId: "react",
@@ -61,4 +66,75 @@ test("wraps fragment-only renderers in the controlled browser document", () => {
     /<div id="todo-browser-root"><todo-app id="todo-browser-root"><\/todo-app><\/div>/u,
   );
   assert.match(document, /<link rel="stylesheet" href="\/__browser\/styles\.css">/u);
+});
+
+test("streams fragment renderers between the controlled shell and state", async () => {
+  const fragment = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("<todo-app>"));
+      controller.enqueue(new TextEncoder().encode("</todo-app>"));
+      controller.close();
+    },
+  });
+  const document = Buffer.from(
+    await collectByteStream(
+      controlledDocumentStream({ ...options, fragment }),
+    ),
+  ).toString("utf8");
+  assert.match(
+    document,
+    /<div id="todo-browser-root"><todo-app><\/todo-app><\/div>/u,
+  );
+  assert.match(document, /id="todo-bench-initial-state"/u);
+  assert.match(document, /\\u003c\/script>/u);
+  assert.match(document, /\/__browser\/react\.js/u);
+  assert.equal(
+    Buffer.byteLength(document) - Buffer.byteLength("<todo-app></todo-app>"),
+    controlledDocumentWrapperBytes(options),
+  );
+});
+
+test("cancels an unopened fragment when the controlled shell is abandoned", async () => {
+  let cancelled = false;
+  const fragment = new ReadableStream({
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const stream = controlledDocumentStream({ ...options, fragment });
+  const reader = stream.getReader();
+  const prefix = await reader.read();
+  assert.equal(prefix.done, false);
+  await reader.cancel(new Error("abandoned after shell"));
+  assert.equal(cancelled, true);
+});
+
+test("cancels a fragment while its read is pending", async () => {
+  let markPulling;
+  let markCancelled;
+  const pulling = new Promise((resolve) => {
+    markPulling = resolve;
+  });
+  const cancelled = new Promise((resolve) => {
+    markCancelled = resolve;
+  });
+  const fragment = new ReadableStream({
+    cancel(reason) {
+      markCancelled(reason);
+    },
+    pull() {
+      markPulling();
+      return new Promise(() => {});
+    },
+  });
+  const stream = controlledDocumentStream({ ...options, fragment });
+  const reader = stream.getReader();
+  await reader.read();
+  const pendingRead = reader.read();
+  await pulling;
+  const reason = new Error("cancel pending fragment");
+  const cancellation = reader.cancel(reason);
+  assert.equal(await cancelled, reason);
+  await cancellation;
+  await pendingRead;
 });

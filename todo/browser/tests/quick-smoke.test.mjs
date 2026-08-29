@@ -84,7 +84,7 @@ test(
       const webuiTimingNames = webuiRound.navigationTiming.serverTiming.map(
         ({ name }) => name,
       );
-      assert.ok(webuiTimingNames.includes("webui-render"));
+      assert.ok(webuiTimingNames.includes("webui-stream-setup"));
       assert.equal(webuiTimingNames.includes("browser-adapter-total"), false);
       assert.equal(webuiRound.server.serverId, "actix");
       assert.equal(shadowRound.status, "ok", shadowRound.reason);

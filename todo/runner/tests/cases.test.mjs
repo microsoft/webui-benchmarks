@@ -4,11 +4,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
   HEADLINE_INPUT_POLICY,
   NATURAL_PAYLOAD_POLICY,
   OFFICIAL_CASE_COUNT,
   OFFICIAL_MATRIX_ID,
   PRODUCT_KINDS,
+  RESPONSE_MODES,
   assertCaseMatrix,
   createCaseMatrix,
   filterCases,
@@ -135,13 +137,14 @@ test("metadata separates the product SSR renderer from its transport", () => {
   assert.deepEqual(
     renderers.map((benchmarkCase) => benchmarkCase.renderer),
     [
-      "@vue/server-renderer renderToString",
-      "preact-render-to-string renderToString",
-      "react-dom/server renderToString",
-      "react-dom/server renderToString + @tanstack/react-router",
-      "solid-js/web renderToString",
+      "@vue/server-renderer renderToWebStream",
+      "preact-render-to-string renderToReadableStream",
+      "react-dom/server renderToReadableStream",
+      "react-dom/server stream + @tanstack/react-router renderRouterToStream",
+      "solid-js/web renderToStream",
     ],
   );
+  assert.ok(renderers.every(({ streaming }) => streaming === "native"));
 });
 
 test("framework rows keep their own production servers", () => {
@@ -159,6 +162,10 @@ test("framework rows keep their own production servers", () => {
         && benchmarkCase.serverId === benchmarkCase.appId,
     ),
   );
+  assert.deepEqual(
+    frameworks.map(({ streaming }) => streaming),
+    ["buffered", "buffered", "native", "native"],
+  );
 });
 
 test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
@@ -174,6 +181,17 @@ test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
       "Bun.serve",
       "Deno.serve",
       "node:http",
+    ],
+  );
+  assert.deepEqual(
+    webui.map(({ streaming }) => streaming),
+    [
+      "progressive-boundaries",
+      "progressive-boundaries",
+      "native-chunks",
+      "progressive-boundaries",
+      "progressive-boundaries",
+      "progressive-boundaries",
     ],
   );
   assert.deepEqual(
@@ -211,6 +229,84 @@ test("assertCaseMatrix rejects any deviation from the official contract", () => 
   );
 });
 
+test("the default matrix is the progressive suite and keeps identical ids", () => {
+  const matrix = createCaseMatrix();
+  assert.ok(
+    matrix.every(
+      (benchmarkCase) => benchmarkCase.responseMode === RESPONSE_MODES.progressive,
+    ),
+  );
+  assert.deepEqual(
+    matrix.map((benchmarkCase) => benchmarkCase.id),
+    EXPECTED_ROWS,
+  );
+});
+
+test("createCaseMatrix rejects unknown response modes", () => {
+  assert.throws(
+    () => createCaseMatrix({ responseMode: "eventual" }),
+    /Unknown response mode/u,
+  );
+});
+
+test("the complete suite keeps product identity but publishes one buffered response", () => {
+  const progressive = createCaseMatrix();
+  const complete = createCaseMatrix({ responseMode: RESPONSE_MODES.complete });
+  assert.deepEqual(
+    complete.map((benchmarkCase) => benchmarkCase.id),
+    progressive.map((benchmarkCase) => benchmarkCase.id),
+  );
+  assert.ok(
+    complete.every(
+      (benchmarkCase) => benchmarkCase.responseMode === RESPONSE_MODES.complete,
+    ),
+  );
+  assert.ok(
+    complete.every(
+      (benchmarkCase) => benchmarkCase.launcher.responseMode === RESPONSE_MODES.complete,
+    ),
+  );
+  // SvelteKit and Nuxt never had a native streaming path to collect, so their
+  // renderer/streaming labels are identical between suites.
+  const unchanged = ["sveltekit", "nuxt"];
+  for (const id of unchanged) {
+    const [before] = progressive.filter((benchmarkCase) => benchmarkCase.id === id);
+    const [after] = complete.filter((benchmarkCase) => benchmarkCase.id === id);
+    assert.equal(after.streaming, before.streaming, id);
+    assert.equal(after.renderer, before.renderer, id);
+  }
+  // Every other row must report a buffered (collected) response and must
+  // describe a genuinely different, non-streaming rendering mechanism than
+  // its progressive-suite counterpart.
+  for (const after of complete) {
+    if (unchanged.includes(after.id)) {
+      continue;
+    }
+    assert.equal(after.streaming, "buffered", after.id);
+    const [before] = progressive.filter(
+      (benchmarkCase) => benchmarkCase.id === after.id,
+    );
+    assert.notEqual(after.renderer, before.renderer, after.id);
+  }
+});
+
+test("assertCaseMatrix rejects a matrix that mixes response modes", () => {
+  const complete = createCaseMatrix({ responseMode: RESPONSE_MODES.complete });
+  const progressive = createCaseMatrix();
+  assert.throws(
+    () => assertCaseMatrix([...complete.slice(1), progressive[0]]),
+    /must not mix response modes/u,
+  );
+});
+
+test("the async data-boundary capability is disclosed, not faked as active", () => {
+  assert.equal(
+    ASYNC_DATA_BOUNDARY_CAPABILITY.status,
+    "deferred-pending-webui-release",
+  );
+  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.27");
+});
+
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {
   const matrix = createCaseMatrix();
   assert.equal(filterCases(matrix, ["react"]).length, 1);
@@ -231,11 +327,11 @@ test("build plan deduplicates exact production and release commands", () => {
     "webui-fast-rust-actix",
     "next",
   ]);
-  const plan = createBuildPlan(selected);
+  const plan = createBuildPlan(selected, { localWebui: false });
   const commands = plan.map((entry) => entry.display);
   assert.equal(
     commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework run build",
+      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
     ),
     false,
   );
@@ -257,16 +353,23 @@ test("build plan deduplicates exact production and release commands", () => {
 
 test("local WebUI builds are explicit build-plan dependencies", () => {
   const selected = filterCases(createCaseMatrix(), ["webui-node-http"]);
-  const commands = createBuildPlan(selected, { localWebui: true })
-    .map((entry) => entry.display);
-  assert.ok(
-    commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework run build",
-    ),
-  );
+  const plan = createBuildPlan(selected, { localWebui: true });
+  const commands = plan.map((entry) => entry.display);
+  assert.ok(plan.some(({ id }) => id === "webui-package"));
   assert.ok(
     commands.includes("cargo build --release -p microsoft-webui-node"),
   );
+});
+
+test("packed WebUI builds consume artifacts without rebuilding package sources", () => {
+  const selected = filterCases(createCaseMatrix(), ["webui-node-http"]);
+  const ids = createBuildPlan(selected, {
+    localWebui: true,
+    localWebuiSource: false,
+  }).map(({ id }) => id);
+  assert.equal(ids.includes("webui-package"), false);
+  assert.equal(ids.includes("native-addon"), true);
+  assert.equal(ids.includes("webui"), true);
 });
 
 test("browser build plan always includes native TLS material", () => {

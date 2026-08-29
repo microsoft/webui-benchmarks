@@ -369,6 +369,14 @@ export function validateBrowserReport(report) {
   if (report.tier?.id !== BROWSER_TIER || report.tier?.headline !== false) {
     errors.push("tier must be browser-secondary and non-headline");
   }
+  if (
+    report.responseMode !== undefined
+    && report.responseMode !== "progressive"
+  ) {
+    errors.push(
+      "the browser suite only measures the progressive suite's native streaming today",
+    );
+  }
   validateMode(report, errors);
   if (
     report.fixture?.hash?.algorithm !== "sha256"

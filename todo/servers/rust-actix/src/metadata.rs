@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+use crate::config::ResponseMode;
 use crate::{SERVER_SCHEMA, STATE_VARIANT_COUNT};
 use serde::Serialize;
 
@@ -45,6 +46,7 @@ pub(crate) struct ReadyMetadata<'a> {
     cache_mode: &'a str,
     input_policy: &'a str,
     response_bytes: ResponseBytes,
+    response_mode: &'a str,
     routes: Routes<'a>,
     runtime_id: &'a str,
     runtime_version: &'a str,
@@ -52,6 +54,7 @@ pub(crate) struct ReadyMetadata<'a> {
     server_id: &'a str,
     state_variant_count: usize,
     status: &'a str,
+    streaming: &'a str,
     worker_count: usize,
 }
 
@@ -68,6 +71,7 @@ pub(crate) fn build_metadata(
     lengths: Vec<usize>,
     cached: usize,
     app_id: &'static str,
+    response_mode: ResponseMode,
 ) -> ReadyMetadata<'static> {
     let minimum = lengths.iter().copied().min().unwrap_or_default();
     let maximum = lengths.iter().copied().max().unwrap_or_default();
@@ -90,6 +94,7 @@ pub(crate) fn build_metadata(
                 minimum,
             },
         },
+        response_mode: response_mode.as_str(),
         routes: Routes {
             activity: "/activity",
             cached: "/cached",
@@ -103,6 +108,19 @@ pub(crate) fn build_metadata(
         server_id: "actix",
         state_variant_count: STATE_VARIANT_COUNT,
         status: "ready",
+        streaming: match response_mode {
+            // The complete suite always renders through WebUIHandler::render
+            // and publishes one fully collected response for every WebUI
+            // family case (Light DOM, Shadow DOM, and FAST V3 alike).
+            ResponseMode::Complete => "buffered",
+            ResponseMode::Progressive => {
+                if app_id == "webui" {
+                    "progressive-boundaries"
+                } else {
+                    "native-chunks"
+                }
+            }
+        },
         worker_count: 1,
     }
 }
@@ -110,17 +128,20 @@ pub(crate) fn build_metadata(
 #[cfg(test)]
 mod tests {
     use super::build_metadata;
+    use crate::config::ResponseMode;
     use crate::STATE_VARIANT_COUNT;
 
     #[test]
     fn metadata_reports_runtime_cache_and_response_sizes() {
         let lengths = (100..100 + STATE_VARIANT_COUNT).collect::<Vec<_>>();
-        let metadata = build_metadata(lengths, 99, "webui");
+        let metadata = build_metadata(lengths, 99, "webui", ResponseMode::Progressive);
         assert_eq!(metadata.runtime_id, "rust");
         assert_eq!(metadata.server_id, "actix");
         assert_eq!(metadata.app_id, "webui");
         assert_eq!(metadata.cache_mode, "dynamic-and-cached");
         assert_eq!(metadata.state_variant_count, STATE_VARIANT_COUNT);
+        assert_eq!(metadata.streaming, "progressive-boundaries");
+        assert_eq!(metadata.response_mode, "progressive");
         assert_eq!(metadata.response_bytes.cached, 99);
         assert_eq!(metadata.response_bytes.dynamic.minimum, 100);
         assert_eq!(
@@ -132,7 +153,33 @@ mod tests {
 
     #[test]
     fn metadata_identifies_the_fast_v3_app() {
-        let metadata = build_metadata(vec![100; STATE_VARIANT_COUNT], 99, "webui-fast");
+        let metadata = build_metadata(
+            vec![100; STATE_VARIANT_COUNT],
+            99,
+            "webui-fast",
+            ResponseMode::Progressive,
+        );
         assert_eq!(metadata.app_id, "webui-fast");
+        assert_eq!(metadata.streaming, "native-chunks");
+    }
+
+    #[test]
+    fn metadata_reports_the_complete_suite_as_buffered_for_every_app() {
+        let webui = build_metadata(
+            vec![100; STATE_VARIANT_COUNT],
+            99,
+            "webui",
+            ResponseMode::Complete,
+        );
+        assert_eq!(webui.streaming, "buffered");
+        assert_eq!(webui.response_mode, "complete");
+        let fast = build_metadata(
+            vec![100; STATE_VARIANT_COUNT],
+            99,
+            "webui-fast",
+            ResponseMode::Complete,
+        );
+        assert_eq!(fast.streaming, "buffered");
+        assert_eq!(fast.response_mode, "complete");
     }
 }

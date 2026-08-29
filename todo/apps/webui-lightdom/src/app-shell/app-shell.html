@@ -3,6 +3,7 @@
 
 <template w-hydrate="interaction">
   <div class="workspace-shell">
+    <boundary name="navigation-ready">
     <header class="workspace-nav">
       <a class="workspace-brand" href="/dynamic">
         <span class="workspace-brand__mark" aria-hidden="true">W</span>
@@ -17,6 +18,7 @@
         <a data-route-link="settings" href="/settings">Settings</a>
       </nav>
     </header>
+    </boundary>
     <outlet />
   </div>
 </template>

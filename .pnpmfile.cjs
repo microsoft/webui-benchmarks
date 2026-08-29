@@ -9,33 +9,83 @@ const configPath = resolve(repositoryRoot, ".webui-local.json");
 const packageDirectories = Object.freeze({
   "@microsoft/webui": "webui",
   "@microsoft/webui-framework": "webui-framework",
+  "@microsoft/webui-router": "webui-router",
 });
 
-function configuredCheckout() {
+function configuredDependency() {
   const configured = process.env.WEBUI_CHECKOUT
-    ?? (existsSync(configPath)
-      ? JSON.parse(readFileSync(configPath, "utf8")).checkout
-      : undefined);
-  if (!configured) {
+    ? {
+        checkout: process.env.WEBUI_CHECKOUT,
+        mode: "source",
+      }
+    : existsSync(configPath)
+      ? JSON.parse(readFileSync(configPath, "utf8"))
+      : null;
+  if (configured === null) {
     return null;
   }
-  const checkout = realpathSync(resolve(repositoryRoot, configured));
+  const checkout = realpathSync(
+    resolve(repositoryRoot, configured.checkout),
+  );
   if (!existsSync(resolve(checkout, "packages", "webui", "package.json"))) {
     throw new Error(`WEBUI_CHECKOUT is not a WebUI checkout: ${checkout}`);
   }
-  return checkout;
+  return {
+    ...configured,
+    checkout,
+    mode: configured.mode ?? "source",
+  };
 }
 
-function rewriteDependencies(dependencies, checkout) {
+function packageSpecifiers(configuration) {
+  if (configuration.mode === "source") {
+    return Object.fromEntries(
+      Object.entries(packageDirectories).map(([name, directory]) => [
+        name,
+        `link:${
+          (
+            typeof configuration.packages?.[name] === "string"
+              ? resolve(repositoryRoot, configuration.packages[name])
+              : resolve(configuration.checkout, "packages", directory)
+          )
+            .replaceAll("\\", "/")
+        }`,
+      ]),
+    );
+  }
+  if (configuration.mode === "packed") {
+    if (
+      configuration.packages === null
+      || typeof configuration.packages !== "object"
+    ) {
+      throw new Error("Packed WebUI configuration is missing package artifacts");
+    }
+    return Object.fromEntries(
+      Object.keys(packageDirectories).map((name) => {
+        const artifact = configuration.packages[name];
+        if (typeof artifact !== "string") {
+          throw new Error(`Packed WebUI configuration is missing ${name}`);
+        }
+        return [
+          name,
+          `file:${resolve(repositoryRoot, artifact).replaceAll("\\", "/")}`,
+        ];
+      }),
+    );
+  }
+  throw new Error(`Unsupported local WebUI mode '${configuration.mode}'`);
+}
+
+function rewriteDependencies(dependencies, configuration) {
   if (!dependencies) {
     return dependencies;
   }
   const rewritten = { ...dependencies };
-  for (const [name, directory] of Object.entries(packageDirectories)) {
+  for (const [name, specifier] of Object.entries(
+    packageSpecifiers(configuration),
+  )) {
     if (rewritten[name] !== undefined) {
-      const packagePath = resolve(checkout, "packages", directory)
-        .replaceAll("\\", "/");
-      rewritten[name] = `link:${packagePath}`;
+      rewritten[name] = specifier;
     }
   }
   return rewritten;
@@ -44,19 +94,24 @@ function rewriteDependencies(dependencies, checkout) {
 module.exports = {
   hooks: {
     readPackage(pkg) {
-      const checkout = configuredCheckout();
-      if (checkout === null) {
+      const configuration = configuredDependency();
+      if (configuration === null) {
         return pkg;
       }
       return {
         ...pkg,
-        dependencies: rewriteDependencies(pkg.dependencies, checkout),
-        devDependencies: rewriteDependencies(pkg.devDependencies, checkout),
+        dependencies: rewriteDependencies(pkg.dependencies, configuration),
+        devDependencies: rewriteDependencies(
+          pkg.devDependencies,
+          configuration,
+        ),
         optionalDependencies: rewriteDependencies(
           pkg.optionalDependencies,
-          checkout,
+          configuration,
         ),
       };
     },
   },
+  packageSpecifiers,
+  rewriteDependencies,
 };

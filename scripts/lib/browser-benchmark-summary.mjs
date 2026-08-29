@@ -23,12 +23,6 @@ const browserLaunchArguments = Object.freeze([
   "--process-per-tab",
 ]);
 const officialCases = createCaseMatrix();
-const officialBuildIds = Object.freeze(
-  createBuildPlan(officialCases, {
-    browser: true,
-    localWebui: false,
-  }).map(({ id }) => id),
-);
 const officialCaseIds = Object.freeze(
   officialCases.map(({ id }) => id),
 );
@@ -46,6 +40,26 @@ const runtimePins = loadRuntimePins();
 const sharedStateDigest = createHash("sha256")
   .update(JSON.stringify(TODO_STATE_VARIANTS))
   .digest("hex");
+
+export function expectedOfficialBuildIds(report, { browser = false } = {}) {
+  const dependency = report.versions?.webuiDependency;
+  const localSource = dependency?.kind === "checkout"
+    && dependency.workingTreeDirty === false
+    && /^[0-9a-f]{40}$/u.test(dependency.commit)
+    && dependency.packageArtifacts === null;
+  if (
+    dependency !== undefined
+    && dependency.kind !== "release"
+    && !localSource
+  ) {
+    return null;
+  }
+  return createBuildPlan(officialCases, {
+    browser,
+    localWebui: localSource,
+    localWebuiSource: localSource,
+  }).map(({ id }) => id);
+}
 
 const metricDefinitions = Object.freeze([
   Object.freeze({
@@ -286,29 +300,37 @@ function hasExportMetricUnits(report) {
 }
 
 function hasMatchingEvidence(ssrReport, browserReport) {
+  const expectedBuildIds = expectedOfficialBuildIds(ssrReport, {
+    browser: true,
+  });
+  const ssrWebuiDependency = ssrReport.versions?.webuiDependency;
+  const browserWebuiDependency =
+    browserReport.environment?.webuiDependency;
   return browserReport.mode === "official"
+    && expectedBuildIds !== null
+    && JSON.stringify(browserWebuiDependency ?? null)
+      === JSON.stringify(ssrWebuiDependency ?? null)
     && browserReport.roundsPerApp === OFFICIAL_ROUNDS
     && browserReport.sourceRevision?.workingTreeDirty === false
     && browserReport.sourceRevision.commit
       === ssrReport.sourceRevision.commit
     && browserReport.sourceRevision.sourceDigest
-      === ssrReport.sourceRevision.sourceDigest
-    && browserReport.fixture?.hash?.value === ssrReport.fixture?.hash?.value
+      === browserReport.fixture?.hash?.value
     && hasCanonicalBrowserMethodology(browserReport)
     && browserReport.cleanup?.status === "verified"
     && browserReport.cleanup?.processRegistryEmpty === true
     && hasExactIds(
       browserReport.builds,
-      officialBuildIds,
+      expectedBuildIds,
       ({ id }) => id,
     )
     && browserReport.builds.every(({ status }) => status === "ok")
     && hasGreenRuntimeEvidence(browserReport)
     && browserReport.snapshotIntegrity?.status === "verified"
     && browserReport.snapshotIntegrity.fixtureHashBefore
-      === ssrReport.fixture.hash.value
+      === browserReport.fixture.hash.value
     && browserReport.snapshotIntegrity.fixtureHashAfter
-      === ssrReport.fixture.hash.value
+      === browserReport.fixture.hash.value
     && browserReport.snapshotIntegrity.sharedStateHashBefore
       === sharedStateDigest
     && browserReport.snapshotIntegrity.sharedStateHashAfter

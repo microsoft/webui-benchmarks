@@ -113,3 +113,19 @@ test("option parsing rejects unsafe baselines and invalid protocol values", () =
     /not permitted/,
   );
 });
+
+test("response mode defaults to progressive and can be selected explicitly", () => {
+  assert.equal(parseOptions([], {}).responseMode, "progressive");
+  assert.equal(
+    parseOptions(["--response-mode", "complete"], {}).responseMode,
+    "complete",
+  );
+  assert.equal(
+    parseOptions([], { WEBUI_BENCH_RESPONSE_MODE: "complete" }).responseMode,
+    "complete",
+  );
+  assert.throws(
+    () => parseOptions(["--response-mode", "eventual"], {}),
+    /--response-mode must be/,
+  );
+});

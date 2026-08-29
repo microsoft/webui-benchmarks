@@ -16,7 +16,10 @@ import {
   metricAt,
 } from "../../todo/browser/metrics.mjs";
 import { createBuildPlan } from "../../todo/runner/lib/builds.mjs";
-import { createCaseMatrix } from "../../todo/runner/lib/cases.mjs";
+import {
+  ASYNC_DATA_BOUNDARY_CAPABILITY,
+  createCaseMatrix,
+} from "../../todo/runner/lib/cases.mjs";
 import {
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../../todo/runner/lib/metrics.mjs";
@@ -44,10 +47,23 @@ const OFFICIAL_CASES = createCaseMatrix();
 const OFFICIAL_BUILD_IDS = Object.freeze(
   createBuildPlan(OFFICIAL_CASES, { localWebui: false }).map(({ id }) => id),
 );
+const OFFICIAL_SOURCE_BUILD_IDS = Object.freeze(
+  createBuildPlan(OFFICIAL_CASES, {
+    localWebui: true,
+    localWebuiSource: true,
+  }).map(({ id }) => id),
+);
 const OFFICIAL_BROWSER_BUILD_IDS = Object.freeze(
   createBuildPlan(OFFICIAL_CASES, {
     browser: true,
     localWebui: false,
+  }).map(({ id }) => id),
+);
+const OFFICIAL_SOURCE_BROWSER_BUILD_IDS = Object.freeze(
+  createBuildPlan(OFFICIAL_CASES, {
+    browser: true,
+    localWebui: true,
+    localWebuiSource: true,
   }).map(({ id }) => id),
 );
 const RUNTIME_PINS = loadRuntimePins();
@@ -117,12 +133,14 @@ function rawRound(benchmarkCase, round, orderIndex) {
     naturalResponseBytes: 10_065.5 + orderIndex,
     orderIndex,
     payloadPolicy: "natural",
+    responseMode: benchmarkCase.responseMode,
     requests: 10_000,
     requestsPerSecond: 1_000 - orderIndex * 10,
     responseByteProfile: responseByteProfile(orderIndex),
     responseBytes: 10_065.5 + orderIndex,
     round,
     serverMetrics: { status: "available" },
+    streaming: benchmarkCase.streaming,
     throughputBytesPerSecond: 10_000_000,
     warmup: {
       durationSeconds: DEFAULT_PROTOCOL.warmupSeconds,
@@ -158,8 +176,10 @@ function report() {
       naturalResponseBytes: profile.dynamic.mean,
       payloadPolicy: "natural",
       renderer: benchmarkCase.renderer,
+      responseMode: benchmarkCase.responseMode,
       responseByteProfile: profile,
       responseBytes: profile.dynamic.mean,
+      streaming: benchmarkCase.streaming,
       transport: benchmarkCase.transport,
       workerCount: 1,
       ...summarizeRounds(rounds),
@@ -167,6 +187,9 @@ function report() {
   });
   return {
     builds: OFFICIAL_BUILD_IDS.map((id) => ({ id, status: "ok" })),
+    capabilities: {
+      asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY,
+    },
     cases,
     config: {
       build: true,
@@ -175,6 +198,7 @@ function report() {
       durationSeconds: DEFAULT_PROTOCOL.durationSeconds,
       loadWorkers: DEFAULT_PROTOCOL.loadWorkers,
       quick: false,
+      responseMode: "progressive",
       rounds: DEFAULT_PROTOCOL.rounds,
       runtimeMode: "official",
       saturationConnections: [...DEFAULT_PROTOCOL.saturationConnections],
@@ -202,6 +226,7 @@ function report() {
       headlineInput: "request-timestamped-input",
       headlineMode: "dynamic",
       payload: "natural",
+      responseMode: "progressive",
       workersPerCase: 1,
     },
     rawRounds,
@@ -242,6 +267,34 @@ function report() {
     status: "ok",
     summaries,
   };
+}
+
+function setReportResponseMode(report, responseMode) {
+  const expectedCases = new Map(
+    createCaseMatrix({ responseMode }).map((entry) => [entry.id, entry]),
+  );
+  report.config.responseMode = responseMode;
+  report.policies.responseMode = responseMode;
+  for (const collection of [
+    report.cases,
+    report.rawRounds,
+    report.summaries,
+    report.matrix.summaries,
+  ]) {
+    for (const entry of collection) {
+      const expected = expectedCases.get(entry.id ?? entry.caseId);
+      entry.responseMode = responseMode;
+      if (expected !== undefined) {
+        if ("renderer" in entry) {
+          entry.renderer = expected.renderer;
+        }
+        entry.streaming = expected.streaming;
+      }
+    }
+  }
+  report.capabilities = responseMode === "progressive"
+    ? { asyncDataBoundary: ASYNC_DATA_BOUNDARY_CAPABILITY }
+    : {};
 }
 
 function windowsPartialReport() {
@@ -418,6 +471,12 @@ function browserReport(ssrReport = report()) {
       processRegistryEmpty: true,
       status: "verified",
     },
+    environment: ssrReport.versions?.webuiDependency === undefined
+      ? {}
+      : {
+        webuiDependency:
+          structuredClone(ssrReport.versions.webuiDependency),
+      },
     fixture: {
       hash: { ...ssrReport.fixture.hash },
     },
@@ -469,6 +528,54 @@ test("exports only the compact homepage benchmark DTO", () => {
   );
   assert.deepEqual(JSON.parse(summary.benchmarksJson), summary.benchmarks);
   assert.equal("rawRounds" in summary, false);
+  assert.equal(summary.benchmarks.responseMode, "progressive");
+  assert.deepEqual(
+    summary.benchmarks.asyncDataBoundary,
+    ASYNC_DATA_BOUNDARY_CAPABILITY,
+  );
+});
+
+test("accepts clean source-checkout evidence with its exact build plans", () => {
+  const value = report();
+  value.versions = {
+    webuiDependency: {
+      checkout: "../webui",
+      commit: "c".repeat(40),
+      kind: "checkout",
+      packageArtifacts: null,
+      version: "0.0.27",
+      workingTreeDirty: false,
+    },
+  };
+  value.builds = OFFICIAL_SOURCE_BUILD_IDS.map((id) => ({ id, status: "ok" }));
+  const browser = browserReport(value);
+  browser.builds = OFFICIAL_SOURCE_BROWSER_BUILD_IDS.map((id) => ({
+    id,
+    status: "ok",
+  }));
+  assert.equal(
+    buildBenchmarkSummary(value, browser).benchmarks.rows.length,
+    15,
+  );
+
+  value.versions.webuiDependency.workingTreeDirty = true;
+  assert.throws(
+    () => buildBenchmarkSummary(value),
+    /clean, complete, unfiltered canonical official report/u,
+  );
+});
+
+test("labels an explicit complete-suite report and refuses to merge browser evidence into it", () => {
+  const value = report();
+  setReportResponseMode(value, "complete");
+  const summary = buildBenchmarkSummary(value);
+  assert.equal(summary.benchmarks.responseMode, "complete");
+  assert.equal(summary.benchmarks.asyncDataBoundary, null);
+  assert.match(summary.benchmarks.title, /one complete response/u);
+  assert.throws(
+    () => buildBenchmarkSummary(value, browserReport(value)),
+    /Do not merge browser-derived progressive UX evidence/u,
+  );
 });
 
 test("accepts complete Windows reports with intentional process telemetry gaps", () => {
@@ -543,6 +650,54 @@ test("combines matching official browser outcomes", () => {
   );
 });
 
+test("combines complete and progressive throughput with only essential browser metrics", () => {
+  const progressive = report();
+  const complete = structuredClone(progressive);
+  setReportResponseMode(complete, "complete");
+  const summary = buildBenchmarkSummary(
+    progressive,
+    browserReport(progressive),
+    complete,
+  );
+  assert.deepEqual(
+    summary.benchmarks.metrics.map(({ id }) => id),
+    [
+      "noStreamingRequestsPerSecond",
+      "streamingRequestsPerSecond",
+      "largestContentfulPaintMs",
+      "jsHeapUsedBytes",
+      "rendererPrivateBytes",
+    ],
+  );
+  assert.equal(summary.benchmarks.selectedMetric, "noStreamingRequestsPerSecond");
+  assert.equal(summary.benchmarks.selectedMetricLabel, "No Streaming RPS");
+  assert.equal(summary.benchmarks.responseMode, "comparison");
+  assert.deepEqual(summary.benchmarks.responseModes, [
+    "complete",
+    "progressive",
+  ]);
+  assert.equal(
+    summary.benchmarks.rows.every((row) =>
+      Object.keys(row.metrics).length === 5
+    ),
+    true,
+  );
+  assert.deepEqual(
+    JSON.parse(summary.benchmarksJson),
+    summary.benchmarks,
+  );
+
+  complete.machine = { cpuModel: "different host" };
+  assert.throws(
+    () => buildBenchmarkSummary(
+      progressive,
+      browserReport(progressive),
+      complete,
+    ),
+    /matching progressive and complete official reports/u,
+  );
+});
+
 test("rejects mismatched or noncanonical browser evidence", async (t) => {
   const scenarios = [
     ["dirty source", (value) => {
@@ -560,6 +715,15 @@ test("rejects mismatched or noncanonical browser evidence", async (t) => {
     }],
     ["missing required build", (value) => {
       value.builds.pop();
+    }],
+    ["mismatched WebUI dependency", (value) => {
+      value.environment.webuiDependency = {
+        commit: "d".repeat(40),
+        kind: "checkout",
+        packageArtifacts: null,
+        version: "0.0.27",
+        workingTreeDirty: false,
+      };
     }],
     ["self-asserted runtime version", (value) => {
       value.runtimeVerification.runtimes[0].expectedVersion = "0.0.0";

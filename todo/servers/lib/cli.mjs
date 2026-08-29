@@ -31,6 +31,7 @@ export function parseServerArgs(
     port: parsePort(
       process.env.WEBUI_BENCH_PORT ?? process.env.PORT ?? "3000",
     ),
+    responseMode: process.env.WEBUI_BENCH_RESPONSE_MODE ?? "progressive",
   };
   for (let index = 0; index < argv.length; index += 2) {
     const argument = argv[index];
@@ -44,11 +45,18 @@ export function parseServerArgs(
       options.port = parsePort(value);
     } else if (argument === "--addon") {
       options.addonPath = value;
+    } else if (argument === "--response-mode") {
+      options.responseMode = value;
     } else if (argument === "--app" && allowApp) {
       options.appId = value;
     } else {
       throw new Error(`Unknown option '${argument}'`);
     }
+  }
+  if (!["complete", "progressive"].includes(options.responseMode)) {
+    throw new RangeError(
+      `--response-mode must be 'complete' or 'progressive', received '${options.responseMode}'`,
+    );
   }
   return Object.freeze(options);
 }

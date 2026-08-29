@@ -35,6 +35,7 @@ import { resolveNativeAddon } from "../../servers/lib/webui-engine.mjs";
 import {
   collectWebuiDependency,
   configuredWebuiCheckout,
+  webuiFixtureFiles,
   webuiFixtureRoots,
 } from "../../shared/webui-dependency.mjs";
 
@@ -186,12 +187,19 @@ export function computeFixtureHash(
 ) {
   const fixtureRoots = roots ?? [BENCHMARK_ROOT, ...webuiFixtureRoots()];
   const files = [
-    ...fixtureRoots.flatMap(walkFixtureFiles),
-    ...explicitFiles,
-  ].sort();
+    ...fixtureRoots.flatMap(walkFixtureFiles).map((path) => ({
+      name: fixturePathName(path),
+      path,
+    })),
+    ...(roots === undefined ? webuiFixtureFiles() : []),
+    ...explicitFiles.map((file) =>
+      typeof file === "string"
+        ? { name: fixturePathName(file), path: file }
+        : file
+    ),
+  ].sort((left, right) => left.name.localeCompare(right.name));
   const hash = createHash("sha256");
-  for (const path of files) {
-    const name = fixturePathName(path);
+  for (const { name, path } of files) {
     hash.update(name);
     hash.update("\0");
     hash.update(readFileSync(path));
@@ -199,7 +207,7 @@ export function computeFixtureHash(
   }
   return Object.freeze({
     algorithm: "sha256",
-    files: Object.freeze(files.map(fixturePathName)),
+    files: Object.freeze(files.map(({ name }) => name)),
     value: hash.digest("hex"),
   });
 }

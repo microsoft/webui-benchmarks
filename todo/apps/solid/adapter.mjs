@@ -27,7 +27,7 @@ export function build() {
 
 export function createRenderer() {
   rendererPromise ??= build().then(async ({ artifactPath, css }) => {
-    const { renderHydrationScript, renderTodo } = await import(
+    const { renderHydrationScript, renderTodo, renderTodoStream } = await import(
       pathToFileURL(artifactPath).href
     );
     return Object.freeze({
@@ -36,6 +36,9 @@ export function createRenderer() {
       css,
       render(state = defaultState, requestPath = "/dynamic") {
         return renderTodo(state, requestPath);
+      },
+      renderStream(state = defaultState, requestPath = "/dynamic", options) {
+        return renderTodoStream(state, requestPath, options);
       },
     });
   });

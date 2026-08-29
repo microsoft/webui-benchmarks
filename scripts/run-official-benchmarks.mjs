@@ -12,7 +12,9 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const OFFICIAL_BENCHMARK_OUTPUTS = Object.freeze({
   browser: "results/ssr-todo-browser-outcomes-official.json",
   ssr: "results/ssr-todo-official.json",
+  ssrComplete: "results/ssr-todo-official-complete.json",
   summary: "results/benchmark-summary.json",
+  summaryComplete: "results/benchmark-summary-complete.json",
 });
 
 export const OFFICIAL_BENCHMARK_STEPS = Object.freeze([
@@ -20,10 +22,24 @@ export const OFFICIAL_BENCHMARK_STEPS = Object.freeze([
     arguments: Object.freeze([
       "--runtime-mode",
       "official",
+      "--response-mode",
+      "progressive",
       "--save-baseline",
       "official",
     ]),
     id: "ssr",
+    script: "todo/runner/cli.mjs",
+  }),
+  Object.freeze({
+    arguments: Object.freeze([
+      "--runtime-mode",
+      "official",
+      "--response-mode",
+      "complete",
+      "--save-baseline",
+      "official-complete",
+    ]),
+    id: "ssr-complete",
     script: "todo/runner/cli.mjs",
   }),
   Object.freeze({
@@ -44,10 +60,22 @@ export const OFFICIAL_BENCHMARK_STEPS = Object.freeze([
       OFFICIAL_BENCHMARK_OUTPUTS.ssr,
       "--browser-input",
       OFFICIAL_BENCHMARK_OUTPUTS.browser,
+      "--complete-input",
+      OFFICIAL_BENCHMARK_OUTPUTS.ssrComplete,
       "--output",
       OFFICIAL_BENCHMARK_OUTPUTS.summary,
     ]),
     id: "summary",
+    script: "scripts/export-benchmark-summary.mjs",
+  }),
+  Object.freeze({
+    arguments: Object.freeze([
+      "--input",
+      OFFICIAL_BENCHMARK_OUTPUTS.ssrComplete,
+      "--output",
+      OFFICIAL_BENCHMARK_OUTPUTS.summaryComplete,
+    ]),
+    id: "summary-complete",
     script: "scripts/export-benchmark-summary.mjs",
   }),
 ]);
@@ -86,8 +114,13 @@ export async function runOfficialBenchmarks({
     await runStep(step);
   }
   process.stdout.write(
-    `Copy-ready benchmark summary: ${
+    `Copy-ready progressive-suite benchmark summary: ${
       resolve(repositoryRoot, OFFICIAL_BENCHMARK_OUTPUTS.summary)
+    }\n`,
+  );
+  process.stdout.write(
+    `Copy-ready complete-suite benchmark summary: ${
+      resolve(repositoryRoot, OFFICIAL_BENCHMARK_OUTPUTS.summaryComplete)
     }\n`,
   );
   return OFFICIAL_BENCHMARK_OUTPUTS;

@@ -12,6 +12,39 @@ export const PRODUCT_KINDS = Object.freeze({
   webui: "webui-runtime",
 });
 
+// The response-mode dimension separates *what is measured* from *product
+// identity*: every product id above is unique and stable across both suites,
+// only the response contract changes.
+//   - complete:    all data is ready; the server publishes exactly one
+//                  completed HTML response (RPS/p95/CPU/bytes/memory ranking).
+//   - progressive: the product's native progressive/streaming boundaries are
+//                  preserved unchanged (time-to-boundary/UX ranking).
+export const RESPONSE_MODES = Object.freeze({
+  complete: "complete",
+  progressive: "progressive",
+});
+
+// WebUI's resumable async data-boundary (StreamingSession) is a first-class
+// capability on newer WebUI releases, but the canonical dependency pinned by
+// this repository is 0.0.27 (see package.json). Rather than fake an async
+// shell/list boundary workload against an API that is not released yet, the
+// progressive suite honestly reports this capability gap so consumers do not
+// mistake "unchanged native streaming" for "new async data-boundary
+// streaming". See README.md for the version-gated follow-up.
+export const ASYNC_DATA_BOUNDARY_CAPABILITY = Object.freeze({
+  canonicalWebuiVersion: "0.0.27",
+  notes:
+    "The progressive suite continues to measure each product's existing "
+    + "native progressive/streaming boundaries unchanged. A dedicated "
+    + "above-the-fold-shell / below-the-fold-async-list workload driven by "
+    + "WebUI's resumable StreamingSession boundary API is intentionally not "
+    + "implemented against canonical WebUI 0.0.27, because that API is not "
+    + "part of this release. This is disclosed capability metadata, not an "
+    + "active measurement.",
+  requiredCapability: "StreamingSession resumable async data-boundary API",
+  status: "deferred-pending-webui-release",
+});
+
 // Grouping consumed by the separate, non-headline browser outcome tier when it
 // picks one SSR source per application. The official SSR table itself is flat.
 export const TIERS = Object.freeze({
@@ -21,7 +54,7 @@ export const TIERS = Object.freeze({
 
 const NODE_HTTP_TRANSPORT = "node:http";
 const WEBUI_NATIVE_RENDERER =
-  "@microsoft/webui Protocol.render (request-materialized Node-API state)";
+  "@microsoft/webui Protocol.streamResponse (request-materialized Node-API state)";
 
 function freezeCase(value) {
   if (typeof value.renderer !== "string" || typeof value.transport !== "string") {
@@ -35,6 +68,8 @@ function freezeCase(value) {
     matrixId: OFFICIAL_MATRIX_ID,
     mode: "dynamic",
     payloadPolicy: NATURAL_PAYLOAD_POLICY,
+    responseMode: RESPONSE_MODES.progressive,
+    streaming: value.streaming ?? "buffered",
     workerCount: 1,
     ...value,
     buildIds: Object.freeze(value.buildIds ?? []),
@@ -42,6 +77,80 @@ function freezeCase(value) {
     tier: value.productKind === PRODUCT_KINDS.framework
       ? TIERS.fullStack
       : TIERS.controlled,
+  });
+}
+
+// Per-product overrides applied only when building the `complete` suite. Each
+// entry documents the *best correct* complete-response mechanism the product
+// already ships (see the adjacent render()/renderStream() adapters and the
+// Rust WebUIHandler::render vs render_streaming split) so the complete suite
+// never silently reuses a progressive/native-streaming code path.
+const COMPLETE_RENDERER_OVERRIDES = Object.freeze({
+  astro: {
+    renderer:
+      "Astro production SSR + @astrojs/preact island (fully collected at "
+      + "the framework's own Node http.Server response boundary before "
+      + "the response completes)",
+  },
+  next: {
+    renderer:
+      "Next.js production App Router SSR (fully collected at the "
+      + "framework's own Node http.Server response boundary before the "
+      + "response completes)",
+  },
+  preact: { renderer: "preact-render-to-string renderToString" },
+  react: { renderer: "react-dom/server renderToString" },
+  "react-tanstack": {
+    renderer:
+      "react-dom/server renderToString + @tanstack/react-router renderRouterToString",
+  },
+  solid: { renderer: "solid-js/web renderToString" },
+  vue: { renderer: "@vue/server-renderer renderToString" },
+  "webui-bun-serve": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-deno-serve": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-fast-rust-actix": {
+    renderer: "webui-handler render (Rust, FAST V3, single response)",
+  },
+  "webui-node-http": {
+    renderer:
+      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+  },
+  "webui-rust-actix": { renderer: "webui-handler render (Rust)" },
+  "webui-shadowdom-rust-actix": {
+    renderer: "webui-handler render (Rust, Shadow DOM)",
+  },
+});
+
+// Frameworks whose production servers already always publish one buffered
+// response (SvelteKit and Nuxt here) keep their progressive-suite labels
+// unchanged in the complete suite too: there is no native streaming path to
+// collect, so `complete` and `progressive` measure the identical mechanism.
+const COMPLETE_STREAMING_UNCHANGED = Object.freeze(
+  new Set(["nuxt", "sveltekit"]),
+);
+
+function applyResponseMode(benchmarkCase, responseMode) {
+  if (responseMode === RESPONSE_MODES.progressive) {
+    return benchmarkCase;
+  }
+  const rendererOverride = COMPLETE_RENDERER_OVERRIDES[benchmarkCase.id];
+  return Object.freeze({
+    ...benchmarkCase,
+    ...(rendererOverride ?? {}),
+    launcher: Object.freeze({
+      ...benchmarkCase.launcher,
+      responseMode,
+    }),
+    responseMode,
+    streaming: COMPLETE_STREAMING_UNCHANGED.has(benchmarkCase.id)
+      ? benchmarkCase.streaming
+      : "buffered",
   });
 }
 
@@ -56,11 +165,12 @@ function webuiRuntimeCase({ buildIds, entry, id, label, runtimeId, serverId, tra
     renderer: WEBUI_NATIVE_RENDERER,
     runtimeId,
     serverId,
+    streaming: "progressive-boundaries",
     transport,
   });
 }
 
-function frameworkCase({ appId, label, renderer, transport }) {
+function frameworkCase({ appId, label, renderer, streaming, transport }) {
   return freezeCase({
     appId,
     buildIds: [`full-stack-${appId}`],
@@ -71,6 +181,7 @@ function frameworkCase({ appId, label, renderer, transport }) {
     renderer,
     runtimeId: "node",
     serverId: appId,
+    streaming,
     transport,
   });
 }
@@ -86,6 +197,7 @@ function rendererCase({ appId, buildIds = [], label, renderer }) {
     renderer,
     runtimeId: "node",
     serverId: "node-http",
+    streaming: "native",
     transport: NODE_HTTP_TRANSPORT,
   });
 }
@@ -99,9 +211,10 @@ function officialCases() {
       label: "WebUI / Light DOM / Rust / Actix",
       launcher: { kind: "rust-actix" },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust)",
+      renderer: "webui-handler StreamingResponse (Rust)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "progressive-boundaries",
       transport: "actix-web",
     }),
     freezeCase({
@@ -118,9 +231,10 @@ function officialCases() {
         protocol: "todo/apps/webui-shadowdom/dist/protocol.bin",
       },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust, Shadow DOM)",
+      renderer: "webui-handler StreamingResponse (Rust, Shadow DOM)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "progressive-boundaries",
       transport: "actix-web",
     }),
     freezeCase({
@@ -138,9 +252,10 @@ function officialCases() {
         protocol: "todo/apps/webui-fast/dist/protocol.bin",
       },
       productKind: PRODUCT_KINDS.webui,
-      renderer: "webui-handler WebUIHandler (Rust, FAST V3)",
+      renderer: "webui-handler chunked ResponseWriter (Rust, FAST V3)",
       runtimeId: "rust",
       serverId: "actix",
+      streaming: "native-chunks",
       transport: "actix-web",
     }),
     webuiRuntimeCase({
@@ -173,63 +288,84 @@ function officialCases() {
     frameworkCase({
       appId: "sveltekit",
       label: "SvelteKit",
-      renderer: "SvelteKit production SSR (@sveltejs/kit)",
+      renderer: "SvelteKit production SSR (buffered synchronous route)",
+      streaming: "buffered",
       transport: "@sveltejs/adapter-node",
     }),
     frameworkCase({
       appId: "nuxt",
       label: "Nuxt",
-      renderer: "Nuxt production SSR (vue-bundle-renderer)",
+      renderer: "Nuxt production SSR (buffered synchronous route)",
+      streaming: "buffered",
       transport: "nitro node-server",
     }),
     frameworkCase({
       appId: "next",
       label: "Next.js",
-      renderer: "Next.js production App Router SSR",
+      renderer: "Next.js production App Router streaming SSR",
+      streaming: "native",
       transport: "next start",
     }),
     frameworkCase({
       appId: "astro",
       label: "Astro + Preact",
-      renderer: "Astro production SSR + @astrojs/preact island",
+      renderer: "Astro production streaming SSR + @astrojs/preact island",
+      streaming: "native",
       transport: "@astrojs/node standalone",
     }),
     rendererCase({
       appId: "vue",
       buildIds: ["vue"],
       label: "Vue",
-      renderer: "@vue/server-renderer renderToString",
+      renderer: "@vue/server-renderer renderToWebStream",
     }),
     rendererCase({
       appId: "preact",
       buildIds: ["preact"],
       label: "Preact",
-      renderer: "preact-render-to-string renderToString",
+      renderer: "preact-render-to-string renderToReadableStream",
     }),
     rendererCase({
       appId: "react",
       buildIds: ["react"],
       label: "React",
-      renderer: "react-dom/server renderToString",
+      renderer: "react-dom/server renderToReadableStream",
     }),
     rendererCase({
       appId: "react-tanstack",
       buildIds: ["react-tanstack"],
       label: "React + TanStack Router",
       renderer:
-        "react-dom/server renderToString + @tanstack/react-router",
+        "react-dom/server stream + @tanstack/react-router renderRouterToStream",
     }),
     rendererCase({
       appId: "solid",
       buildIds: ["solid"],
       label: "Solid",
-      renderer: "solid-js/web renderToString",
+      renderer: "solid-js/web renderToStream",
     }),
   ];
 }
 
-export function createCaseMatrix() {
-  const matrix = Object.freeze(officialCases());
+/**
+ * Build the official 15-row matrix for one response-mode suite. Product
+ * identity (case id, appId, productKind, transport, runtimeId, serverId)
+ * never changes between suites: only the response contract (renderer label,
+ * streaming label, and the launcher's `responseMode` hint consumed by
+ * server.mjs) does. Omitting `responseMode` preserves the exact progressive
+ * suite that shipped before this dimension existed.
+ */
+export function createCaseMatrix({
+  responseMode = RESPONSE_MODES.progressive,
+} = {}) {
+  if (!Object.values(RESPONSE_MODES).includes(responseMode)) {
+    throw new RangeError(`Unknown response mode '${responseMode}'`);
+  }
+  const matrix = Object.freeze(
+    officialCases().map((benchmarkCase) =>
+      applyResponseMode(benchmarkCase, responseMode)
+    ),
+  );
   assertCaseMatrix(matrix);
   return matrix;
 }
@@ -241,6 +377,7 @@ export function assertCaseMatrix(matrix) {
     );
   }
   const ids = new Set();
+  const responseModes = new Set();
   for (const benchmarkCase of matrix) {
     if (ids.has(benchmarkCase.id)) {
       throw new Error(`Duplicate benchmark case '${benchmarkCase.id}'`);
@@ -264,6 +401,16 @@ export function assertCaseMatrix(matrix) {
     if (benchmarkCase.serverId === "fastify") {
       throw new Error(`${benchmarkCase.id} must not use the Fastify transport`);
     }
+    if (!Object.values(RESPONSE_MODES).includes(benchmarkCase.responseMode)) {
+      throw new Error(`${benchmarkCase.id} has an unknown response mode`);
+    }
+    responseModes.add(benchmarkCase.responseMode);
+  }
+  if (responseModes.size > 1) {
+    throw new Error(
+      "A benchmark matrix must not mix response modes: publish complete and "
+      + "progressive results as separate reports",
+    );
   }
   return matrix;
 }

@@ -16,12 +16,16 @@ repository = "https://github.com/microsoft/webui-benchmarks"
 [workspace.dependencies]
 actix-web = "=4.14.0"
 anyhow = "=1.0.103"
+bytes = "=1.12.1"
+futures-core = "=0.3.34"
+mimalloc = "=0.1.52"
 rcgen = "=0.14.8"
 rustls = "=0.23.41"
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = { version = "=1.0.150", features = ["raw_value"] }
 time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
-microsoft-webui-handler = "=0.0.26"
+tokio = { version = "=1.53.1", features = ["rt", "sync", "time"] }
+microsoft-webui-handler = "=0.0.27"
 
 [workspace.lints.clippy]
 perf = { level = "deny", priority = -1 }

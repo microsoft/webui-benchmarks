@@ -28,8 +28,11 @@
     "bench:json": "node todo/runner/cli.mjs --json",
     "bench:ssr:official": "node todo/runner/cli.mjs --runtime-mode official",
     "bench:ssr:save": "node todo/runner/cli.mjs --runtime-mode official",
+    "bench:ssr:complete:official": "node todo/runner/cli.mjs --runtime-mode official --response-mode complete --save-baseline official-complete",
+    "bench:ssr:streaming:official": "node todo/runner/cli.mjs --runtime-mode official --response-mode progressive --save-baseline official",
     "bench:browser": "node todo/browser/cli.mjs",
     "bench:browser:official": "node todo/browser/cli.mjs --official --rounds 10 --headed",
+    "bench:browser:streaming:official": "node todo/browser/cli.mjs --official --rounds 10 --headed",
     "bench:hydration-gate": "node todo/browser/hydration-gate.mjs",
     "preview:all": "node todo/browser/serve-all.mjs",
     "bench:todo": "node todo/runner/cli.mjs",
@@ -41,7 +44,12 @@
     "profile:prepare": "node todo/profile/prepare.mjs",
     "verify:runtimes": "node todo/servers/verify-runtimes.mjs --official",
     "webui:configure": "node scripts/configure-webui.mjs",
-    "webui:release": "node scripts/configure-webui.mjs --release"
+    "webui:local": "node scripts/configure-webui.mjs --prepare --install",
+    "webui:packed": "node scripts/configure-webui.mjs --packed --install",
+    "webui:sync": "node scripts/configure-webui.mjs --sync",
+    "webui:status": "node scripts/configure-webui.mjs --status",
+    "webui:cargo": "node scripts/webui-cargo.mjs",
+    "webui:release": "node scripts/configure-webui.mjs --release --install"
   },
   "engines": {
     "node": "24.19.0"
@@ -49,9 +57,9 @@
   "packageManager": "pnpm@11.5.3",
   "dependencies": {
     "@microsoft/fast-element": "3.0.1",
-    "@microsoft/webui": "0.0.26",
-    "@microsoft/webui-framework": "0.0.26",
-    "@microsoft/webui-router": "0.0.26",
+    "@microsoft/webui": "0.0.27",
+    "@microsoft/webui-framework": "0.0.27",
+    "@microsoft/webui-router": "0.0.27",
     "@solidjs/router": "1.0.0",
     "@tanstack/react-router": "1.170.31",
     "@vue/server-renderer": "3.5.41",

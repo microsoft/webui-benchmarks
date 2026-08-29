@@ -7,7 +7,11 @@ import {
   createRequestTodoState,
   currentRequestTimestamp,
 } from "../../shared/state.mjs";
-import { controlledDocument } from "../../shared/document.mjs";
+import {
+  controlledDocument,
+  controlledDocumentStream,
+} from "../../shared/document.mjs";
+import { collectByteStream } from "../../shared/streaming.mjs";
 
 export { STATE_VARIANT_COUNT };
 export const SERVER_SCHEMA = "webui.ssr-todo-server/v1";
@@ -77,43 +81,96 @@ async function renderResponse(render, state, documentOptions, requestPath) {
   });
 }
 
+async function renderStreamResponse(
+  renderStream,
+  state,
+  documentOptions,
+  requestPath,
+  options,
+) {
+  const rendered = await renderStream(state, requestPath, options);
+  if (!(rendered instanceof ReadableStream)) {
+    throw new TypeError("A streaming renderer must return a ReadableStream");
+  }
+  return documentOptions === null
+    ? rendered
+    : controlledDocumentStream({
+        ...documentOptions,
+        fragment: rendered,
+        state,
+      });
+}
+
+async function collectResponse(render, renderStream, state, documentOptions, path) {
+  if (renderStream === null) {
+    return toResponseBytes(
+      await renderResponse(render, state, documentOptions, path),
+    );
+  }
+  return toResponseBytes(
+    await collectByteStream(
+      await renderStreamResponse(renderStream, state, documentOptions, path),
+    ),
+  );
+}
+
 export async function createRouteController(options) {
   const {
     addonCapability,
     appId,
     document: documentOptions = null,
     render,
+    renderStream = null,
     renderPartial = null,
+    responseMode = "progressive",
     runtimeId,
     runtimeVersion,
     serverId,
     states,
+    streaming,
   } = options;
   validateStates(states);
   if (typeof render !== "function") {
     throw new TypeError("render must be a function");
   }
+  if (renderStream !== null && typeof renderStream !== "function") {
+    throw new TypeError("renderStream must be a function or null");
+  }
+  if (!["complete", "progressive"].includes(responseMode)) {
+    throw new RangeError(`Unknown response mode '${responseMode}'`);
+  }
+  // The complete suite always publishes one fully collected HTML response:
+  // every controlled renderer already ships a genuine complete-response API
+  // (see each app's render() adapter), so the complete suite calls it
+  // directly instead of collecting the native renderStream() output.
+  const effectiveRenderStream = responseMode === "complete" ? null : renderStream;
+  const resolvedStreaming = responseMode === "complete"
+    ? "buffered"
+    : streaming ?? (effectiveRenderStream === null ? "buffered" : "native");
+  if (
+    !["buffered", "native", "progressive-boundaries"].includes(resolvedStreaming)
+  ) {
+    throw new RangeError(`Unknown streaming mode '${resolvedStreaming}'`);
+  }
 
   const dynamicLengths = new Array(states.length);
   for (let index = 0; index < states.length; index += 1) {
-    const body = toResponseBytes(
-      await renderResponse(
-        render,
-        createRequestTodoState(states[index], PROFILE_TIMESTAMP),
-        documentOptions,
-        DYNAMIC_PATH,
-      ),
+    const body = await collectResponse(
+      render,
+      effectiveRenderStream,
+      createRequestTodoState(states[index], PROFILE_TIMESTAMP),
+      documentOptions,
+      DYNAMIC_PATH,
     );
     dynamicLengths[index] = body.byteLength;
   }
   const cachedTimestamp = currentRequestTimestamp();
-  const cachedBody = toResponseBytes(
-    await renderResponse(
-      render,
-      createRequestTodoState(states[0], cachedTimestamp),
-      documentOptions,
-      CACHED_PATH,
-    ),
+  const cachedBody = await collectResponse(
+    render,
+    effectiveRenderStream,
+    createRequestTodoState(states[0], cachedTimestamp),
+    documentOptions,
+    CACHED_PATH,
   );
   const responseBytes = Object.freeze({
     cached: cachedBody.byteLength,
@@ -127,6 +184,7 @@ export async function createRouteController(options) {
     naturalResponseBytes: responseBytes,
     payloadPolicy: "natural",
     responseBytes,
+    responseMode,
     routes: Object.freeze({
       cached: CACHED_PATH,
       dynamic: DYNAMIC_PATH,
@@ -140,6 +198,7 @@ export async function createRouteController(options) {
     serverId,
     stateVariantCount: states.length,
     status: "ready",
+    streaming: resolvedStreaming,
     workerCount: 1,
   });
   let nextVariant = 0;
@@ -154,19 +213,31 @@ export async function createRouteController(options) {
       });
     },
     metadata,
-    async renderDynamic(requestPath = DYNAMIC_PATH) {
+    async renderDynamic(requestPath = DYNAMIC_PATH, streamOptions) {
       const variantIndex = nextVariant;
       nextVariant = (nextVariant + 1) % states.length;
       const requestTimestamp = currentRequestTimestamp();
+      const requestState = createRequestTodoState(
+        states[variantIndex],
+        requestTimestamp,
+      );
       return Object.freeze({
-        body: toResponseBytes(
-          await renderResponse(
-            render,
-            createRequestTodoState(states[variantIndex], requestTimestamp),
-            documentOptions,
-            requestPath,
-          ),
-        ),
+        body: effectiveRenderStream === null
+          ? toResponseBytes(
+              await renderResponse(
+                render,
+                requestState,
+                documentOptions,
+                requestPath,
+              ),
+            )
+          : await renderStreamResponse(
+              effectiveRenderStream,
+              requestState,
+              documentOptions,
+              requestPath,
+              streamOptions,
+            ),
         cacheMode: "dynamic",
         requestTimestamp,
         variantIndex,
@@ -201,7 +272,9 @@ export function htmlHeaders(result) {
       result.cacheMode === "cached"
         ? CACHED_CACHE_CONTROL
         : DYNAMIC_CACHE_CONTROL,
-    "content-length": String(result.body.byteLength),
+    ...(Number.isFinite(result.body?.byteLength)
+      ? { "content-length": String(result.body.byteLength) }
+      : {}),
     "content-type": HTML_CONTENT_TYPE,
     "x-webui-bench-cache": result.cacheMode,
     "x-webui-bench-timestamp": result.requestTimestamp,
