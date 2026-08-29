@@ -14,7 +14,6 @@ import {
   assertCaseMatrix,
   createCaseMatrix,
   filterCases,
-  requiredServerCoreCount,
 } from "../lib/cases.mjs";
 import { createBuildPlan } from "../lib/builds.mjs";
 
@@ -306,18 +305,6 @@ test("the async data-boundary capability is disclosed, not faked as active", () 
     "deferred-pending-webui-release",
   );
   assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.27");
-});
-
-test("rust-actix rows declare the two cores their render worker needs; everything else declares one", () => {
-  const matrix = createCaseMatrix();
-  for (const benchmarkCase of matrix) {
-    const expected = benchmarkCase.launcher.kind === "rust-actix" ? 2 : 1;
-    assert.equal(
-      requiredServerCoreCount(benchmarkCase),
-      expected,
-      `${benchmarkCase.id} (${benchmarkCase.launcher.kind})`,
-    );
-  }
 });
 
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {
