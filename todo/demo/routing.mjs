@@ -139,6 +139,9 @@ export function resolveDemoRoute({
     if (product === undefined) {
       return Object.freeze({ kind: "not-found" });
     }
+    if (launched.path.startsWith("//")) {
+      return Object.freeze({ kind: "not-found" });
+    }
     const route = launched.path === "" || launched.path === "/"
       ? ENTRY_ROUTE
       : launched.path;

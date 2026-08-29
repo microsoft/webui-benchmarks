@@ -39,7 +39,7 @@ function startUpstream() {
   });
 }
 
-async function withGateway(operation) {
+async function withGateway(operation, handlerOptions = {}) {
   const upstream = await startUpstream();
   const hosted = new Map(
     products.map((entry) => [
@@ -48,9 +48,10 @@ async function withGateway(operation) {
     ]),
   );
   const gateway = await startDemoGateway({
-    handler: createDemoHandler({ hosted, products }),
+    handler: createDemoHandler({ hosted, products, ...handlerOptions }),
     host: "127.0.0.1",
     port: 0,
+    trustProxyHeaders: handlerOptions.trustProxyHeaders,
   });
   try {
     await operation(`http://127.0.0.1:${gateway.port}`);
@@ -93,6 +94,23 @@ test("launching a product pins it and hands it the origin root", async () => {
     assert.equal(await proxied.text(), "upstream /dynamic http");
     assert.equal(proxied.headers.get("set-cookie"), null);
   });
+});
+
+test("untrusted forwarded protocol headers cannot make requests secure", async () => {
+  await withGateway(async (origin) => {
+    const headers = { "x-forwarded-proto": "https" };
+    const launch = await fetch(`${origin}${product.launchPath}/dynamic`, {
+      headers,
+      redirect: "manual",
+    });
+    assert.doesNotMatch(launch.headers.get("set-cookie"), /Secure/u);
+    assert.equal(launch.headers.get("strict-transport-security"), null);
+
+    const proxied = await fetch(`${origin}/dynamic`, {
+      headers: { ...headers, cookie: `${DEMO_COOKIE}=${product.id}` },
+    });
+    assert.equal(await proxied.text(), "upstream /dynamic http");
+  }, { trustProxyHeaders: false });
 });
 
 test("unpinned, unknown, and unsafe requests are refused", async () => {

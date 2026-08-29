@@ -55,6 +55,7 @@ test("a launch pins the product and redirects onto the origin root", () => {
 test("an unknown product is never launched", () => {
   assert.equal(resolve("/app/does-not-exist/dynamic").kind, "not-found");
   assert.equal(resolve("/app/..%2F..%2Fetc/passwd").kind, "not-found");
+  assert.equal(resolve(`/app/${first}//evil.example/x`).kind, "not-found");
 });
 
 test("the pinned product serves every other path unchanged", () => {

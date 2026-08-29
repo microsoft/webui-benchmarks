@@ -67,20 +67,33 @@ function securityHeaders(secure) {
     : SECURITY_HEADERS;
 }
 
-function isSecureRequest(request) {
+function isSecureRequest(request, trustProxyHeaders) {
   return (
     request.socket.encrypted === true
-    || request.headers["x-forwarded-proto"]?.split(",")[0].trim() === "https"
+    || (
+      trustProxyHeaders
+      && request.headers["x-forwarded-proto"]?.split(",")[0].trim() === "https"
+    )
   );
 }
 
-function send(request, response, status, contentType, body, headers = {}) {
+function send(
+  request,
+  response,
+  status,
+  contentType,
+  body,
+  {
+    headers = {},
+    secure,
+  },
+) {
   const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
   response.writeHead(status, {
     "cache-control": "no-store",
     "content-length": String(bytes.byteLength),
     "content-type": contentType,
-    ...securityHeaders(isSecureRequest(request)),
+    ...securityHeaders(secure),
     ...headers,
   });
   response.end(request.method === "HEAD" ? undefined : bytes);
@@ -192,7 +205,7 @@ async function proxyRequest({
   timeoutMilliseconds,
   trustProxyHeaders,
 }) {
-  const secure = isSecureRequest(request);
+  const secure = isSecureRequest(request, trustProxyHeaders);
   const abort = new AbortController();
   const onClose = () => {
     if (!response.writableEnded) {
@@ -268,13 +281,14 @@ export function createDemoHandler({
   );
 
   return async function handle(request, response) {
+    const secure = isSecureRequest(request, trustProxyHeaders);
     if (!rateLimiter(clientKey(request, trustProxyHeaders))) {
       send(request, response, 429, "text/plain; charset=utf-8", "Too many requests", {
-        "retry-after": "60",
+        headers: { "retry-after": "60" },
+        secure,
       });
       return;
     }
-    const secure = isSecureRequest(request);
     const action = resolveDemoRoute({
       headers: request.headers,
       method: request.method ?? "GET",
@@ -285,16 +299,17 @@ export function createDemoHandler({
 
     if (action.kind === "method-not-allowed") {
       send(request, response, 405, "text/plain; charset=utf-8", "Method not allowed", {
-        allow: "GET, HEAD",
+        headers: { allow: "GET, HEAD" },
+        secure,
       });
       return;
     }
     if (action.kind === "gallery") {
-      send(request, response, 200, HTML_CONTENT_TYPE, gallery);
+      send(request, response, 200, HTML_CONTENT_TYPE, gallery, { secure });
       return;
     }
     if (action.kind === "registry") {
-      send(request, response, 200, JSON_CONTENT_TYPE, registry);
+      send(request, response, 200, JSON_CONTENT_TYPE, registry, { secure });
       return;
     }
     if (action.kind === "health" || action.kind === "ready") {
@@ -312,13 +327,17 @@ export function createDemoHandler({
         healthy ? 200 : 503,
         JSON_CONTENT_TYPE,
         body,
+        { secure },
       );
       return;
     }
     if (action.kind === "launch") {
       send(request, response, 302, HTML_CONTENT_TYPE, "", {
-        location: action.location,
-        "set-cookie": productCookie(action.product, secure),
+        headers: {
+          location: action.location,
+          "set-cookie": productCookie(action.product, secure),
+        },
+        secure,
       });
       return;
     }
@@ -331,7 +350,7 @@ export function createDemoHandler({
           503,
           "text/plain; charset=utf-8",
           `${action.product.id} is still starting`,
-          { "retry-after": "5" },
+          { headers: { "retry-after": "5" }, secure },
         );
         return;
       }
@@ -339,7 +358,8 @@ export function createDemoHandler({
       const asset = entry.assets.get(assetPath);
       if (asset !== undefined) {
         send(request, response, 200, asset.contentType, asset.body, {
-          "cache-control": asset.cacheControl,
+          headers: { "cache-control": asset.cacheControl },
+          secure,
         });
         return;
       }
@@ -353,7 +373,7 @@ export function createDemoHandler({
       });
       return;
     }
-    send(request, response, 404, HTML_CONTENT_TYPE, notFound);
+    send(request, response, 404, HTML_CONTENT_TYPE, notFound, { secure });
   };
 }
 
@@ -363,6 +383,7 @@ export function startDemoGateway({
   host = "0.0.0.0",
   port = 8080,
   requestTimeout = 60_000,
+  trustProxyHeaders = true,
 }) {
   const server = createServer((request, response) => {
     void Promise.resolve(handler(request, response)).catch((error) => {
@@ -379,6 +400,7 @@ export function startDemoGateway({
         502,
         "text/plain; charset=utf-8",
         "The hosted application could not be reached",
+        { secure: isSecureRequest(request, trustProxyHeaders) },
       );
     });
   });
