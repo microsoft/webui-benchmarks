@@ -263,7 +263,7 @@ export function createDemoHandler({
   rateLimiter = createRateLimiter(),
   startedAt = Date.now(),
   timeoutMilliseconds = 30_000,
-  trustProxyHeaders = true,
+  trustProxyHeaders = false,
 }) {
   const index = new Map(products.map((product) => [product.id, product]));
   const gallery = Buffer.from(renderGallery(products), "utf8");
@@ -383,7 +383,7 @@ export function startDemoGateway({
   host = "0.0.0.0",
   port = 8080,
   requestTimeout = 60_000,
-  trustProxyHeaders = true,
+  trustProxyHeaders = false,
 }) {
   const server = createServer((request, response) => {
     void Promise.resolve(handler(request, response)).catch((error) => {

@@ -110,7 +110,7 @@ test("untrusted forwarded protocol headers cannot make requests secure", async (
       headers: { ...headers, cookie: `${DEMO_COOKIE}=${product.id}` },
     });
     assert.equal(await proxied.text(), "upstream /dynamic http");
-  }, { trustProxyHeaders: false });
+  });
 });
 
 test("unpinned, unknown, and unsafe requests are refused", async () => {
