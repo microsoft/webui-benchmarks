@@ -145,6 +145,9 @@ export function resolveDemoRoute({
     const route = launched.path === "" || launched.path === "/"
       ? ENTRY_ROUTE
       : launched.path;
+    if (route.startsWith("//")) {
+      return Object.freeze({ kind: "not-found" });
+    }
     return launch(product, `${route}${search}`);
   }
 
