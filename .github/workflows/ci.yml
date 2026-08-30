@@ -20,14 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
         with:
-          node-version: 24.19.0
-
-      - name: Enable pinned pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.5.3 --activate
+          version: 12.1.0
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Install pinned Rust
         run: rustup toolchain install 1.98 --profile minimal

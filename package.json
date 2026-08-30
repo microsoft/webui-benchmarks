@@ -58,7 +58,7 @@
   "engines": {
     "node": "24.19.0"
   },
-  "packageManager": "pnpm@11.5.3",
+  "packageManager": "pnpm@12.1.0",
   "dependencies": {
     "@microsoft/fast-element": "3.0.1",
     "@microsoft/webui": "0.0.27",
