@@ -35,6 +35,6 @@
   "devDependencies": {
     "@sveltejs/adapter-node": "5.5.2",
     "@sveltejs/kit": "2.48.5",
-    "vite": "7.2.7"
+    "vite": "7.3.5"
   }
 }
