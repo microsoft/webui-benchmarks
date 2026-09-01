@@ -123,7 +123,7 @@ test("unpinned, unknown, and unsafe requests are refused", async () => {
   });
 });
 
-test("readiness reports how many products are hosted", async () => {
+test("readiness is immediate while reporting lazy product startup", async () => {
   const gateway = await startDemoGateway({
     handler: createDemoHandler({ hosted: new Map(), products }),
     host: "127.0.0.1",
@@ -135,10 +135,52 @@ test("readiness reports how many products are hosted", async () => {
     assert.equal(health.status, 200);
     assert.deepEqual((await health.json()).products, products.length);
     const ready = await fetch(`${origin}/readyz`);
-    assert.equal(ready.status, 503);
-    assert.equal((await ready.json()).status, "starting");
+    assert.equal(ready.status, 200);
+    const readiness = await ready.json();
+    assert.equal(readiness.hosted, 0);
+    assert.equal(readiness.products, products.length);
+    assert.equal(readiness.starting, 0);
+    assert.equal(readiness.status, "ready");
+    assert.ok(readiness.uptimeSeconds >= 0);
   } finally {
     await gateway.close();
+  }
+});
+
+test("launch requests start an unhosted product before redirecting", async () => {
+  const upstream = await startUpstream();
+  const hosted = new Map();
+  let launches = 0;
+  const gateway = await startDemoGateway({
+    handler: createDemoHandler({
+      ensureHosted: async (entry) => {
+        launches += 1;
+        const hostedEntry = {
+          assets: new Map(),
+          origin: upstream.origin,
+          product: entry,
+        };
+        hosted.set(entry.id, hostedEntry);
+        return hostedEntry;
+      },
+      hosted,
+      products,
+    }),
+    host: "127.0.0.1",
+    port: 0,
+  });
+  try {
+    const origin = `http://127.0.0.1:${gateway.port}`;
+    const launch = await fetch(`${origin}${product.launchPath}/dynamic`, {
+      redirect: "manual",
+    });
+    assert.equal(launch.status, 302);
+    assert.equal(launch.headers.get("location"), "/dynamic");
+    assert.equal(launches, 1);
+    assert.ok(hosted.has(product.id));
+  } finally {
+    await gateway.close();
+    await upstream.close();
   }
 });
 

@@ -54,9 +54,8 @@ COPY --from=builder --chown=node:node /app /app
 USER node
 EXPOSE 8080
 
-# Twenty-four production servers boot before the gateway reports readiness, so
-# the start period is generous while the interval stays short afterwards.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+# The gateway is ready before products are launched on demand.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["node", "todo/demo/healthcheck.mjs"]
 
 ENTRYPOINT ["node", "todo/demo/cli.mjs"]

@@ -26,8 +26,13 @@ const CLIENT_APPS = Object.freeze([
 const GATEWAY_SERVED_APPS = Object.freeze(
   new Set(["preact", "react", "react-tanstack", "solid", "vue"]),
 );
+const CLIENT_APP_SET = new Set(CLIENT_APPS);
 const SHARED_STYLES = resolve(TODO_ROOT, "shared", "styles.css");
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const EMPTY_CLIENT = Object.freeze({
+  assetDirectory: undefined,
+  assets: new Map(),
+});
 
 function contentType(path) {
   if (path.endsWith(".css")) {
@@ -63,6 +68,23 @@ function assetTable(appId, bundle, styles) {
   );
 }
 
+async function buildDemoClient(appId, progress = () => {}) {
+  if (!CLIENT_APP_SET.has(appId)) {
+    return EMPTY_CLIENT;
+  }
+  progress(`Building the ${appId} browser client`);
+  const [bundle, styles] = await Promise.all([
+    buildClient(appId),
+    GATEWAY_SERVED_APPS.has(appId) ? readFile(SHARED_STYLES) : undefined,
+  ]);
+  return Object.freeze({
+    assetDirectory: bundle.browserAssetDirectory,
+    assets: GATEWAY_SERVED_APPS.has(appId)
+      ? assetTable(appId, bundle, styles)
+      : new Map(),
+  });
+}
+
 /**
  * Build every browser client the demo needs once, and index the static assets
  * each hosted application expects the origin to publish.
@@ -71,35 +93,138 @@ export async function buildDemoClients({
   appIds = CLIENT_APPS,
   progress = () => {},
 } = {}) {
-  const styles = await readFile(SHARED_STYLES);
   const assetsByApp = new Map();
   const assetDirectories = new Map();
   for (const appId of appIds) {
-    progress(`Building the ${appId} browser client`);
-    const bundle = await buildClient(appId);
-    if (typeof bundle.browserAssetDirectory === "string") {
-      assetDirectories.set(appId, bundle.browserAssetDirectory);
+    const client = await buildDemoClient(appId, progress);
+    if (typeof client.assetDirectory === "string") {
+      assetDirectories.set(appId, client.assetDirectory);
     }
     if (GATEWAY_SERVED_APPS.has(appId)) {
-      assetsByApp.set(appId, assetTable(appId, bundle, styles));
+      assetsByApp.set(appId, client.assets);
     }
   }
   return Object.freeze({ assetDirectories, assetsByApp });
 }
 
-async function launchProduct(product, clients, registry, timeoutMilliseconds) {
+async function launchProduct(product, client, registry, timeoutMilliseconds) {
   const server = await launchCaseServer(product.sourceCase, {
-    browserAssetDirectory: clients.assetDirectories.get(product.appId),
+    browserAssetDirectory: client.assetDirectory,
     browserTls: false,
     registry,
     timeoutMilliseconds,
   });
   return Object.freeze({
-    assets: clients.assetsByApp.get(product.appId) ?? new Map(),
+    assets: client.assets,
     origin: server.announcement.url,
     product,
     stop: () => server.stop(),
   });
+}
+
+function createScheduler(concurrency) {
+  const limit = Math.max(1, concurrency);
+  const pending = [];
+  let active = 0;
+  let closed = false;
+
+  const pump = () => {
+    while (!closed && active < limit && pending.length > 0) {
+      const job = pending.shift();
+      active += 1;
+      Promise.resolve()
+        .then(job.operation)
+        .then(job.resolve, job.reject)
+        .finally(() => {
+          active -= 1;
+          pump();
+        });
+    }
+  };
+
+  return Object.freeze({
+    close(error = new Error("Demo host is shutting down")) {
+      closed = true;
+      for (const job of pending.splice(0)) {
+        job.reject(error);
+      }
+    },
+    schedule(operation) {
+      if (closed) {
+        return Promise.reject(new Error("Demo host is shutting down"));
+      }
+      return new Promise((resolveJob, rejectJob) => {
+        pending.push({ operation, reject: rejectJob, resolve: resolveJob });
+        pump();
+      });
+    },
+  });
+}
+
+/**
+ * Lazily build and launch products when a browsing session first selects them.
+ * Concurrent requests for the same product share one launch, and separate
+ * product launches remain bounded to protect small container instances.
+ */
+export function createDemoHost({
+  concurrency = 4,
+  progress = () => {},
+  registry,
+  timeoutMilliseconds = 180_000,
+  buildClientForApp = buildDemoClient,
+  launch = launchProduct,
+}) {
+  const hosted = new Map();
+  const launching = new Map();
+  const clients = new Map();
+  const scheduler = createScheduler(concurrency);
+  let stopping = false;
+
+  const clientFor = (appId) => {
+    let pending = clients.get(appId);
+    if (pending === undefined) {
+      pending = Promise.resolve(buildClientForApp(appId, progress));
+      clients.set(appId, pending);
+      pending.catch(() => clients.delete(appId));
+    }
+    return pending;
+  };
+
+  const ensureHosted = (product) => {
+    const existing = hosted.get(product.id);
+    if (existing !== undefined) {
+      return Promise.resolve(existing);
+    }
+    if (stopping) {
+      return Promise.reject(new Error("Demo host is shutting down"));
+    }
+    let pending = launching.get(product.id);
+    if (pending !== undefined) {
+      return pending;
+    }
+    pending = scheduler.schedule(async () => {
+      const client = await clientFor(product.appId);
+      const entry = await launch(product, client, registry, timeoutMilliseconds);
+      hosted.set(product.id, entry);
+      progress(
+        `${entry.product.id.padEnd(42)} ${entry.origin} (${entry.product.streaming})`,
+      );
+      return entry;
+    });
+    launching.set(product.id, pending);
+    pending.finally(() => launching.delete(product.id)).catch(() => {});
+    return pending;
+  };
+
+  const stopAll = async () => {
+    stopping = true;
+    scheduler.close();
+    await Promise.allSettled([...launching.values()]);
+    await Promise.allSettled([...hosted.values()].map((entry) => entry.stop()));
+    hosted.clear();
+  };
+
+  return Object.freeze({ ensureHosted, hosted, launching, stopAll });
 }
 
 /**
@@ -126,9 +251,13 @@ export async function launchDemoProducts({
     while (pending.length > 0) {
       const batch = pending.splice(0, Math.max(1, concurrency));
       const launched = await Promise.all(
-        batch.map((product) =>
-          launchProduct(product, clients, registry, timeoutMilliseconds)
-        ),
+        batch.map((product) => {
+          const client = {
+            assetDirectory: clients.assetDirectories.get(product.appId),
+            assets: clients.assetsByApp.get(product.appId) ?? new Map(),
+          };
+          return launchProduct(product, client, registry, timeoutMilliseconds);
+        }),
       );
       for (const entry of launched) {
         hosted.set(entry.product.id, entry);

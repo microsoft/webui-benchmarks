@@ -123,7 +123,7 @@ export function renderGallery(products) {
     "<h1>WebUI SSR todo benchmark demo</h1>",
     `<p class="demo-lede">The same routed todo workspace, implemented ${
       groups.length
-    } times and hosted ${products.length} times: every application runs in both response-mode variants. `,
+    } times and available as ${products.length} products: every application runs in both response-mode variants and starts on first open. `,
     "<strong>Streaming</strong> keeps each product's native progressive boundaries; ",
     "<strong>No streaming</strong> publishes exactly one fully collected HTML response.</p>",
     '<p class="demo-lede">Opening a product hands it the root of this origin so it runs '

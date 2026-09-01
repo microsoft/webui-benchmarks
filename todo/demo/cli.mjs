@@ -7,7 +7,7 @@ import {
   createRateLimiter,
   startDemoGateway,
 } from "./gateway.mjs";
-import { buildDemoClients, launchDemoProducts } from "./host.mjs";
+import { createDemoHost } from "./host.mjs";
 import { createDemoRegistry } from "./registry.mjs";
 import {
   ProcessRegistry,
@@ -78,11 +78,8 @@ export async function runDemo({
   const registry = new ProcessRegistry();
   const removeCleanup = installProcessCleanup(registry);
   progress(`Preparing ${products.length} demo products`);
-  const clients = await buildDemoClients({ progress });
-  const launched = await launchDemoProducts({
-    clients,
+  const host = createDemoHost({
     concurrency: options.concurrency,
-    products,
     progress,
     registry,
   });
@@ -90,7 +87,9 @@ export async function runDemo({
   try {
     gateway = await startDemoGateway({
       handler: createDemoHandler({
-        hosted: launched.hosted,
+        ensureHosted: host.ensureHosted,
+        hosted: host.hosted,
+        launching: host.launching,
         products,
         rateLimiter: options.rateLimit === 0
           ? () => true
@@ -100,7 +99,7 @@ export async function runDemo({
       port: options.port,
     });
   } catch (error) {
-    await launched.stopAll();
+    await host.stopAll();
     removeCleanup();
     await registry.stopAll();
     throw error;
@@ -109,11 +108,11 @@ export async function runDemo({
 
   const shutdown = async () => {
     await gateway.close();
-    await launched.stopAll();
+    await host.stopAll();
     removeCleanup();
     await registry.stopAll();
   };
-  return Object.freeze({ gateway, products, shutdown });
+  return Object.freeze({ gateway, host, products, shutdown });
 }
 
 if (isMainModule(import.meta.url)) {
