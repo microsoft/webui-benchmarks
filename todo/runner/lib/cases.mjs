@@ -25,24 +25,22 @@ export const RESPONSE_MODES = Object.freeze({
 });
 
 // WebUI's resumable async data-boundary (StreamingSession) is a first-class
-// capability on newer WebUI releases, but the canonical dependency pinned by
-// this repository is 0.0.27 (see package.json). Rather than fake an async
-// shell/list boundary workload against an API that is not released yet, the
-// progressive suite honestly reports this capability gap so consumers do not
-// mistake "unchanged native streaming" for "new async data-boundary
-// streaming". See README.md for the version-gated follow-up.
+// capability in WebUI 0.0.28, but this suite does not yet implement the
+// dedicated async shell/list boundary workload. The progressive suite honestly
+// reports that implementation gap so consumers do not mistake "unchanged
+// native streaming" for "new async data-boundary streaming". See README.md for
+// the follow-up.
 export const ASYNC_DATA_BOUNDARY_CAPABILITY = Object.freeze({
-  canonicalWebuiVersion: "0.0.27",
+  canonicalWebuiVersion: "0.0.28",
   notes:
     "The progressive suite continues to measure each product's existing "
     + "native progressive/streaming boundaries unchanged. A dedicated "
     + "above-the-fold-shell / below-the-fold-async-list workload driven by "
     + "WebUI's resumable StreamingSession boundary API is intentionally not "
-    + "implemented against canonical WebUI 0.0.27, because that API is not "
-    + "part of this release. This is disclosed capability metadata, not an "
-    + "active measurement.",
+    + "implemented yet against canonical WebUI 0.0.28. This is disclosed "
+    + "capability metadata, not an active measurement.",
   requiredCapability: "StreamingSession resumable async data-boundary API",
-  status: "deferred-pending-webui-release",
+  status: "available-pending-benchmark-implementation",
 });
 
 // Grouping consumed by the separate, non-headline browser outcome tier when it

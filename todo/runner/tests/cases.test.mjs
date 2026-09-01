@@ -302,9 +302,9 @@ test("assertCaseMatrix rejects a matrix that mixes response modes", () => {
 test("the async data-boundary capability is disclosed, not faked as active", () => {
   assert.equal(
     ASYNC_DATA_BOUNDARY_CAPABILITY.status,
-    "deferred-pending-webui-release",
+    "available-pending-benchmark-implementation",
   );
-  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.27");
+  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.28");
 });
 
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {

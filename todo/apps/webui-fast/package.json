@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@microsoft/fast-element": "3.0.1",
-    "@microsoft/webui": "0.0.27",
-    "@microsoft/webui-router": "0.0.27"
+    "@microsoft/webui": "0.0.28",
+    "@microsoft/webui-router": "0.0.28"
   }
 }
