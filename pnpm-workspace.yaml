@@ -7,7 +7,6 @@ packages:
 
 overrides:
   babel-preset-solid: 1.9.12
-  seroval-plugins: 1.6.3
 
 allowBuilds:
   '@microsoft/webui': true
