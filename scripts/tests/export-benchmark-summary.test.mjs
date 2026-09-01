@@ -543,7 +543,7 @@ test("accepts clean source-checkout evidence with its exact build plans", () => 
       commit: "c".repeat(40),
       kind: "checkout",
       packageArtifacts: null,
-      version: "0.0.27",
+      version: "0.0.28",
       workingTreeDirty: false,
     },
   };
@@ -721,7 +721,7 @@ test("rejects mismatched or noncanonical browser evidence", async (t) => {
         commit: "d".repeat(40),
         kind: "checkout",
         packageArtifacts: null,
-        version: "0.0.27",
+        version: "0.0.28",
         workingTreeDirty: false,
       };
     }],
