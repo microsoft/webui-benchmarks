@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canSkipUnavailableCase,
+  metricsStatus,
   unsupportedReason,
 } from "../lib/orchestrator.mjs";
 
@@ -66,5 +67,16 @@ test("unsupported native runtime reports its addon failure", () => {
       "generic",
     ),
     "Deno could not load the native addon.",
+  );
+});
+
+test("unavailable memory telemetry does not invalidate RPS evidence", () => {
+  assert.equal(
+    metricsStatus({
+      latencyP95Status: "histogram-10us",
+      loadGenerator: { status: "available" },
+      serverMetrics: { status: "unavailable" },
+    }),
+    "ok",
   );
 });

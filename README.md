@@ -173,12 +173,18 @@ pnpm run bench:quick -- --case webui-*
 
 Run only the official timeboxed SSR matrix when investigating server results.
 Each product gets two four-second saturation probes, a three-second warmup, and
-one twenty-second measured round:
+one twenty-second measured round. The SSR report publishes per-framework RPS,
+latency, and peak server RSS measured during that RPS window for both response
+modes:
 
 ```bash
 pnpm run bench:ssr:save -- \
   --save-baseline 2026-08-25-windows-285k
 ```
+
+Use `--validate-telemetry` to run a telemetry-disabled control load after each
+measured window. The runner rejects the result when RPS or p95 differs by more
+than 15%; the primary RPS window itself remains unchanged.
 
 Run only one response-mode suite explicitly:
 

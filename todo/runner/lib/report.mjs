@@ -22,6 +22,13 @@ function formatNumber(value) {
   }).format(value);
 }
 
+function formatMemory(summary) {
+  const bytes = summary.serverMemory?.peakRssBytes?.median;
+  return Number.isFinite(bytes)
+    ? formatNumber(bytes / (1024 * 1024))
+    : "unavailable";
+}
+
 export function renderHumanReport(report) {
   const responseMode = report.policies?.responseMode ?? "progressive";
   const lines = [
@@ -35,12 +42,12 @@ export function renderHumanReport(report) {
     `Protocol: ${report.config.rounds} rounds, ${report.config.connections} connections, ${report.config.durationSeconds}s`,
     `Matrix: ${report.matrix.id} (${report.matrix.expectedCaseCount} rows, dynamic SSR, natural response bytes, 1 worker per case)`,
     "",
-    `${"case".padEnd(20)} ${"renderer".padEnd(64)} ${"transport".padEnd(24)} ${"req/s".padStart(12)} ${"p95 ms".padStart(9)} ${"bytes".padStart(16)}`,
+    `${"case".padEnd(20)} ${"renderer".padEnd(64)} ${"transport".padEnd(24)} ${"req/s".padStart(12)} ${"p95 ms".padStart(9)} ${"peak RSS MiB".padStart(12)} ${"bytes".padStart(16)}`,
   ];
   for (const summary of report.matrix.summaries) {
     const bytes = summary.responseByteProfile.dynamic;
     lines.push(
-      `${summary.caseId.padEnd(20)} ${summary.renderer.padEnd(64)} ${summary.transport.padEnd(24)} ${formatNumber(summary.requestsPerSecond.median).padStart(12)} ${formatNumber(summary.latencyP95Ms.median).padStart(9)} ${`${formatNumber(bytes.minimum)}-${formatNumber(bytes.maximum)}`.padStart(16)}`,
+      `${summary.caseId.padEnd(20)} ${summary.renderer.padEnd(64)} ${summary.transport.padEnd(24)} ${formatNumber(summary.requestsPerSecond.median).padStart(12)} ${formatNumber(summary.latencyP95Ms.median).padStart(9)} ${formatMemory(summary).padStart(12)} ${`${formatNumber(bytes.minimum)}-${formatNumber(bytes.maximum)}`.padStart(16)}`,
     );
   }
   if (report.matrix.summaries.length === 0) {

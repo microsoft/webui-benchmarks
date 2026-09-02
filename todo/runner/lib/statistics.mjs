@@ -55,11 +55,49 @@ export function summarizeRounds(rounds) {
   if (!Array.isArray(rounds) || rounds.length === 0) {
     throw new RangeError("At least one successful benchmark round is required");
   }
+  const memorySeries = (select) => {
+    const values = rounds.map(select).filter(Number.isFinite);
+    return values.length === 0 ? null : summarizeSeries(values);
+  };
+  const memorySamples = memorySeries((round) => round.serverMetrics?.peakRssBytes);
+  const availableRounds = rounds.filter((round) =>
+    ["startup", "postWarmup", "peakDuringLoad", "postSettle"].every(
+      (phase) => round.serverMemory?.[phase]?.status === "available",
+    )
+  ).length;
   return Object.freeze({
     latencyP50Ms: summarizeSeries(rounds.map((round) => round.latencyP50Ms)),
     latencyP95Ms: summarizeSeries(rounds.map((round) => round.latencyP95Ms)),
     requestsPerSecond: summarizeSeries(
       rounds.map((round) => round.requestsPerSecond),
+    ),
+    serverMemory: Object.freeze({
+      availableRounds,
+      loadDeltaPeakRssBytes: memorySeries(
+        (round) => round.serverMemory?.loadDeltaPeakRssBytes,
+      ),
+      peakRssBytes: memorySamples,
+      postSettleRssBytes: memorySeries(
+        (round) => round.serverMemory?.postSettle?.rssBytes,
+      ),
+      postWarmupRssBytes: memorySeries(
+        (round) => round.serverMemory?.postWarmup?.rssBytes,
+      ),
+      retainedRssBytes: memorySeries(
+        (round) => round.serverMemory?.retainedRssBytes,
+      ),
+      startupRssBytes: memorySeries(
+        (round) => round.serverMemory?.startup?.rssBytes,
+      ),
+      status: availableRounds === rounds.length
+        ? "available"
+        : availableRounds === 0
+          ? "unavailable"
+          : "partial",
+      unavailableRounds: rounds.length - availableRounds,
+    }),
+    serverCpuMillisecondsPerRequest: memorySeries(
+      (round) => round.serverCpuMillisecondsPerRequest,
     ),
     throughputBytesPerSecond: summarizeSeries(
       rounds.map((round) => round.throughputBytesPerSecond),

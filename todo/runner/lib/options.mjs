@@ -78,6 +78,7 @@ export function parseOptions(argv, environment = process.env) {
   let quick = false;
   let json = false;
   let build;
+  let validateTelemetry = false;
   let saveBaseline = environment.WEBUI_BENCH_SAVE?.trim() || null;
   let runtimeMode =
     environment.WEBUI_BENCH_RUNTIME_MODE?.trim() || "local";
@@ -104,6 +105,8 @@ export function parseOptions(argv, environment = process.env) {
       json = true;
     } else if (name === "--build") {
       build = true;
+    } else if (name === "--validate-telemetry") {
+      validateTelemetry = true;
     } else if (name === "--skip-build") {
       build = false;
     } else if (
@@ -194,5 +197,6 @@ export function parseOptions(argv, environment = process.env) {
     saveBaseline,
     scalingCores,
     serverCpu,
+    validateTelemetry,
   });
 }

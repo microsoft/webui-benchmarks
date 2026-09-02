@@ -1,17 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import process from "node:process";
 
 export const WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON =
   "Windows process sampling is disabled because synchronous PowerShell probes perturb load measurements";
+export const PROCESS_METRICS_INTERVAL_MILLISECONDS = 200;
 
-function linuxSample(pid) {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+const execFileAsync = promisify(execFile);
+
+async function linuxSample(pid) {
+  const [stat, status] = await Promise.all([
+    readFile(`/proc/${pid}/stat`, "utf8"),
+    readFile(`/proc/${pid}/status`, "utf8"),
+  ]);
   const fields = stat.slice(stat.lastIndexOf(") ") + 2).trim().split(/\s+/u);
-  const status = readFileSync(`/proc/${pid}/status`, "utf8");
   const rssLine = status.split(/\r?\n/u).find((line) =>
     line.startsWith("VmRSS:")
   );
@@ -31,22 +37,6 @@ function linuxSample(pid) {
   };
 }
 
-function windowsSample(pid) {
-  const script = [
-    `$process = Get-Process -Id ${pid} -ErrorAction Stop`,
-    "[pscustomobject]@{ cpuMilliseconds = $process.CPU * 1000; rssBytes = $process.WorkingSet64 } | ConvertTo-Json -Compress",
-  ].join("; ");
-  const result = spawnSync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", script],
-    { encoding: "utf8", windowsHide: true },
-  );
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "PowerShell process metrics failed");
-  }
-  return JSON.parse(result.stdout);
-}
-
 function parseCpuTime(value) {
   const parts = value.trim().split(":").map(Number);
   if (parts.some((part) => !Number.isFinite(part))) {
@@ -59,16 +49,26 @@ function parseCpuTime(value) {
   return seconds * 1000;
 }
 
-function posixSample(pid) {
-  const result = spawnSync(
-    "ps",
-    ["-o", "time=", "-o", "rss=", "-p", String(pid)],
-    { encoding: "utf8" },
-  );
-  if (result.status !== 0 || result.stdout.trim().length === 0) {
-    throw new Error(result.stderr || "ps process metrics failed");
+async function posixSample(pid) {
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(
+      "ps",
+      ["-o", "time=", "-o", "rss=", "-p", String(pid)],
+      { encoding: "utf8" },
+    ));
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && "stderr" in error && typeof error.stderr === "string"
+        ? error.stderr || "ps process metrics failed"
+        : "ps process metrics failed",
+      { cause: error },
+    );
   }
-  const match = result.stdout.trim().match(/^(\S+)\s+(\d+)$/u);
+  if (stdout.trim().length === 0) {
+    throw new Error("ps process metrics failed");
+  }
+  const match = stdout.trim().match(/^(\S+)\s+(\d+)$/u);
   if (match === null) {
     throw new Error("Unexpected ps process metrics output");
   }
@@ -78,7 +78,7 @@ function posixSample(pid) {
   };
 }
 
-export function readProcessMetrics(pid, platform = process.platform) {
+export async function readProcessMetrics(pid, platform = process.platform) {
   if (!Number.isInteger(pid) || pid <= 0) {
     throw new RangeError("Process metrics require a valid PID");
   }
@@ -86,25 +86,44 @@ export function readProcessMetrics(pid, platform = process.platform) {
     return linuxSample(pid);
   }
   if (platform === "win32") {
-    return windowsSample(pid);
+    throw new Error(WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON);
   }
   return posixSample(pid);
+}
+
+export async function snapshotProcessMemory(pid, options = {}) {
+  try {
+    const metrics = await (options.read ?? readProcessMetrics)(
+      pid,
+      options.platform ?? process.platform,
+    );
+    if (!Number.isFinite(metrics.rssBytes)) {
+      throw new Error("Process RSS was incomplete");
+    }
+    return Object.freeze({ rssBytes: metrics.rssBytes, status: "available" });
+  } catch (error) {
+    return Object.freeze({
+      reason: error instanceof Error ? error.message : String(error),
+      status: "unavailable",
+    });
+  }
 }
 
 export function startProcessMetrics(
   pid,
   {
-    intervalMilliseconds = 200,
+    intervalMilliseconds = PROCESS_METRICS_INTERVAL_MILLISECONDS,
     platform = process.platform,
     read = readProcessMetrics,
   } = {},
 ) {
   if (platform === "win32" && read === readProcessMetrics) {
     return {
-      finish() {
+      async finish() {
         return Object.freeze({
           reason: WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
           status: "unavailable",
+          intervalMilliseconds,
         });
       },
     };
@@ -112,24 +131,39 @@ export function startProcessMetrics(
   const samples = [];
   const errors = [];
   const startedAt = performance.now();
-  const sample = () => {
-    try {
-      samples.push({ at: performance.now(), ...read(pid) });
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
+  let sampling;
+  const sample = async () => {
+    if (sampling !== undefined) {
+      return sampling;
     }
+    const pending = (async () => {
+      try {
+        samples.push({ at: performance.now(), ...await read(pid) });
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    })();
+    sampling = pending;
+    void pending.finally(() => {
+      if (sampling === pending) {
+        sampling = undefined;
+      }
+    });
+    return pending;
   };
-  sample();
-  const timer = setInterval(sample, intervalMilliseconds);
+  void sample();
+  const timer = setInterval(() => void sample(), intervalMilliseconds);
   timer.unref();
   return {
-    finish() {
+    async finish() {
       clearInterval(timer);
-      sample();
+      await sampling;
+      await sample();
       if (samples.length < 2) {
         return Object.freeze({
           reason: errors.at(-1) ?? "Process metrics are unavailable",
           status: "unavailable",
+          intervalMilliseconds,
         });
       }
       const first = samples[0];
@@ -146,6 +180,7 @@ export function startProcessMetrics(
         cpuMilliseconds,
         cpuPercent: (cpuMilliseconds / elapsedMilliseconds) * 100,
         errors: Object.freeze(errors),
+        intervalMilliseconds,
         peakRssBytes: Math.max(...samples.map((entry) => entry.rssBytes)),
         samples: samples.length,
         status: "available",
