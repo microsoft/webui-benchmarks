@@ -5,8 +5,5 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs"
-  },
-  "dependencies": {
-    "@microsoft/webui": "0.0.28"
   }
 }

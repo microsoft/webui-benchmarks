@@ -3,9 +3,11 @@
 
 import {
   enum as zodEnum,
+  maxLength,
+  minLength,
   object as zodObject,
   string as zodString,
-} from "zod";
+} from "zod/mini";
 import {
   WORKSPACE_ASSIGNMENT_IDS,
   WORKSPACE_PRIORITY_IDS,
@@ -16,10 +18,10 @@ import {
 
 const savedViewSchema = zodObject({
   assignment: zodEnum(WORKSPACE_ASSIGNMENT_IDS),
-  id: zodString().min(1).max(64),
-  label: zodString().min(1).max(64),
+  id: zodString().check(minLength(1), maxLength(64)),
+  label: zodString().check(minLength(1), maxLength(64)),
   priority: zodEnum(WORKSPACE_PRIORITY_IDS),
-  query: zodString().max(120),
+  query: zodString().check(maxLength(120)),
   sort: zodEnum(WORKSPACE_SORT_IDS),
   status: zodEnum(WORKSPACE_STATUS_IDS),
   view: zodEnum(WORKSPACE_VIEW_IDS),

@@ -20,7 +20,7 @@ test("official runtime metadata pins the approved versions", () => {
   const pins = loadRuntimePins();
   assert.equal(pins.runtimes.node.version, "24.19.0");
   assert.equal(pins.runtimes.bun.version, "1.4.0");
-  assert.equal(pins.runtimes.deno.version, "2.9.5");
+  assert.equal(pins.runtimes.deno.version, "2.9.6");
 });
 
 test("absent Deno is skipped locally and required officially", () => {

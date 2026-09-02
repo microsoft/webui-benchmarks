@@ -122,14 +122,15 @@ export function loadFullStackMetadata(appId) {
   if (manifest.engines?.node !== "24.19.0") {
     throw new Error(`${appId} must pin Node 24.19.0`);
   }
+  const rootManifest = readJson(resolve(BENCHMARK_ROOT, "package.json"));
   const dependencies = {
-    ...manifest.dependencies,
-    ...manifest.devDependencies,
+    ...rootManifest.dependencies,
+    ...rootManifest.devDependencies,
   };
   for (const packageName of metadata.frameworkPackages) {
     if (typeof dependencies[packageName] !== "string") {
       throw new Error(
-        `${appId} does not declare framework dependency '${packageName}'`,
+        `root workspace does not declare framework dependency '${packageName}'`,
       );
     }
   }
@@ -415,7 +416,12 @@ export async function assertBuildArtifacts(cases) {
 }
 
 export function productionEntry(app) {
-  return resolve(app.appRoot, app.metadata.productionEntry);
+  return resolve(
+    app.metadata.productionEntryBase === "workspace"
+      ? BENCHMARK_ROOT
+      : app.appRoot,
+    app.metadata.productionEntry,
+  );
 }
 
 export {

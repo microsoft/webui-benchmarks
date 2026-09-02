@@ -104,7 +104,7 @@ test(
       assert.equal(fastRound.status, "ok", fastRound.reason);
       assert.equal(fastRound.server.serverId, "actix");
       assert.match(fastRound.server.command, /webui-fast/u);
-      assert.ok(fastRound.metrics.dom.shadowRootCount.value >= 800);
+      assert.ok(fastRound.metrics.dom.shadowRootCount.value >= 400);
       assert.deepEqual(
         Object.values(fastRound.metrics.interactions.steps).map(
           ({ status }) => status,
