@@ -254,11 +254,13 @@ async function proxyRequest({
 }
 
 /**
- * Create the demo gateway request handler over an already-launched registry of
+ * Create the demo gateway request handler over a lazily launched registry of
  * hosted products.
  */
 export function createDemoHandler({
   hosted,
+  ensureHosted = async (product) => hosted.get(product.id),
+  launching = new Map(),
   products,
   rateLimiter = createRateLimiter(),
   startedAt = Date.now(),
@@ -313,18 +315,17 @@ export function createDemoHandler({
       return;
     }
     if (action.kind === "health" || action.kind === "ready") {
-      const ready = hosted.size === products.length;
       const body = JSON.stringify({
         hosted: hosted.size,
         products: products.length,
-        status: ready ? "ready" : "starting",
+        starting: launching.size,
+        status: "ready",
         uptimeSeconds: Math.round((Date.now() - startedAt) / 1_000),
       });
-      const healthy = action.kind === "health" || ready;
       send(
         request,
         response,
-        healthy ? 200 : 503,
+        200,
         JSON_CONTENT_TYPE,
         body,
         { secure },
@@ -332,6 +333,7 @@ export function createDemoHandler({
       return;
     }
     if (action.kind === "launch") {
+      await ensureHosted(action.product);
       send(request, response, 302, HTML_CONTENT_TYPE, "", {
         headers: {
           location: action.location,
@@ -342,7 +344,8 @@ export function createDemoHandler({
       return;
     }
     if (action.kind === "proxy") {
-      const entry = hosted.get(action.product.id);
+      const entry = hosted.get(action.product.id) ??
+        await ensureHosted(action.product);
       if (entry === undefined) {
         send(
           request,

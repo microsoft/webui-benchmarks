@@ -1,9 +1,10 @@
 # Todo demo site
 
-A single-container demo that hosts every todo application in the benchmark
+A single-container demo that offers every todo application in the benchmark
 suite, in both response-mode variants: **12 applications × 2 response modes =
-24 hosted products** behind one HTTP port, which is what an Azure Container App
-ingress exposes.
+24 products** behind one HTTP port, which is what an Azure Container App
+ingress exposes. The gallery and readiness endpoint start immediately; each
+product starts lazily when it is first opened.
 
 ```
 pnpm run demo                       # http://localhost:8080
@@ -25,7 +26,7 @@ Rust/Actix host; every other official case is hosted twice:
 | `progressive` | Streaming     | The product keeps its native streaming boundaries.  |
 | `complete`    | No streaming  | The product publishes one fully collected response. |
 
-Each product runs the same production server the benchmark launches
+Each product starts once on demand and runs the same production server the benchmark launches
 (`launchCaseServer`): the framework production servers for Next, Nuxt,
 SvelteKit and Astro, the shared `node:http` renderer transport for Preact,
 React, React + TanStack, Solid and Vue, and the Rust/Actix WebUI server for the
@@ -55,7 +56,7 @@ application the unmodified root path it is measured on.
 | `/`                 | Gallery of all 24 entry points.                            |
 | `/app/{product}/…`  | Launch (pin + redirect).                                   |
 | `/healthz`          | Liveness: always `200` once the gateway listens.           |
-| `/readyz`           | Readiness: `503` until all 24 products are hosted.         |
+| `/readyz`           | Readiness plus counts of running and starting products.     |
 | `/_demo/apps.json`  | Machine-readable registry of the hosted products.          |
 
 ## Hardening
@@ -69,9 +70,9 @@ application the unmodified root path it is measured on.
   TLS) `Strict-Transport-Security` are set on every response.
 - A per-client fixed-window rate limiter bounds the cost of an origin where
   every response is rendered dynamically (`--rate-limit`, `0` disables it).
-- Header and request timeouts are bounded, and every hosted server is a child
+- Header and request timeouts are bounded, and every launched server is a child
   process tracked by the shared `ProcessRegistry`, so `SIGINT`/`SIGTERM` stops
-  all 24 servers.
+  every running product.
 
 ## Options
 
@@ -82,10 +83,9 @@ application the unmodified root path it is measured on.
 | `--concurrency`   | `WEBUI_DEMO_CONCURRENCY`   | `4`       |
 | `--rate-limit`    | `WEBUI_DEMO_RATE_LIMIT`    | `600`     |
 
-`--concurrency` bounds how many production servers boot at once. Twenty-four
-servers take a few minutes to become ready on a small container, which is why
-the image declares a long health-check start period and why `/readyz` must gate
-any ingress probe.
+`--concurrency` bounds simultaneous first-use product launches. The gateway is
+ready in seconds without booting unused framework servers; opening a product
+builds its browser client if needed and starts its production server.
 
 ## Tests
 
