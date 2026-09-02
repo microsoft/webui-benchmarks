@@ -432,7 +432,7 @@ export async function runBenchmark(options, {
             });
           if (telemetryValidation.status === "failed") {
             throw new Error(
-              `${benchmarkCase.id} telemetry changed RPS or p95 beyond ${telemetryValidation.maximumRelativeDifference * 100}%`,
+              `${benchmarkCase.id} telemetry changed RPS or p95 beyond ${(telemetryValidation.maximumRelativeDifference * 100).toFixed(0)}%`,
             );
           }
           await waitForMemorySettle();

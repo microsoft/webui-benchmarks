@@ -61,7 +61,9 @@ export function summarizeRounds(rounds) {
   };
   const memorySamples = memorySeries((round) => round.serverMetrics?.peakRssBytes);
   const availableRounds = rounds.filter((round) =>
-    round.serverMetrics?.status === "available"
+    ["startup", "postWarmup", "peakDuringLoad", "postSettle"].every(
+      (phase) => round.serverMemory?.[phase]?.status === "available",
+    )
   ).length;
   return Object.freeze({
     latencyP50Ms: summarizeSeries(rounds.map((round) => round.latencyP50Ms)),
