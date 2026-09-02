@@ -33,18 +33,54 @@ test("round summaries retain all required throughput and latency series", () => 
       latencyP50Ms: 1,
       latencyP95Ms: 3,
       requestsPerSecond: 100,
+      serverMetrics: { peakRssBytes: 10_000, status: "available" },
       throughputBytesPerSecond: 1_000,
     },
     {
       latencyP50Ms: 2,
       latencyP95Ms: 5,
       requestsPerSecond: 200,
+      serverMetrics: { peakRssBytes: 20_000, status: "available" },
       throughputBytesPerSecond: 2_000,
     },
   ]);
   assert.equal(summary.requestsPerSecond.median, 150);
   assert.equal(summary.latencyP95Ms.p95, 5);
   assert.equal(summary.throughputBytesPerSecond.mad, 500);
+  assert.equal(summary.serverMemory.status, "available");
+  assert.equal(summary.serverMemory.peakRssBytes.median, 15_000);
+});
+
+test("round summaries disclose unavailable server memory samples", () => {
+  const summary = summarizeRounds([
+    {
+      latencyP50Ms: 1,
+      latencyP95Ms: 3,
+      requestsPerSecond: 100,
+      serverMetrics: { peakRssBytes: 10_000, status: "available" },
+      throughputBytesPerSecond: 1_000,
+    },
+    {
+      latencyP50Ms: 2,
+      latencyP95Ms: 5,
+      requestsPerSecond: 200,
+      serverMetrics: { status: "unavailable" },
+      throughputBytesPerSecond: 2_000,
+    },
+  ]);
+  assert.deepEqual(summary.serverMemory, {
+    availableRounds: 1,
+    peakRssBytes: {
+      count: 1,
+      mad: 0,
+      max: 10_000,
+      median: 10_000,
+      min: 10_000,
+      p95: 10_000,
+    },
+    status: "partial",
+    unavailableRounds: 1,
+  });
 });
 
 test("statistics reject empty and non-finite samples", () => {

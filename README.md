@@ -173,7 +173,9 @@ pnpm run bench:quick -- --case webui-*
 
 Run only the official timeboxed SSR matrix when investigating server results.
 Each product gets two four-second saturation probes, a three-second warmup, and
-one twenty-second measured round:
+one twenty-second measured round. The SSR report publishes per-framework RPS,
+latency, and peak server RSS measured during that RPS window for both response
+modes:
 
 ```bash
 pnpm run bench:ssr:save -- \

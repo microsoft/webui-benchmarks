@@ -55,12 +55,30 @@ export function summarizeRounds(rounds) {
   if (!Array.isArray(rounds) || rounds.length === 0) {
     throw new RangeError("At least one successful benchmark round is required");
   }
+  const memorySamples = rounds
+    .map((round) => round.serverMetrics)
+    .filter((metrics) =>
+      metrics?.status === "available" && Number.isFinite(metrics.peakRssBytes)
+    )
+    .map((metrics) => metrics.peakRssBytes);
   return Object.freeze({
     latencyP50Ms: summarizeSeries(rounds.map((round) => round.latencyP50Ms)),
     latencyP95Ms: summarizeSeries(rounds.map((round) => round.latencyP95Ms)),
     requestsPerSecond: summarizeSeries(
       rounds.map((round) => round.requestsPerSecond),
     ),
+    serverMemory: Object.freeze({
+      availableRounds: memorySamples.length,
+      peakRssBytes: memorySamples.length === 0
+        ? null
+        : summarizeSeries(memorySamples),
+      status: memorySamples.length === rounds.length
+        ? "available"
+        : memorySamples.length === 0
+          ? "unavailable"
+          : "partial",
+      unavailableRounds: rounds.length - memorySamples.length,
+    }),
     throughputBytesPerSecond: summarizeSeries(
       rounds.map((round) => round.throughputBytesPerSecond),
     ),
