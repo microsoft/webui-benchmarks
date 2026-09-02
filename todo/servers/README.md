@@ -35,6 +35,15 @@ the released platform package when no path is supplied. Native-addon failure
 exits with code 78 after emitting one JSON `unsupported` record; WebAssembly is
 never used.
 
+The official benchmark launches the `bun-serve` build, an ahead-of-time
+`bun build --compile --bytecode --splitting --format=esm` executable
+(`target/bun/webui-bun-serve`), instead of interpreting `bun.mjs` directly.
+`--format=esm` is required because `--bytecode` defaults to a CommonJS target
+that rejects the top-level `await` in `bun.mjs`'s startup block. Run
+`node todo/runner/lib/builds.mjs` indirectly via the runner build plan (or
+`bun build todo/servers/bun.mjs --compile --bytecode --splitting --format=esm
+--outfile target/bun/webui-bun-serve`) to reproduce it locally.
+
 `node todo/servers/verify-runtimes.mjs --official` enforces Node 24.19.0,
 Bun 1.3.14, and Deno 2.9.5. Local verification reports an absent Deno as
 `skipped`; official verification fails it. Generate the Rust state input with:

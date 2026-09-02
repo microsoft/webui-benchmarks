@@ -5,7 +5,8 @@ import { existsSync } from "node:fs";
 import process from "node:process";
 import { join, win32 as windowsPath } from "node:path";
 import { runManagedCommand } from "./process-tree.mjs";
-import { BENCHMARK_ROOT, REPOSITORY_ROOT } from "./paths.mjs";
+import { BENCHMARK_ROOT, bunServeBinaryPath, REPOSITORY_ROOT } from "./paths.mjs";
+import { resolveRuntimeExecutable } from "../../servers/lib/runtime-executable.mjs";
 import {
   configuredWebuiAddonPath,
   configuredWebuiCheckout,
@@ -212,6 +213,24 @@ const definitions = Object.freeze({
     display: "node todo/servers/write-state-pool.mjs",
     id: "state-pool",
   }),
+  "bun-serve": Object.freeze({
+    args: [
+      "build",
+      join("todo", "servers", "bun.mjs"),
+      "--compile",
+      "--bytecode",
+      "--splitting",
+      "--format=esm",
+      "--outfile",
+      bunServeBinaryPath(),
+    ],
+    command: resolveRuntimeExecutable("bun"),
+    cwd: BENCHMARK_ROOT,
+    dependsOn: Object.freeze([]),
+    display:
+      "bun build todo/servers/bun.mjs --compile --bytecode --splitting --format=esm",
+    id: "bun-serve",
+  }),
   "rust-actix": Object.freeze({
     ...benchmarkCargoInvocation([
       "build",
@@ -286,6 +305,7 @@ const BUILD_ORDER = Object.freeze([
   "solid",
   "vue",
   "state-pool",
+  "bun-serve",
   "rust-actix",
   "tls-material",
   "full-stack-next",

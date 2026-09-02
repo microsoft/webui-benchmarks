@@ -12,7 +12,7 @@ import {
   productionEntry,
 } from "./metadata.mjs";
 import { spawnManagedProcess } from "./process-tree.mjs";
-import { BENCHMARK_ROOT, BUILD_ROOT } from "./paths.mjs";
+import { BENCHMARK_ROOT, BUILD_ROOT, bunServeBinaryPath } from "./paths.mjs";
 import { resolveRuntimeExecutable } from "../../servers/lib/runtime-executable.mjs";
 import { resolveNativeAddon } from "../../servers/lib/webui-engine.mjs";
 
@@ -348,8 +348,8 @@ function runtimeCommand(benchmarkCase) {
   }
   if (benchmarkCase.runtimeId === "bun") {
     return {
-      args: [entry, "--port", "0"],
-      command: resolveRuntimeExecutable("bun"),
+      args: ["--port", "0"],
+      command: bunServeBinaryPath(),
     };
   }
   return {
