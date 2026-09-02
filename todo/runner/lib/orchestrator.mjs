@@ -111,7 +111,12 @@ export function metricsStatus(measurement) {
     : "ok";
 }
 
-function memoryLifecycle(startup, postWarmup, measurement, postSettle) {
+function memoryLifecycle({
+  measurement,
+  postSettle,
+  postWarmup,
+  startup,
+}) {
   const peak = measurement.serverMetrics.status === "available"
     ? Object.freeze({
         rssBytes: measurement.serverMetrics.peakRssBytes,
@@ -456,12 +461,12 @@ export async function runBenchmark(options, {
             serverMetrics: measurement.serverMetrics,
             serverCpuMillisecondsPerRequest:
               measurement.serverCpuMillisecondsPerRequest,
-            serverMemory: memoryLifecycle(
-              startupMemory,
-              postWarmupMemory,
+            serverMemory: memoryLifecycle({
               measurement,
-              postSettleMemory,
-            ),
+              postSettle: postSettleMemory,
+              postWarmup: postWarmupMemory,
+              startup: startupMemory,
+            }),
             telemetry: Object.freeze({
               overheadValidation: telemetryValidation,
               samplerIntervalMilliseconds:

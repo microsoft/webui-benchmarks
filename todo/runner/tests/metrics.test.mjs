@@ -45,3 +45,21 @@ test("memory snapshots degrade to unavailable without affecting callers", async 
     { reason: "probe failed", status: "unavailable" },
   );
 });
+
+test("asynchronous sampling never overlaps probes", async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const metrics = startProcessMetrics(123, {
+    intervalMilliseconds: 1,
+    read: async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      active -= 1;
+      return { cpuMilliseconds: 1, rssBytes: 1024 };
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await metrics.finish();
+  assert.equal(maximumActive, 1);
+});

@@ -126,16 +126,20 @@ export function startProcessMetrics(
     if (sampling !== undefined) {
       return sampling;
     }
-    sampling = (async () => {
-    try {
-      samples.push({ at: performance.now(), ...await read(pid) });
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    } finally {
-      sampling = undefined;
-    }
+    const pending = (async () => {
+      try {
+        samples.push({ at: performance.now(), ...await read(pid) });
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
     })();
-    return sampling;
+    sampling = pending;
+    void pending.finally(() => {
+      if (sampling === pending) {
+        sampling = undefined;
+      }
+    });
+    return pending;
   };
   void sample();
   const timer = setInterval(() => void sample(), intervalMilliseconds);
