@@ -9,7 +9,7 @@ function product(id, appId = "shared-app") {
   return Object.freeze({ appId, id, streaming: "buffered" });
 }
 
-test("products and browser clients start lazily and only once", async () => {
+test("the host deduplicates product and browser client startup", async () => {
   const builds = [];
   const launches = [];
   const stopped = [];
@@ -33,6 +33,7 @@ test("products and browser clients start lazily and only once", async () => {
   const second = product("second");
 
   assert.equal(host.hosted.size, 0);
+  assert.equal(host.isReady(), false);
   const [firstLaunch, duplicateLaunch] = await Promise.all([
     host.ensureHosted(first),
     host.ensureHosted(first),
@@ -50,4 +51,31 @@ test("products and browser clients start lazily and only once", async () => {
   await host.stopAll();
   assert.deepEqual(stopped.sort(), ["first", "second"]);
   assert.equal(host.hosted.size, 0);
+  assert.equal(host.isReady(), false);
+});
+
+test("prepareAll launches and warms every product before becoming ready", async () => {
+  const warmed = [];
+  const host = createDemoHost({
+    buildClientForApp: async () => ({
+      assetDirectory: undefined,
+      assets: new Map(),
+    }),
+    launch: async (entry, client) => ({
+      assets: client.assets,
+      origin: `http://127.0.0.1/${entry.id}`,
+      product: entry,
+      stop: async () => {},
+    }),
+    registry: {},
+    warm: async (entry, requests) => warmed.push([entry.product.id, requests]),
+  });
+  const products = [product("first"), product("second")];
+
+  await host.prepareAll(products);
+
+  assert.equal(host.isReady(), true);
+  assert.equal(host.hosted.size, products.length);
+  assert.deepEqual(warmed.sort(), [["first", 3], ["second", 3]]);
+  await host.stopAll();
 });

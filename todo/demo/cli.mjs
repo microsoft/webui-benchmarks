@@ -40,7 +40,7 @@ export function parseDemoArgs(argv, environment = process.env) {
     ),
     rateLimit: parsePositiveInteger(
       "--rate-limit",
-      environment.WEBUI_DEMO_RATE_LIMIT ?? "600",
+      environment.WEBUI_DEMO_RATE_LIMIT ?? "0",
     ),
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -89,6 +89,7 @@ export async function runDemo({
       handler: createDemoHandler({
         ensureHosted: host.ensureHosted,
         hosted: host.hosted,
+        isReady: host.isReady,
         launching: host.launching,
         products,
         rateLimiter: options.rateLimit === 0
@@ -105,6 +106,16 @@ export async function runDemo({
     throw error;
   }
   progress(`Demo gateway listening on http://${options.host}:${gateway.port}`);
+  try {
+    await host.prepareAll(products);
+  } catch (error) {
+    await gateway.close();
+    await host.stopAll();
+    removeCleanup();
+    await registry.stopAll();
+    throw error;
+  }
+  progress(`All ${products.length} demo products are ready and warm`);
 
   const shutdown = async () => {
     await gateway.close();

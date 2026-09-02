@@ -129,6 +129,7 @@ function demoProduct(benchmarkCase) {
   return Object.freeze({
     appId: benchmarkCase.appId,
     application: presentation.application,
+    benchmarkPath: `/benchmark/${id}`,
     launchPath: `/app/${id}`,
     caseId: benchmarkCase.id,
     family: presentation.family,
@@ -181,6 +182,9 @@ export function assertDemoRegistry(products) {
     }
     if (!/^\/app\/[\w.-]+$/u.test(product.launchPath)) {
       throw new Error(`${product.id} has an unsafe base path`);
+    }
+    if (!/^\/benchmark\/[\w.-]+$/u.test(product.benchmarkPath)) {
+      throw new Error(`${product.id} has an unsafe benchmark path`);
     }
   }
   if (applications.size !== DEMO_APPLICATION_COUNT) {

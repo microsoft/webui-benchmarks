@@ -13,6 +13,7 @@ services:
     environment:
       PORT: "8080"
       WEBUI_DEMO_CONCURRENCY: "4"
+      WEBUI_DEMO_RATE_LIMIT: "0"
     init: true
     ports:
       - "8080:8080"

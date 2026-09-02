@@ -11,17 +11,18 @@
  * container port therefore needs an explicit resolution order rather than a
  * plain prefix strip:
  *
- *   1. `/app/{productId}/{route}` is the launch entry point. It pins the
- *      product onto the browsing session with a cookie and redirects to
- *      `{route}` on the demo origin, so gallery links and shared deep links
- *      both work while the hosted application still owns the root path.
- *   2. Every other request is served by the pinned product, exactly at the path
+ *   1. `/benchmark/{productId}/{route}` is a stable, cookie-free RPS endpoint.
+ *      The gateway strips the product prefix and returns the upstream response
+ *      directly, with no redirect or markup rewrite.
+ *   2. `/app/{productId}/{route}` pins an interactive browsing session and
+ *      redirects to the root path required by each framework's client router.
+ *   3. Every other request is served by the pinned product, exactly at the path
  *      the application emitted. Serving each application from the origin root
  *      is what keeps it byte-for-byte the benchmark artifact: its router, its
  *      root-absolute asset URLs, and its module identities are untouched, and
  *      the gateway never rewrites markup. The cost is that one browsing session
  *      shows one product at a time; launching another product re-pins it.
- *   3. Anything left over is answered by the gallery's not-found page.
+ *   4. Anything left over is answered by the gallery's not-found page.
  *
  * All functions here are pure so the resolution order is unit tested without
  * sockets.
@@ -33,6 +34,7 @@ export const READY_PATH = "/readyz";
 export const REGISTRY_PATH = "/_demo/apps.json";
 export const GALLERY_PATH = "/";
 export const APP_PREFIX = "/app/";
+export const BENCHMARK_PREFIX = "/benchmark/";
 
 const PRODUCT_ID_PATTERN = /^[\w.-]+$/u;
 const ALLOWED_METHODS = Object.freeze(new Set(["GET", "HEAD"]));
@@ -49,11 +51,11 @@ function headerValue(headers, name) {
  * Split `/app/{productId}/rest` into its product id and the path the hosted
  * application actually sees. Returns `null` when the path is not prefixed.
  */
-export function splitBasePath(pathname) {
-  if (!pathname.startsWith(APP_PREFIX)) {
+export function splitBasePath(pathname, prefix = APP_PREFIX) {
+  if (!pathname.startsWith(prefix)) {
     return null;
   }
-  const remainder = pathname.slice(APP_PREFIX.length);
+  const remainder = pathname.slice(prefix.length);
   const boundary = remainder.indexOf("/");
   const productId = boundary === -1 ? remainder : remainder.slice(0, boundary);
   if (!PRODUCT_ID_PATTERN.test(productId)) {
@@ -131,6 +133,18 @@ export function resolveDemoRoute({
   }
   if (pathname === REGISTRY_PATH) {
     return Object.freeze({ kind: "registry" });
+  }
+
+  const benchmark = splitBasePath(pathname, BENCHMARK_PREFIX);
+  if (benchmark !== null) {
+    const product = products.get(benchmark.productId);
+    if (product === undefined || benchmark.path.startsWith("//")) {
+      return Object.freeze({ kind: "not-found" });
+    }
+    const route = benchmark.path === "" || benchmark.path === "/"
+      ? ENTRY_ROUTE
+      : benchmark.path;
+    return proxy(product, `${route}${search}`);
   }
 
   const launched = splitBasePath(pathname);
