@@ -10,6 +10,7 @@ import {
   OFFICIAL_CASE_COUNT,
 } from "../todo/runner/lib/cases.mjs";
 import {
+  PROCESS_METRICS_INTERVAL_MILLISECONDS,
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../todo/runner/lib/metrics.mjs";
 import { analyzeSaturation } from "../todo/runner/lib/load.mjs";
@@ -51,6 +52,7 @@ const summaryStatisticFields = Object.freeze([
 const windowsSaturationReason = "Server process metrics were unavailable";
 const unsaturatedReason =
   "Throughput was still increasing at the largest connection count";
+const mebibyte = 1024 * 1024;
 const runtimePins = loadRuntimePins();
 const defaultOutputPath = resolve(
   repositoryRoot,
@@ -379,12 +381,24 @@ function hasCompleteRawRounds(report) {
 }
 
 function isWindowsProcessMetricsUnavailable(serverMetrics) {
+  const keys = serverMetrics === null || typeof serverMetrics !== "object"
+    ? []
+    : Object.keys(serverMetrics);
   return serverMetrics !== null
     && typeof serverMetrics === "object"
     && !Array.isArray(serverMetrics)
-    && Object.keys(serverMetrics).length === 2
+    && keys.length >= 2
+    && keys.length <= 3
+    && keys.every((key) =>
+      ["intervalMilliseconds", "reason", "status"].includes(key)
+    )
     && serverMetrics.status === "unavailable"
-    && serverMetrics.reason === WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON;
+    && serverMetrics.reason === WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON
+    && (
+      serverMetrics.intervalMilliseconds === undefined
+      || serverMetrics.intervalMilliseconds
+        === PROCESS_METRICS_INTERVAL_MILLISECONDS
+    );
 }
 
 function hasGreenRuntimeEvidence(report) {
@@ -484,7 +498,7 @@ function isDocumentedPartialReport(report) {
     && hasGreenRuntimeEvidence(report)
     && report.rawRounds.every((round) =>
       (windows
-        ? round.metricsStatus === "metrics-unavailable"
+        ? round.metricsStatus === "ok"
           && isWindowsProcessMetricsUnavailable(round.serverMetrics)
         : round.metricsStatus === "ok"
           && round.serverMetrics?.status === "available")
@@ -512,6 +526,114 @@ function isCanonicalOfficialReport(report) {
     && hasCompleteRawRounds(report)
     && hasDerivedSummaries(report)
     && hasCompleteSaturationEvidence(report);
+}
+
+function unavailableTelemetryMetric(unit, reason) {
+  return {
+    available: false,
+    detail: reason,
+    statistics: null,
+    unit,
+    value: null,
+    valueDisplay: "Unavailable",
+  };
+}
+
+function telemetryMetric(statistics, unit, scale, reason) {
+  if (statistics === null) {
+    return unavailableTelemetryMetric(unit, reason);
+  }
+  const scaled = (value) => value / scale;
+  return {
+    available: true,
+    detail: `${statistics.count} measured round${
+      statistics.count === 1 ? "" : "s"
+    } · MAD ${formatNumber(scaled(statistics.mad))} ${unit} · p95 ${
+      formatNumber(scaled(statistics.p95))
+    } ${unit}`,
+    statistics,
+    unit,
+    value: statistics.median,
+    valueDisplay: formatNumber(scaled(statistics.median)),
+  };
+}
+
+function telemetryReasons(rounds) {
+  return [
+    ...new Set(
+      rounds.flatMap((round) => [
+        round.serverMetrics,
+        round.serverMemory?.startup,
+        round.serverMemory?.postWarmup,
+        round.serverMemory?.peakDuringLoad,
+        round.serverMemory?.postSettle,
+      ])
+        .filter((measurement) =>
+          measurement?.status === "unavailable"
+          && typeof measurement.reason === "string"
+          && measurement.reason.length > 0
+        )
+        .map(({ reason }) => reason),
+    ),
+  ];
+}
+
+function serverTelemetry(report, caseId) {
+  const rounds = report.rawRounds.filter((round) => round.caseId === caseId);
+  const summary = summarizeRounds(rounds);
+  const reasons = telemetryReasons(rounds);
+  const reason = reasons.length === 1 ? reasons[0] : null;
+  const memory = summary.serverMemory;
+  return {
+    available: memory.status === "available",
+    availableRounds: memory.availableRounds,
+    cpuMillisecondsPerRequest: telemetryMetric(
+      summary.serverCpuMillisecondsPerRequest,
+      "ms/req",
+      1,
+      reason,
+    ),
+    loadDeltaPeakRssBytes: telemetryMetric(
+      memory.loadDeltaPeakRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    peakRssBytes: telemetryMetric(
+      memory.peakRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    postSettleRssBytes: telemetryMetric(
+      memory.postSettleRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    postWarmupRssBytes: telemetryMetric(
+      memory.postWarmupRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    reason,
+    reasons,
+    retainedRssBytes: telemetryMetric(
+      memory.retainedRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    startupRssBytes: telemetryMetric(
+      memory.startupRssBytes,
+      "MiB",
+      mebibyte,
+      reason,
+    ),
+    status: memory.status,
+    unavailableRounds: memory.unavailableRounds,
+  };
 }
 
 function matrixRows(report) {
@@ -551,6 +673,7 @@ function matrixRows(report) {
       summary.renderer,
       `summaries[${index}].renderer`,
     ),
+    serverTelemetry: serverTelemetry(report, summary.caseId),
     transport: requiredString(
       summary.transport,
       `summaries[${index}].transport`,
@@ -664,6 +787,7 @@ function renderRows(rows, browserEvidence, warnings) {
     const metric = {
       available: true,
       detail,
+      serverTelemetry: row.serverTelemetry,
       value: row.medianRequestsPerSecond,
       valueDisplay,
     };

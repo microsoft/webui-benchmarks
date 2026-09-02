@@ -21,6 +21,7 @@ import {
   createCaseMatrix,
 } from "../../todo/runner/lib/cases.mjs";
 import {
+  PROCESS_METRICS_INTERVAL_MILLISECONDS,
   WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
 } from "../../todo/runner/lib/metrics.mjs";
 import { analyzeSaturation } from "../../todo/runner/lib/load.mjs";
@@ -118,6 +119,10 @@ function responseByteProfile(index = 0) {
 }
 
 function rawRound(benchmarkCase, round, orderIndex) {
+  const startupRssBytes = (40 + orderIndex) * 1024 * 1024;
+  const postWarmupRssBytes = startupRssBytes + 2 * 1024 * 1024;
+  const peakRssBytes = startupRssBytes + 4 * 1024 * 1024;
+  const postSettleRssBytes = startupRssBytes + 1024 * 1024;
   return {
     affinity: { cpuIndex: 0, status: "applied" },
     caseId: benchmarkCase.id,
@@ -139,7 +144,16 @@ function rawRound(benchmarkCase, round, orderIndex) {
     responseByteProfile: responseByteProfile(orderIndex),
     responseBytes: 10_065.5 + orderIndex,
     round,
-    serverMetrics: { status: "available" },
+    serverCpuMillisecondsPerRequest: 0.25 + orderIndex / 100,
+    serverMemory: {
+      loadDeltaPeakRssBytes: peakRssBytes - startupRssBytes,
+      peakDuringLoad: { rssBytes: peakRssBytes, status: "available" },
+      postSettle: { rssBytes: postSettleRssBytes, status: "available" },
+      postWarmup: { rssBytes: postWarmupRssBytes, status: "available" },
+      retainedRssBytes: postSettleRssBytes - startupRssBytes,
+      startup: { rssBytes: startupRssBytes, status: "available" },
+    },
+    serverMetrics: { peakRssBytes, status: "available" },
     streaming: benchmarkCase.streaming,
     throughputBytesPerSecond: 10_000_000,
     warmup: {
@@ -300,6 +314,7 @@ function setReportResponseMode(report, responseMode) {
 function windowsPartialReport() {
   const value = report();
   const serverMetrics = () => ({
+    intervalMilliseconds: PROCESS_METRICS_INTERVAL_MILLISECONDS,
     reason: WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
     status: "unavailable",
   });
@@ -310,7 +325,16 @@ function windowsPartialReport() {
   };
   value.rawRounds = value.rawRounds.map((round) => ({
     ...round,
-    metricsStatus: "metrics-unavailable",
+    metricsStatus: "ok",
+    serverCpuMillisecondsPerRequest: null,
+    serverMemory: {
+      loadDeltaPeakRssBytes: null,
+      peakDuringLoad: serverMetrics(),
+      postSettle: serverMetrics(),
+      postWarmup: serverMetrics(),
+      retainedRssBytes: null,
+      startup: serverMetrics(),
+    },
     serverMetrics: serverMetrics(),
   }));
   value.saturation = value.cases.map((benchmarkCase) => {
@@ -582,6 +606,16 @@ test("accepts complete Windows reports with intentional process telemetry gaps",
   const summary = buildBenchmarkSummary(windowsPartialReport());
   assert.equal(summary.benchmarks.rows.length, 15);
   assert.equal(summary.benchmarks.hasUnavailable, false);
+  const telemetry =
+    summary.benchmarks.rows[0].metrics.requestsPerSecond.serverTelemetry;
+  assert.equal(telemetry.available, false);
+  assert.equal(telemetry.status, "unavailable");
+  assert.equal(
+    telemetry.reason,
+    WINDOWS_PROCESS_METRICS_UNAVAILABLE_REASON,
+  );
+  assert.equal(telemetry.peakRssBytes.available, false);
+  assert.equal(telemetry.cpuMillisecondsPerRequest.available, false);
 });
 
 test("publishes fixed-load saturation warnings without hiding them", () => {
@@ -681,6 +715,21 @@ test("combines complete and progressive throughput with only essential browser m
       Object.keys(row.metrics).length === 5
     ),
     true,
+  );
+  const row = summary.benchmarks.rows[0];
+  assert.equal(
+    row.metrics.noStreamingRequestsPerSecond.serverTelemetry
+      .peakRssBytes.available,
+    true,
+  );
+  assert.equal(
+    row.metrics.streamingRequestsPerSecond.serverTelemetry
+      .cpuMillisecondsPerRequest.available,
+    true,
+  );
+  assert.equal(
+    "serverTelemetry" in row.metrics.rendererPrivateBytes,
+    false,
   );
   assert.deepEqual(
     JSON.parse(summary.benchmarksJson),
@@ -881,6 +930,12 @@ test("rejects partial reports with any non-Windows-sampler cause", async (t) => 
     }],
     ["mixed process-metric reasons", (value) => {
       value.rawRounds[0].serverMetrics.reason = "A different failure";
+    }],
+    ["unexpected process-metric interval", (value) => {
+      value.rawRounds[0].serverMetrics.intervalMilliseconds = 1;
+    }],
+    ["unexpected process-metric field", (value) => {
+      value.rawRounds[0].serverMetrics.detail = "unexpected";
     }],
     ["available server metrics", (value) => {
       value.rawRounds[0].serverMetrics = { status: "available" };
