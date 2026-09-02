@@ -19,7 +19,7 @@ import { spawnServer } from "./child-server.mjs";
 test("official runtime metadata pins the approved versions", () => {
   const pins = loadRuntimePins();
   assert.equal(pins.runtimes.node.version, "24.19.0");
-  assert.equal(pins.runtimes.bun.version, "1.3.14");
+  assert.equal(pins.runtimes.bun.version, "1.4.0");
   assert.equal(pins.runtimes.deno.version, "2.9.5");
 });
 
@@ -49,7 +49,7 @@ test("runtime mismatches are informational locally and fatal officially", () => 
   const pins = loadRuntimePins();
   const run = (definition, runtimeId) => ({
     installed: true,
-    version: runtimeId === "bun" ? "1.4.0" : definition.version,
+    version: runtimeId === "bun" ? "1.3.14" : definition.version,
   });
   assert.equal(verifyRuntimeMatrix({ pins, run }).status, "ok");
   assert.equal(

@@ -41,7 +41,7 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   assert.equal(shadow.dependencies["@microsoft/webui"], "0.0.28");
   assert.equal(tsconfig.compilerOptions.experimentalDecorators, true);
   assert.equal(tsconfig.compilerOptions.useDefineForClassFields, false);
-  assert.equal(runtimes.runtimes.bun.version, "1.3.14");
+  assert.equal(runtimes.runtimes.bun.version, "1.4.0");
   assert.equal(runtimes.runtimes.deno.version, "2.9.5");
   assert.equal(runtimes.runtimes.node.version, "24.19.0");
 });

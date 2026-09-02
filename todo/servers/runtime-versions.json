@@ -9,7 +9,7 @@
     "bun": {
       "args": ["--version"],
       "command": "bun",
-      "version": "1.3.14"
+      "version": "1.4.0"
     },
     "deno": {
       "args": ["--version"],
