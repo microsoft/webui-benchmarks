@@ -262,6 +262,33 @@ function loadGeneratorStatus(startCpu, elapsedMilliseconds, result) {
   );
 }
 
+export function validateTelemetryOverhead(
+  instrumented,
+  uninstrumented,
+  maximumRelativeDifference = 0.15,
+) {
+  const relativeDifference = (left, right) =>
+    Math.abs(left - right) / Math.max(left, right, 1);
+  const requestsPerSecondDifference = relativeDifference(
+    instrumented.requestsPerSecond,
+    uninstrumented.requestsPerSecond,
+  );
+  const latencyP95Difference = relativeDifference(
+    instrumented.latencyP95Ms,
+    uninstrumented.latencyP95Ms,
+  );
+  const valid = Number.isFinite(requestsPerSecondDifference)
+    && Number.isFinite(latencyP95Difference)
+    && requestsPerSecondDifference <= maximumRelativeDifference
+    && latencyP95Difference <= maximumRelativeDifference;
+  return Object.freeze({
+    latencyP95Difference,
+    maximumRelativeDifference,
+    requestsPerSecondDifference,
+    status: valid ? "passed" : "failed",
+  });
+}
+
 export async function warmup(url, protocol) {
   const result = await runAutocannon(
     autocannonOptions(url, {
@@ -286,9 +313,12 @@ export async function measureLoad(
     loadWorkers,
     processId,
     responseBytes,
+    collectServerMetrics = true,
   },
 ) {
-  const processMetrics = startProcessMetrics(processId);
+  const processMetrics = collectServerMetrics
+    ? startProcessMetrics(processId)
+    : null;
   const startCpu = process.cpuUsage();
   const startedAt = performance.now();
   let result;
@@ -301,11 +331,13 @@ export async function measureLoad(
       }),
     );
   } catch (error) {
-    processMetrics.finish();
+    await processMetrics?.finish();
     throw error;
   }
   const elapsedMilliseconds = performance.now() - startedAt;
-  const serverMetrics = processMetrics.finish();
+  const serverMetrics = processMetrics === null
+    ? Object.freeze({ reason: "Server telemetry disabled", status: "unavailable" })
+    : await processMetrics.finish();
   assertSuccessfulLoad(result, url);
   const requestsPerSecond = result.requests.average;
   return Object.freeze({
@@ -326,6 +358,10 @@ export async function measureLoad(
     requests: result.requests.total,
     requestsPerSecond,
     serverMetrics,
+    serverCpuMillisecondsPerRequest:
+      serverMetrics.status === "available" && result.requests.total > 0
+        ? serverMetrics.cpuMilliseconds / result.requests.total
+        : null,
     timeouts: result.timeouts,
     throughputBytesPerSecond:
       result.throughput?.average ?? requestsPerSecond * responseBytes,

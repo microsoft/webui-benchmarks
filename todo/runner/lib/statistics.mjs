@@ -55,12 +55,14 @@ export function summarizeRounds(rounds) {
   if (!Array.isArray(rounds) || rounds.length === 0) {
     throw new RangeError("At least one successful benchmark round is required");
   }
-  const memorySamples = rounds
-    .map((round) => round.serverMetrics)
-    .filter((metrics) =>
-      metrics?.status === "available" && Number.isFinite(metrics.peakRssBytes)
-    )
-    .map((metrics) => metrics.peakRssBytes);
+  const memorySeries = (select) => {
+    const values = rounds.map(select).filter(Number.isFinite);
+    return values.length === 0 ? null : summarizeSeries(values);
+  };
+  const memorySamples = memorySeries((round) => round.serverMetrics?.peakRssBytes);
+  const availableRounds = rounds.filter((round) =>
+    round.serverMetrics?.status === "available"
+  ).length;
   return Object.freeze({
     latencyP50Ms: summarizeSeries(rounds.map((round) => round.latencyP50Ms)),
     latencyP95Ms: summarizeSeries(rounds.map((round) => round.latencyP95Ms)),
@@ -68,17 +70,33 @@ export function summarizeRounds(rounds) {
       rounds.map((round) => round.requestsPerSecond),
     ),
     serverMemory: Object.freeze({
-      availableRounds: memorySamples.length,
-      peakRssBytes: memorySamples.length === 0
-        ? null
-        : summarizeSeries(memorySamples),
-      status: memorySamples.length === rounds.length
+      availableRounds,
+      loadDeltaPeakRssBytes: memorySeries(
+        (round) => round.serverMemory?.loadDeltaPeakRssBytes,
+      ),
+      peakRssBytes: memorySamples,
+      postSettleRssBytes: memorySeries(
+        (round) => round.serverMemory?.postSettle?.rssBytes,
+      ),
+      postWarmupRssBytes: memorySeries(
+        (round) => round.serverMemory?.postWarmup?.rssBytes,
+      ),
+      retainedRssBytes: memorySeries(
+        (round) => round.serverMemory?.retainedRssBytes,
+      ),
+      startupRssBytes: memorySeries(
+        (round) => round.serverMemory?.startup?.rssBytes,
+      ),
+      status: availableRounds === rounds.length
         ? "available"
-        : memorySamples.length === 0
+        : availableRounds === 0
           ? "unavailable"
           : "partial",
-      unavailableRounds: rounds.length - memorySamples.length,
+      unavailableRounds: rounds.length - availableRounds,
     }),
+    serverCpuMillisecondsPerRequest: memorySeries(
+      (round) => round.serverCpuMillisecondsPerRequest,
+    ),
     throughputBytesPerSecond: summarizeSeries(
       rounds.map((round) => round.throughputBytesPerSecond),
     ),

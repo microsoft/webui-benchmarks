@@ -23,6 +23,7 @@ import {
 import {
   measureLoadWithRetry,
   runSaturationSweep,
+  validateTelemetryOverhead,
   warmup,
 } from "./load.mjs";
 import { deterministicOrder } from "./order.mjs";
@@ -31,6 +32,7 @@ import {
   installProcessCleanup,
 } from "./process-tree.mjs";
 import { evaluateRuntimePolicy } from "./runtime-policy.mjs";
+import { snapshotProcessMemory } from "./metrics.mjs";
 import { REPORT_SCHEMA, assertReportSchema } from "./schema.mjs";
 import { launchCaseServer } from "./server.mjs";
 import {
@@ -97,10 +99,9 @@ export function unsupportedReason(announcement, fallback) {
     ?? fallback;
 }
 
-function metricsStatus(measurement) {
+export function metricsStatus(measurement) {
   if (
-    measurement.serverMetrics.status !== "available"
-    || measurement.loadGenerator.status === "unavailable"
+    measurement.loadGenerator.status === "unavailable"
     || measurement.latencyP95Status === "unavailable"
   ) {
     return "metrics-unavailable";
@@ -108,6 +109,36 @@ function metricsStatus(measurement) {
   return measurement.loadGenerator.status === "bottleneck-risk"
     ? "load-generator-bottleneck-risk"
     : "ok";
+}
+
+function memoryLifecycle(startup, postWarmup, measurement, postSettle) {
+  const peak = measurement.serverMetrics.status === "available"
+    ? Object.freeze({
+        rssBytes: measurement.serverMetrics.peakRssBytes,
+        status: "available",
+      })
+    : Object.freeze({
+        reason: measurement.serverMetrics.reason ?? "Load-window telemetry unavailable",
+        status: "unavailable",
+      });
+  const delta = startup.status === "available" && peak.status === "available"
+    ? peak.rssBytes - startup.rssBytes
+    : null;
+  const retained = startup.status === "available" && postSettle.status === "available"
+    ? postSettle.rssBytes - startup.rssBytes
+    : null;
+  return Object.freeze({
+    loadDeltaPeakRssBytes: delta,
+    postSettle,
+    postWarmup,
+    retainedRssBytes: retained,
+    startup,
+    peakDuringLoad: peak,
+  });
+}
+
+function waitForMemorySettle() {
+  return new Promise((resolve) => setTimeout(resolve, 250));
 }
 
 function summarizeCases(cases, rawRounds) {
@@ -335,6 +366,7 @@ export async function runBenchmark(options, {
           server = launched.server;
           nativeAddonPath = launched.addonPath;
           let { affinity, url, validation } = launched;
+          let startupMemory = await snapshotProcessMemory(server.child.pid);
           const saturationNeeded = !saturatedCases.has(benchmarkCase.id);
           let warmupResult;
           if (saturationNeeded) {
@@ -366,8 +398,10 @@ export async function runBenchmark(options, {
             server = launched.server;
             nativeAddonPath = launched.addonPath;
             ({ affinity, url, validation } = launched);
+            startupMemory = await snapshotProcessMemory(server.child.pid);
           }
           warmupResult = await warmup(url, options.protocol);
+          const postWarmupMemory = await snapshotProcessMemory(server.child.pid);
           const measurement = await measureLoadWithRetry(url, {
             connections: options.protocol.connections,
             durationSeconds: options.protocol.durationSeconds,
@@ -375,6 +409,29 @@ export async function runBenchmark(options, {
             processId: server.child.pid,
             responseBytes: validation.measuredBytes,
           });
+          const telemetryValidation = options.validateTelemetry
+            ? validateTelemetryOverhead(
+              measurement,
+              await measureLoadWithRetry(url, {
+                collectServerMetrics: false,
+                connections: options.protocol.connections,
+                durationSeconds: options.protocol.durationSeconds,
+                loadWorkers: options.protocol.loadWorkers,
+                processId: server.child.pid,
+                responseBytes: validation.measuredBytes,
+              }),
+            )
+            : Object.freeze({
+              reason: "Telemetry overhead validation was not requested",
+              status: "not-run",
+            });
+          if (telemetryValidation.status === "failed") {
+            throw new Error(
+              `${benchmarkCase.id} telemetry changed RPS or p95 beyond ${telemetryValidation.maximumRelativeDifference * 100}%`,
+            );
+          }
+          await waitForMemorySettle();
+          const postSettleMemory = await snapshotProcessMemory(server.child.pid);
           rawRounds.push(Object.freeze({
             affinity,
             caseId: benchmarkCase.id,
@@ -397,6 +454,20 @@ export async function runBenchmark(options, {
             responseMode: benchmarkCase.responseMode,
             round,
             serverMetrics: measurement.serverMetrics,
+            serverCpuMillisecondsPerRequest:
+              measurement.serverCpuMillisecondsPerRequest,
+            serverMemory: memoryLifecycle(
+              startupMemory,
+              postWarmupMemory,
+              measurement,
+              postSettleMemory,
+            ),
+            telemetry: Object.freeze({
+              overheadValidation: telemetryValidation,
+              samplerIntervalMilliseconds:
+                measurement.serverMetrics.intervalMilliseconds ?? null,
+              status: measurement.serverMetrics.status,
+            }),
             streaming: benchmarkCase.streaming,
             throughputBytesPerSecond:
               measurement.throughputBytesPerSecond,
@@ -461,6 +532,7 @@ export async function runBenchmark(options, {
         runtimeMode: options.runtimeMode,
         scalingCores: options.scalingCores,
         serverCpu: options.serverCpu,
+        validateTelemetry: options.validateTelemetry,
       },
       createdAt: new Date().toISOString(),
       fixture: {

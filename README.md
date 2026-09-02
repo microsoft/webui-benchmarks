@@ -182,6 +182,10 @@ pnpm run bench:ssr:save -- \
   --save-baseline 2026-08-25-windows-285k
 ```
 
+Use `--validate-telemetry` to run a telemetry-disabled control load after each
+measured window. The runner rejects the result when RPS or p95 differs by more
+than 15%; the primary RPS window itself remains unchanged.
+
 Run only one response-mode suite explicitly:
 
 ```bash

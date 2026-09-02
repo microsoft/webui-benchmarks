@@ -248,3 +248,27 @@ test("schema keeps validating legacy reports that predate the response-mode dime
     valid: true,
   });
 });
+
+test("schema validates optional lifecycle memory telemetry", () => {
+  const report = validReport();
+  report.rawRounds = [{
+    caseId: "webui-node-http",
+    latencyP95Ms: 1,
+    requestsPerSecond: 1,
+    serverCpuMillisecondsPerRequest: 0.5,
+    serverMemory: {
+      loadDeltaPeakRssBytes: 10,
+      postSettle: { rssBytes: 110, status: "available" },
+      postWarmup: { rssBytes: 105, status: "available" },
+      retainedRssBytes: 10,
+      startup: { rssBytes: 100, status: "available" },
+      peakDuringLoad: { rssBytes: 110, status: "available" },
+    },
+  }];
+  assert.equal(validateReportSchema(report).valid, true);
+  report.rawRounds[0].serverMemory.startup = { status: "available" };
+  assert.match(
+    validateReportSchema(report).errors.join("\n"),
+    /lifecycle RSS snapshots/u,
+  );
+});

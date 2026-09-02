@@ -30,6 +30,15 @@ test("default options use the timeboxed official measurement protocol", () => {
 test("official mode pins the server to CPU zero by default", () => {
   const options = parseOptions(["--runtime-mode", "official"], {});
   assert.equal(options.serverCpu, 0);
+  assert.equal(options.validateTelemetry, false);
+});
+
+test("telemetry overhead validation is opt-in", () => {
+  assert.equal(parseOptions([], {}).validateTelemetry, false);
+  assert.equal(
+    parseOptions(["--validate-telemetry"], {}).validateTelemetry,
+    true,
+  );
 });
 
 test("quick mode and targeted overrides parse without dependencies", () => {

@@ -33,6 +33,14 @@ test("round summaries retain all required throughput and latency series", () => 
       latencyP50Ms: 1,
       latencyP95Ms: 3,
       requestsPerSecond: 100,
+      serverCpuMillisecondsPerRequest: 2,
+      serverMemory: {
+        loadDeltaPeakRssBytes: 4_000,
+        postSettle: { rssBytes: 12_000, status: "available" },
+        postWarmup: { rssBytes: 11_000, status: "available" },
+        retainedRssBytes: 2_000,
+        startup: { rssBytes: 10_000, status: "available" },
+      },
       serverMetrics: { peakRssBytes: 10_000, status: "available" },
       throughputBytesPerSecond: 1_000,
     },
@@ -40,6 +48,14 @@ test("round summaries retain all required throughput and latency series", () => 
       latencyP50Ms: 2,
       latencyP95Ms: 5,
       requestsPerSecond: 200,
+      serverCpuMillisecondsPerRequest: 4,
+      serverMemory: {
+        loadDeltaPeakRssBytes: 8_000,
+        postSettle: { rssBytes: 24_000, status: "available" },
+        postWarmup: { rssBytes: 22_000, status: "available" },
+        retainedRssBytes: 4_000,
+        startup: { rssBytes: 20_000, status: "available" },
+      },
       serverMetrics: { peakRssBytes: 20_000, status: "available" },
       throughputBytesPerSecond: 2_000,
     },
@@ -49,6 +65,9 @@ test("round summaries retain all required throughput and latency series", () => 
   assert.equal(summary.throughputBytesPerSecond.mad, 500);
   assert.equal(summary.serverMemory.status, "available");
   assert.equal(summary.serverMemory.peakRssBytes.median, 15_000);
+  assert.equal(summary.serverMemory.loadDeltaPeakRssBytes.median, 6_000);
+  assert.equal(summary.serverMemory.retainedRssBytes.median, 3_000);
+  assert.equal(summary.serverCpuMillisecondsPerRequest.median, 3);
 });
 
 test("round summaries disclose unavailable server memory samples", () => {
@@ -70,6 +89,7 @@ test("round summaries disclose unavailable server memory samples", () => {
   ]);
   assert.deepEqual(summary.serverMemory, {
     availableRounds: 1,
+    loadDeltaPeakRssBytes: null,
     peakRssBytes: {
       count: 1,
       mad: 0,
@@ -78,6 +98,10 @@ test("round summaries disclose unavailable server memory samples", () => {
       min: 10_000,
       p95: 10_000,
     },
+    postSettleRssBytes: null,
+    postWarmupRssBytes: null,
+    retainedRssBytes: null,
+    startupRssBytes: null,
     status: "partial",
     unavailableRounds: 1,
   });

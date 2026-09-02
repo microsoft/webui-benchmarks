@@ -10,6 +10,12 @@ import {
 
 export const REPORT_SCHEMA = "webui.ssr-todo-benchmark/v1";
 
+function validMemorySnapshot(snapshot) {
+  return snapshot?.status === "available"
+    ? Number.isFinite(snapshot.rssBytes)
+    : snapshot?.status === "unavailable";
+}
+
 export function validateReportSchema(report) {
   const errors = [];
   if (report === null || typeof report !== "object" || Array.isArray(report)) {
@@ -252,6 +258,32 @@ export function validateReportSchema(report) {
       )
     ) {
       errors.push("raw rounds must reference a case and contain numeric metrics");
+    }
+  }
+  if (Array.isArray(report.rawRounds)) {
+    for (const [index, round] of report.rawRounds.entries()) {
+      if (
+        round.serverMemory !== undefined
+        && (
+          !validMemorySnapshot(round.serverMemory.startup)
+          || !validMemorySnapshot(round.serverMemory.postWarmup)
+          || !validMemorySnapshot(round.serverMemory.peakDuringLoad)
+          || !validMemorySnapshot(round.serverMemory.postSettle)
+          || ![null, undefined].includes(round.serverMemory.loadDeltaPeakRssBytes)
+            && !Number.isFinite(round.serverMemory.loadDeltaPeakRssBytes)
+          || ![null, undefined].includes(round.serverMemory.retainedRssBytes)
+            && !Number.isFinite(round.serverMemory.retainedRssBytes)
+        )
+      ) {
+        errors.push(`rawRounds[${index}].serverMemory must contain valid lifecycle RSS snapshots`);
+      }
+      if (
+        round.serverCpuMillisecondsPerRequest !== undefined
+        && round.serverCpuMillisecondsPerRequest !== null
+        && !Number.isFinite(round.serverCpuMillisecondsPerRequest)
+      ) {
+        errors.push(`rawRounds[${index}].serverCpuMillisecondsPerRequest must be finite or null`);
+      }
     }
   }
   return Object.freeze({

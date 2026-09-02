@@ -10,6 +10,7 @@ import {
   distributeConnections,
   measureLoadWithRetry,
   runAutocannon,
+  validateTelemetryOverhead,
 } from "../lib/load.mjs";
 import { prepareLoadMeasurement } from "../lib/orchestrator.mjs";
 
@@ -44,6 +45,23 @@ test("connections are divided exactly across available workers", () => {
   assert.deepEqual(distributeConnections(1, 2), [1]);
   assert.deepEqual(distributeConnections(5, 2), [3, 2]);
   assert.deepEqual(distributeConnections(64, 2), [32, 32]);
+});
+
+test("telemetry overhead validation preserves independent RPS and latency limits", () => {
+  assert.equal(
+    validateTelemetryOverhead(
+      { latencyP95Ms: 10, requestsPerSecond: 100 },
+      { latencyP95Ms: 11, requestsPerSecond: 95 },
+    ).status,
+    "passed",
+  );
+  assert.equal(
+    validateTelemetryOverhead(
+      { latencyP95Ms: 10, requestsPerSecond: 100 },
+      { latencyP95Ms: 13, requestsPerSecond: 80 },
+    ).status,
+    "failed",
+  );
 });
 
 test("retries one discarded transient load window", async () => {
