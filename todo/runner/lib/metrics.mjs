@@ -50,11 +50,21 @@ function parseCpuTime(value) {
 }
 
 async function posixSample(pid) {
-  const { stdout } = await execFileAsync(
-    "ps",
-    ["-o", "time=", "-o", "rss=", "-p", String(pid)],
-    { encoding: "utf8" },
-  );
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(
+      "ps",
+      ["-o", "time=", "-o", "rss=", "-p", String(pid)],
+      { encoding: "utf8" },
+    ));
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && "stderr" in error && typeof error.stderr === "string"
+        ? error.stderr || "ps process metrics failed"
+        : "ps process metrics failed",
+      { cause: error },
+    );
+  }
   if (stdout.trim().length === 0) {
     throw new Error("ps process metrics failed");
   }

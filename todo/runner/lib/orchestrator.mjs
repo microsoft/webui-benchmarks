@@ -414,6 +414,8 @@ export async function runBenchmark(options, {
             processId: server.child.pid,
             responseBytes: validation.measuredBytes,
           });
+          await waitForMemorySettle();
+          const postSettleMemory = await snapshotProcessMemory(server.child.pid);
           const telemetryValidation = options.validateTelemetry
             ? validateTelemetryOverhead(
               measurement,
@@ -435,8 +437,6 @@ export async function runBenchmark(options, {
               `${benchmarkCase.id} telemetry changed RPS or p95 beyond ${(telemetryValidation.maximumRelativeDifference * 100).toFixed(0)}%`,
             );
           }
-          await waitForMemorySettle();
-          const postSettleMemory = await snapshotProcessMemory(server.child.pid);
           rawRounds.push(Object.freeze({
             affinity,
             caseId: benchmarkCase.id,
