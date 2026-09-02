@@ -20,6 +20,7 @@
       "react-dom"
     ],
     "productionEntry": "node_modules/next/dist/bin/next",
+    "productionEntryBase": "workspace",
     "productionArgs": [
       "start",
       "--hostname",
@@ -33,10 +34,5 @@
     },
     "compression": false,
     "workerCount": 1
-  },
-  "dependencies": {
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
   }
 }

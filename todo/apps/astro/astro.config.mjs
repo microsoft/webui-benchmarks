@@ -11,4 +11,18 @@ export default defineConfig({
   }),
   integrations: [preact()],
   output: "server",
+  vite: {
+    environments: {
+      prerender: {
+        resolve: {
+          noExternal: ["@astrojs/preact"],
+        },
+      },
+      ssr: {
+        resolve: {
+          noExternal: ["@astrojs/preact"],
+        },
+      },
+    },
+  },
 });
