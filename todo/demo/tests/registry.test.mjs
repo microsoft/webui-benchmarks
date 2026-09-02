@@ -48,6 +48,7 @@ test("every demo product comes from an official benchmark case", () => {
     assert.equal(product.renderer, source.renderer);
     assert.equal(product.sourceCase.responseMode, product.responseMode);
     assert.equal(product.launchPath, `/app/${product.id}`);
+    assert.equal(product.benchmarkPath, `/benchmark/${product.id}`);
   }
 });
 
@@ -69,4 +70,11 @@ test("the registry rejects unsafe or incomplete product sets", () => {
     index === 0 ? { ...product, launchPath: "/app/../etc" } : product
   );
   assert.throws(() => assertDemoRegistry(unsafe), /unsafe base path/u);
+  const unsafeBenchmark = products.map((product, index) =>
+    index === 0 ? { ...product, benchmarkPath: "/benchmark/../etc" } : product
+  );
+  assert.throws(
+    () => assertDemoRegistry(unsafeBenchmark),
+    /unsafe benchmark path/u,
+  );
 });

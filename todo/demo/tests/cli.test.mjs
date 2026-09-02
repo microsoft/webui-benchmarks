@@ -10,7 +10,7 @@ test("the demo defaults to the container contract", () => {
     concurrency: 4,
     host: "0.0.0.0",
     port: 8080,
-    rateLimit: 600,
+    rateLimit: 0,
   });
 });
 

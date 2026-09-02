@@ -169,6 +169,7 @@ export function registryDocument(products) {
     products: products.map((product) =>
       Object.freeze({
         application: product.application,
+        benchmark: `${product.benchmarkPath}${ENTRY_ROUTE}`,
         caseId: product.caseId,
         entry: `${product.launchPath}${ENTRY_ROUTE}`,
         id: product.id,

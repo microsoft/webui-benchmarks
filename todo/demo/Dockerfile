@@ -46,7 +46,8 @@ FROM node:24.19.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=8080 \
-    WEBUI_DEMO_CONCURRENCY=4
+    WEBUI_DEMO_CONCURRENCY=4 \
+    WEBUI_DEMO_RATE_LIMIT=0
 
 WORKDIR /app
 COPY --from=builder --chown=node:node /app /app
@@ -54,8 +55,8 @@ COPY --from=builder --chown=node:node /app /app
 USER node
 EXPOSE 8080
 
-# The gateway is ready before products are launched on demand.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# Readiness succeeds only after all products have launched and warmed.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=600s --retries=3 \
     CMD ["node", "todo/demo/healthcheck.mjs"]
 
 ENTRYPOINT ["node", "todo/demo/cli.mjs"]

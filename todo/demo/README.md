@@ -3,8 +3,8 @@
 A single-container demo that offers every todo application in the benchmark
 suite, in both response-mode variants: **12 applications × 2 response modes =
 24 products** behind one HTTP port, which is what an Azure Container App
-ingress exposes. The gallery and readiness endpoint start immediately; each
-product starts lazily when it is first opened.
+ingress exposes. Startup launches every production server and warms its
+`/dynamic` route three times before readiness succeeds.
 
 ```
 pnpm run demo                       # http://localhost:8080
@@ -26,7 +26,7 @@ Rust/Actix host; every other official case is hosted twice:
 | `progressive` | Streaming     | The product keeps its native streaming boundaries.  |
 | `complete`    | No streaming  | The product publishes one fully collected response. |
 
-Each product starts once on demand and runs the same production server the benchmark launches
+Each product starts once during container initialization and runs the same production server the benchmark launches
 (`launchCaseServer`): the framework production servers for Next, Nuxt,
 SvelteKit and Astro, the shared `node:http` renderer transport for Preact,
 React, React + TanStack, Solid and Vue, and the Rust/Actix WebUI server for the
@@ -39,13 +39,16 @@ fixes `/dynamic`, `/activity` and `/settings`, and each framework emits
 root-absolute asset URLs (`/__browser/...`, `/_next/...`, `/_nuxt/...`). The
 gateway therefore does not rewrite markup or strip a prefix:
 
-1. `/app/{product}/{route}` is the launch entry point. It pins the product to
-   the browsing session with an `HttpOnly` cookie and redirects to `{route}` on
-   the demo origin. Gallery links and shared deep links both work.
-2. Every other request is served by the pinned product at exactly the path the
+1. `/benchmark/{product}/{route}` is the stable RPS endpoint. It proxies
+   directly to the selected product without a redirect or cookie; the upstream
+   framework receives the unprefixed benchmark route.
+2. `/app/{product}/{route}` pins an interactive browsing session with an
+   `HttpOnly` cookie and redirects to the origin root required by every
+   framework's client router.
+3. Every other request is served by the pinned product at exactly the path the
    application emitted, so its router, its asset URLs and its module identities
    are byte-for-byte the benchmark artifact.
-3. Anything else gets the gallery's not-found page.
+4. Anything else gets the gallery's not-found page.
 
 One browsing session shows one product at a time; returning to `/` and
 launching another product re-pins it. That is the price of giving each
@@ -54,9 +57,10 @@ application the unmodified root path it is measured on.
 | Endpoint            | Purpose                                                   |
 | ------------------- | --------------------------------------------------------- |
 | `/`                 | Gallery of all 24 entry points.                            |
-| `/app/{product}/…`  | Launch (pin + redirect).                                   |
+| `/benchmark/{product}/…` | Stable, cookie-free RPS endpoint with no redirect. |
+| `/app/{product}/…`  | Interactive launch (pin + redirect to framework root).      |
 | `/healthz`          | Liveness: always `200` once the gateway listens.           |
-| `/readyz`           | Readiness plus counts of running and starting products.     |
+| `/readyz`           | `200` only when all products are running and warmed.         |
 | `/_demo/apps.json`  | Machine-readable registry of the hosted products.          |
 
 ## Hardening
@@ -81,11 +85,10 @@ application the unmodified root path it is measured on.
 | `--port`          | `PORT`, `WEBUI_DEMO_PORT`  | `8080`    |
 | `--host`          | `WEBUI_DEMO_HOST`          | `0.0.0.0` |
 | `--concurrency`   | `WEBUI_DEMO_CONCURRENCY`   | `4`       |
-| `--rate-limit`    | `WEBUI_DEMO_RATE_LIMIT`    | `600`     |
+| `--rate-limit`    | `WEBUI_DEMO_RATE_LIMIT`    | `0`       |
 
-`--concurrency` bounds simultaneous first-use product launches. The gateway is
-ready in seconds without booting unused framework servers; opening a product
-builds its browser client if needed and starts its production server.
+`--concurrency` bounds simultaneous startup and warmup work. A zero rate limit
+disables gateway throttling so it cannot cap or distort RPS measurements.
 
 ## Tests
 
