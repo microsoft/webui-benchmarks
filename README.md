@@ -63,7 +63,7 @@ to a toy comparison.
 
 ## Reproducible setup
 
-The official runtime pins are Node `24.19.0`, Bun `1.3.14`, Deno `2.9.5`,
+The official runtime pins are Node `24.19.0`, Bun `1.4.0`, Deno `2.9.5`,
 Rust `1.98`, and pnpm `11.5.3`. Framework and adapter versions are exact in
 their package manifests.
 

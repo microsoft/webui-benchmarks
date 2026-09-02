@@ -257,7 +257,7 @@ function officialCases() {
       transport: "actix-web",
     }),
     webuiRuntimeCase({
-      buildIds: ["webui", "native-addon"],
+      buildIds: ["webui", "native-addon", "bun-serve"],
       entry: "bun.mjs",
       id: "webui-bun-serve",
       label: "WebUI / Bun.serve",

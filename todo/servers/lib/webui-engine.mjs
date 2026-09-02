@@ -4,7 +4,6 @@
 import { existsSync, realpathSync, readFileSync } from "node:fs";
 import process from "node:process";
 import { isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { TODO_STATE_VARIANTS } from "../../shared/state.mjs";
 import { createWebuiRenderState } from "../../shared/webui-state.mjs";
 import {
@@ -15,8 +14,18 @@ import { UnsupportedRuntimeError } from "./capability.mjs";
 import { createRouteController } from "./contract.mjs";
 import { runtimeVersion } from "./runtime.mjs";
 
-const protocolPath = fileURLToPath(
-  new URL("../../apps/webui-lightdom/dist/protocol.bin", import.meta.url),
+// Resolved against the current working directory (every launcher starts
+// these servers from the repository root, see servers/README.md) rather than
+// import.meta.url: a Bun `--compile` executable embeds this module under a
+// virtual `/$bunfs/` root, so a URL relative to the module's own location no
+// longer points at a real file on disk.
+const protocolPath = resolve(
+  process.cwd(),
+  "todo",
+  "apps",
+  "webui-lightdom",
+  "dist",
+  "protocol.bin",
 );
 function runtimeAvailable(runtimeId) {
   if (runtimeId === "bun") {
