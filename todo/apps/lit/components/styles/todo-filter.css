@@ -1,0 +1,37 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-filter {
+  min-height: 2.375rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--todo-border);
+  border-radius: 0.625rem;
+  color: var(--todo-text);
+  background: var(--todo-surface);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.todo-filter:hover {
+  border-color: var(--todo-accent);
+}
+
+.todo-filter[data-active],
+.todo-filter[aria-pressed="true"] {
+  border-color: var(--todo-accent);
+  color: #ffffff;
+  background: var(--todo-accent);
+}
+
+.todo-filter__count {
+  margin-inline-start: 0.375rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}

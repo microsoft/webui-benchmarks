@@ -10,6 +10,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 
 const ENTRY_EXTENSIONS = Object.freeze({
+  lit: "mjs",
   preact: "mjs",
   react: "mjs",
   "react-tanstack": "mjs",
@@ -104,6 +105,10 @@ async function buildClient(appId) {
     const { build } = await import("../apps/vue/build.mjs");
     await build();
   }
+  if (appId === "lit") {
+    const { build } = await import("../apps/lit/build.mjs");
+    await build();
+  }
   const options = buildOptions(appId);
   const result = await buildBundle(options);
   const javascript = result.outputFiles.find(
@@ -184,8 +189,11 @@ async function buildClient(appId) {
   bundle.packageBytes = Object.freeze(
     Object.fromEntries(
       [
+        "@lit-labs/router",
+        "@lit-labs/ssr-client",
         "@tanstack/react-router",
         "@tanstack/table-core",
+        "lit",
         "preact",
         "react",
         "react-dom",
@@ -303,6 +311,7 @@ export async function buildControlledClients(browserCases) {
           controlled
           && browserOutcome.status === "supported"
           && [
+            "lit",
             "preact",
             "react",
             "react-tanstack",

@@ -230,7 +230,7 @@ function report() {
       stateVariants: 32,
     },
     matrix: {
-      expectedCaseCount: 15,
+      expectedCaseCount: 16,
       id: "official-ssr-matrix",
       naturalResponseBytes: { policy: "natural" },
       summaries,
@@ -544,7 +544,7 @@ function browserReport(ssrReport = report()) {
 test("exports only the compact homepage benchmark DTO", () => {
   const summary = buildBenchmarkSummary(report());
   assert.deepEqual(Object.keys(summary), ["benchmarks", "benchmarksJson"]);
-  assert.equal(summary.benchmarks.rows.length, 15);
+  assert.equal(summary.benchmarks.rows.length, 16);
   assert.equal(summary.benchmarks.rows[0].rank, "1");
   assert.equal(
     summary.benchmarks.rows.filter(({ primary }) => primary).length,
@@ -579,7 +579,7 @@ test("accepts clean source-checkout evidence with its exact build plans", () => 
   }));
   assert.equal(
     buildBenchmarkSummary(value, browser).benchmarks.rows.length,
-    15,
+    16,
   );
 
   value.versions.webuiDependency.workingTreeDirty = true;
@@ -604,7 +604,7 @@ test("labels an explicit complete-suite report and refuses to merge browser evid
 
 test("accepts complete Windows reports with intentional process telemetry gaps", () => {
   const summary = buildBenchmarkSummary(windowsPartialReport());
-  assert.equal(summary.benchmarks.rows.length, 15);
+  assert.equal(summary.benchmarks.rows.length, 16);
   assert.equal(summary.benchmarks.hasUnavailable, false);
   const telemetry =
     summary.benchmarks.rows[0].metrics.requestsPerSecond.serverTelemetry;
@@ -675,7 +675,7 @@ test("combines matching official browser outcomes", () => {
       "rendererPrivateBytes",
     ],
   );
-  assert.equal(summary.benchmarks.rows.length, 15);
+  assert.equal(summary.benchmarks.rows.length, 16);
   assert.equal(
     summary.benchmarks.rows.every(
       (row) => Object.keys(row.metrics).length === 11,

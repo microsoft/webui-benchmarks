@@ -37,6 +37,7 @@ test("official workflow emits raw evidence and copy-ready summaries for both sui
       "progressive",
       "--save-baseline",
       "official",
+      "--allow-load-errors",
     ],
   );
   assert.deepEqual(
@@ -48,6 +49,7 @@ test("official workflow emits raw evidence and copy-ready summaries for both sui
       "complete",
       "--save-baseline",
       "official-complete",
+      "--allow-load-errors",
     ],
   );
   assert.deepEqual(

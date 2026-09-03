@@ -16,6 +16,7 @@ import { ENTRY_ROUTE } from "./routing.mjs";
  * `node:http` renderer transport intentionally publishes documents only.
  */
 const CLIENT_APPS = Object.freeze([
+  "lit",
   "preact",
   "react",
   "react-tanstack",
@@ -25,7 +26,7 @@ const CLIENT_APPS = Object.freeze([
   "webui-fast",
 ]);
 const GATEWAY_SERVED_APPS = Object.freeze(
-  new Set(["preact", "react", "react-tanstack", "solid", "vue"]),
+  new Set(["lit", "preact", "react", "react-tanstack", "solid", "vue"]),
 );
 const CLIENT_APP_SET = new Set(CLIENT_APPS);
 const SHARED_STYLES = resolve(TODO_ROOT, "shared", "styles.css");

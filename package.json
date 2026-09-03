@@ -62,6 +62,9 @@
   "dependencies": {
     "@astrojs/node": "11.1.5",
     "@astrojs/preact": "6.0.5",
+    "@lit-labs/router": "0.1.4",
+    "@lit-labs/ssr": "4.1.0",
+    "@lit-labs/ssr-client": "1.1.8",
     "@microsoft/fast-element": "3.0.2",
     "@microsoft/webui": "0.0.28",
     "@microsoft/webui-framework": "0.0.28",
@@ -75,6 +78,7 @@
     "d3-dsv": "3.0.1",
     "date-fns": "4.4.0",
     "immer": "11.1.18",
+    "lit": "3.3.3",
     "minisearch": "7.2.0",
     "next": "16.3.4",
     "nuxt": "4.5.2",
