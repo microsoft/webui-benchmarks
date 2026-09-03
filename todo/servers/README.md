@@ -1,8 +1,8 @@
 # Todo benchmark runtime servers
 
 Every official case runs exactly one server process with one worker. Product
-SSR renderers that ship no canonical HTTP server (Vue, Preact, React, and
-Solid) are served through the same minimal `node:http` transport
+SSR renderers that ship no canonical HTTP server (Vue, Preact, React, Solid,
+and Lit) are served through the same minimal `node:http` transport
 (`node-renderer.mjs`) so the matrix compares renderers, not web frameworks.
 
 Each process exposes:

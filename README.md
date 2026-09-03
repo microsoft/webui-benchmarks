@@ -4,7 +4,7 @@
 # WebUI benchmarks
 
 This repository is the canonical home of the WebUI SSR framework benchmark
-suite. It compares fifteen equivalent routed workspace applications in one
+suite. It compares sixteen equivalent routed workspace applications in one
 official dynamic SSR matrix and keeps the browser hydration, interaction, raw
 capture, profiling, and correctness evidence beside the runner that produced
 it.
@@ -26,9 +26,12 @@ it.
 | 13 | `react` | `react-dom/server` `renderToReadableStream` | `node:http` |
 | 14 | `react-tanstack` | React stream + TanStack Router `renderRouterToStream` | `node:http` |
 | 15 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
+| 16 | `lit` | `@lit-labs/ssr` `RenderResultReadable` (declarative shadow DOM) | `node:http` |
 
 The WebUI rows isolate Light DOM, Shadow DOM, FAST V3 hydration, and four
-runtime hosts. The production framework rows use their real production build
+runtime hosts. WebUI Shadow DOM, FAST V3, and Lit are the three shadow-DOM
+products, so the suite separates the shadow-root cost from the framework
+rendering it. The production framework rows use their real production build
 and server adapters. Product renderers without a canonical server share the
 same minimal `node:http` transport.
 
@@ -50,8 +53,9 @@ Every browser product exposes the same three-page workspace:
 WebUI and FAST use `@microsoft/webui-router` with dynamically imported route
 components. React uses React Router, the separate `react-tanstack` row uses
 TanStack Router's SSR pipeline, Preact uses `preact-iso`, Vue uses Vue Router,
-and Solid uses Solid Router. Next, Nuxt, SvelteKit, and Astro use their native
-production routers. All rows render the same state, markup semantics, controls,
+and Solid uses Solid Router. Lit uses `@lit-labs/router`, which is Lit's own
+router but is still published as a pre-1.0 labs package. Next, Nuxt, SvelteKit,
+and Astro use their native production routers. All rows render the same state, markup semantics, controls,
 and shared stylesheet.
 
 The Work queue intentionally carries a realistic client workload rather than a
@@ -232,7 +236,7 @@ process/context/page, and the shared interaction sequence.
 
 ## Response-mode suites
 
-The official 15-row product matrix is measured in two response-mode suites.
+The official 16-row product matrix is measured in two response-mode suites.
 Product identity (case id, app id, transport, runtime) never changes between
 them: only the response contract does. Every case exposes a `responseMode`
 field (`complete` or `progressive`), and reports never mix the two: a report's

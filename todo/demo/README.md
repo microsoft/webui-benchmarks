@@ -1,8 +1,8 @@
 # Todo demo site
 
 A single-container demo that offers every todo application in the benchmark
-suite, in both response-mode variants: **12 applications × 2 response modes =
-24 products** behind one HTTP port, which is what an Azure Container App
+suite, in both response-mode variants: **13 applications × 2 response modes =
+26 products** behind one HTTP port, which is what an Azure Container App
 ingress exposes. The gallery and readiness endpoint start immediately; each
 product starts lazily when it is first opened.
 
@@ -29,7 +29,7 @@ Rust/Actix host; every other official case is hosted twice:
 Each product starts once on demand and runs the same production server the benchmark launches
 (`launchCaseServer`): the framework production servers for Next, Nuxt,
 SvelteKit and Astro, the shared `node:http` renderer transport for Preact,
-React, React + TanStack, Solid and Vue, and the Rust/Actix WebUI server for the
+React, React + TanStack, Solid, Vue and Lit, and the Rust/Actix WebUI server for the
 three WebUI applications.
 
 ## Routing

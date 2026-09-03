@@ -214,6 +214,7 @@ test("framework reducers keep footer and selection state valid after clear", asy
       "preact",
       "solid",
       "vue",
+      "lit",
       "webui",
       "webui-fast",
     ]

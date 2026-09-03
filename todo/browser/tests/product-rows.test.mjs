@@ -25,20 +25,21 @@ const EXPECTED_PRODUCTS = Object.freeze([
   "next",
   "astro",
   "vue",
+  "lit",
   "preact",
   "react",
   "react-tanstack",
   "solid",
 ]);
 
-test("browser suite contains the definitive 15 product rows", () => {
+test("browser suite contains the definitive 16 product rows", () => {
   const cases = createBrowserCases();
   assert.deepEqual(PRODUCT_ORDER, EXPECTED_PRODUCTS);
   assert.deepEqual(
     cases.map(({ productId }) => productId),
     EXPECTED_PRODUCTS,
   );
-  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 15);
+  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 16);
   assert.ok(
     cases.every(({ clientMode, hydration }) =>
       hydration.status !== "unsupported"

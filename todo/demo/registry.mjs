@@ -30,6 +30,13 @@ const PRESENTATION = Object.freeze({
     summary:
       "Astro production SSR with a hydrated @astrojs/preact island and the Astro ClientRouter.",
   }),
+  lit: Object.freeze({
+    application: "lit",
+    family: "Web Components",
+    summary:
+      "@lit-labs/ssr streaming declarative shadow DOM with @lit-labs/router on "
+      + "the shared node:http transport.",
+  }),
   next: Object.freeze({
     application: "next",
     family: "React",
@@ -111,7 +118,7 @@ export const DEMO_RESPONSE_MODES = Object.freeze([
   RESPONSE_MODES.complete,
 ]);
 
-export const DEMO_APPLICATION_COUNT = 12;
+export const DEMO_APPLICATION_COUNT = 13;
 export const DEMO_PRODUCT_COUNT =
   DEMO_APPLICATION_COUNT * DEMO_RESPONSE_MODES.length;
 

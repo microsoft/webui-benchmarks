@@ -5,6 +5,7 @@ import process from "node:process";
 import { isMainModule } from "../servers/lib/cli.mjs";
 
 const builders = Object.freeze({
+  lit: () => import("../apps/lit/build.mjs"),
   preact: () => import("../apps/preact/build.mjs"),
   react: () => import("../apps/react/build.mjs"),
   "react-tanstack": () => import("../apps/react-tanstack/build.mjs"),
@@ -33,7 +34,7 @@ if (isMainModule(import.meta.url)) {
   const appId = process.argv[2];
   if (appId === undefined || process.argv.length !== 3) {
     throw new Error(
-      "Usage: node build-renderer.mjs <preact|react|react-tanstack|solid|vue|webui|webui-fast|webui-shadowdom>",
+      "Usage: node build-renderer.mjs <lit|preact|react|react-tanstack|solid|vue|webui|webui-fast|webui-shadowdom>",
     );
   }
   await buildRenderer(appId);

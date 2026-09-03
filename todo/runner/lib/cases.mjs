@@ -4,7 +4,7 @@
 export const OFFICIAL_MATRIX_ID = "official-ssr-matrix";
 export const HEADLINE_INPUT_POLICY = "request-timestamped-input";
 export const NATURAL_PAYLOAD_POLICY = "natural";
-export const OFFICIAL_CASE_COUNT = 15;
+export const OFFICIAL_CASE_COUNT = 16;
 
 export const PRODUCT_KINDS = Object.freeze({
   framework: "framework-server",
@@ -96,6 +96,7 @@ const COMPLETE_RENDERER_OVERRIDES = Object.freeze({
       + "framework's own Node http.Server response boundary before the "
       + "response completes)",
   },
+  lit: { renderer: "@lit-labs/ssr render (collected RenderResult)" },
   preact: { renderer: "preact-render-to-string renderToString" },
   react: { renderer: "react-dom/server renderToString" },
   "react-tanstack": {
@@ -318,6 +319,12 @@ function officialCases() {
       renderer: "@vue/server-renderer renderToWebStream",
     }),
     rendererCase({
+      appId: "lit",
+      buildIds: ["lit"],
+      label: "Lit",
+      renderer: "@lit-labs/ssr RenderResultReadable (declarative shadow DOM)",
+    }),
+    rendererCase({
       appId: "preact",
       buildIds: ["preact"],
       label: "Preact",
@@ -346,7 +353,7 @@ function officialCases() {
 }
 
 /**
- * Build the official 15-row matrix for one response-mode suite. Product
+ * Build the official 16-row matrix for one response-mode suite. Product
  * identity (case id, appId, productKind, transport, runtimeId, serverId)
  * never changes between suites: only the response contract (renderer label,
  * streaming label, and the launcher's `responseMode` hint consumed by

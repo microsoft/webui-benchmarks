@@ -134,6 +134,25 @@ const CLIENT_METADATA = Object.freeze({
       "Solid hydrate has attached to the authored hydratable SSR root and two animation frames have completed.",
     router: "@solidjs/router",
   }),
+  lit: Object.freeze({
+    clientMode: "hydrate",
+    hydration: Object.freeze({
+      framework:
+        "@lit-labs/ssr-client lit-element hydrate support (declarative shadow DOM)",
+      status: "supported",
+    }),
+    label: "Lit",
+    lazyHydration: Object.freeze({
+      reason:
+        "Lit defers hydration per element with defer-hydration, but ships no "
+        + "viewport strategy that drives it.",
+      status: "unavailable",
+    }),
+    readinessDefinition:
+      "Lit has hydrated the declarative shadow roots of the server-rendered "
+      + "component tree and two animation frames have completed.",
+    router: "@lit-labs/router",
+  }),
   preact: Object.freeze({
     clientMode: "hydrate",
     hydration: Object.freeze({
@@ -280,6 +299,7 @@ export function frameworkVersionsForApp(appId, versions) {
       "react-dom",
       "@tanstack/react-router",
     ],
+    lit: ["lit", "@lit-labs/ssr", "@lit-labs/ssr-client", "@lit-labs/router"],
     solid: ["solid-js", "@solidjs/router"],
     vue: ["vue", "vue-router", "@vue/server-renderer"],
   }[appId];

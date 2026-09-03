@@ -1,0 +1,54 @@
+/* Copyright (c) Microsoft Corporation.
+ * Licensed under the MIT license.
+ */
+
+:host,
+* {
+  box-sizing: border-box;
+}
+
+.todo-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+  margin-top: 0.55rem;
+}
+
+.todo-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  color: #344054;
+  background: var(--todo-surface-subtle);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.todo-tag[data-tone="blue"] {
+  color: #164e8a;
+  background: #dbeafe;
+}
+
+.todo-tag[data-tone="violet"] {
+  color: #5b21b6;
+  background: #ede9fe;
+}
+
+.todo-tag[data-tone="green"] {
+  color: #17623a;
+  background: #dcf7e7;
+}
+
+.todo-tag[data-tone="amber"] {
+  color: #754800;
+  background: #fff0c2;
+}
+
+.todo-tag[data-tone="red"] {
+  color: #9f1c1c;
+  background: #fee2e2;
+}

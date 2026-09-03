@@ -8,6 +8,7 @@ import { runtimeVersion } from "./runtime.mjs";
 import { createWebuiRouteController } from "./webui-engine.mjs";
 
 const adapterLoaders = Object.freeze({
+  lit: () => import("../../apps/lit/adapter.mjs"),
   preact: () => import("../../apps/preact/adapter.mjs"),
   react: () => import("../../apps/react/adapter.mjs"),
   "react-tanstack": () => import("../../apps/react-tanstack/adapter.mjs"),

@@ -12,7 +12,7 @@ import { assertValidObservation } from "../../shared/validator.mjs";
 import { createAdapterRouteController } from "../lib/adapter-engine.mjs";
 import { htmlHeaders } from "../lib/contract.mjs";
 
-for (const appId of ["react", "preact", "solid", "vue", "react-tanstack"]) {
+for (const appId of ["react", "preact", "solid", "vue", "react-tanstack", "lit"]) {
   test(`${appId} uses its native streaming renderer`, async () => {
     const controller = await createAdapterRouteController({ appId });
     assert.equal(controller.metadata.streaming, "native");

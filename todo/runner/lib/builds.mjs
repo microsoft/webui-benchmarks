@@ -205,6 +205,14 @@ const definitions = Object.freeze({
     display: "node todo/runner/build-renderer.mjs vue",
     id: "vue",
   }),
+  lit: Object.freeze({
+    args: [join("todo", "runner", "build-renderer.mjs"), "lit"],
+    command: process.execPath,
+    cwd: BENCHMARK_ROOT,
+    dependsOn: Object.freeze([]),
+    display: "node todo/runner/build-renderer.mjs lit",
+    id: "lit",
+  }),
   "state-pool": Object.freeze({
     args: [join("todo", "servers", "write-state-pool.mjs")],
     command: process.execPath,
@@ -304,6 +312,7 @@ const BUILD_ORDER = Object.freeze([
   "react-tanstack",
   "solid",
   "vue",
+  "lit",
   "state-pool",
   "bun-serve",
   "rust-actix",

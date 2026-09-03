@@ -64,7 +64,7 @@ test("the registry keeps both variants of one application adjacent", () => {
 
 test("the registry rejects unsafe or incomplete product sets", () => {
   const products = createDemoRegistry();
-  assert.throws(() => assertDemoRegistry(products.slice(1)), /exactly 24 products/u);
+  assert.throws(() => assertDemoRegistry(products.slice(1)), /exactly 26 products/u);
   const unsafe = products.map((product, index) =>
     index === 0 ? { ...product, launchPath: "/app/../etc" } : product
   );

@@ -38,6 +38,7 @@ const ASYNC_FACADE_IMPLEMENTATIONS = Object.freeze([
   ["Solid", "../../apps/solid/components/workspace-intelligence.jsx"],
   ["SvelteKit", "../../apps/sveltekit/src/lib/components/workspace-intelligence.svelte"],
   ["Vue and Nuxt", "../../apps/vue/components/workspace-intelligence.vue"],
+  ["Lit", "../../apps/lit/components/workspace-intelligence.mjs"],
 ]);
 
 for (
@@ -49,6 +50,7 @@ for (
     "vue",
     "solid",
     "preact",
+    "lit",
   ]
 ) {
   test(`builds the production ${appId} browser entry`, async () => {
