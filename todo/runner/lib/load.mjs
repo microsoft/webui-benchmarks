@@ -223,7 +223,8 @@ function autocannonOptions(
   };
 }
 
-function assertSuccessfulLoad(result, url) {
+function assertSuccessfulLoad(result, url, allowLoadErrors = false) {
+  if (allowLoadErrors) return;
   for (const name of ["errors", "timeouts", "non2xx"]) {
     if (result[name] !== 0) {
       throw new Error(`${url} load generated ${result[name]} ${name}`);
@@ -289,7 +290,7 @@ export function validateTelemetryOverhead(
   });
 }
 
-export async function warmup(url, protocol) {
+export async function warmup(url, protocol, { allowLoadErrors = false } = {}) {
   const result = await runAutocannon(
     autocannonOptions(url, {
       connections: protocol.connections,
@@ -297,7 +298,7 @@ export async function warmup(url, protocol) {
       loadWorkers: protocol.loadWorkers,
     }),
   );
-  assertSuccessfulLoad(result, url);
+  assertSuccessfulLoad(result, url, allowLoadErrors);
   return Object.freeze({
     durationSeconds: protocol.warmupSeconds,
     requests: result.requests.total,
@@ -314,6 +315,7 @@ export async function measureLoad(
     processId,
     responseBytes,
     collectServerMetrics = true,
+    allowLoadErrors = false,
   },
 ) {
   const processMetrics = collectServerMetrics
@@ -338,7 +340,7 @@ export async function measureLoad(
   const serverMetrics = processMetrics === null
     ? Object.freeze({ reason: "Server telemetry disabled", status: "unavailable" })
     : await processMetrics.finish();
-  assertSuccessfulLoad(result, url);
+  assertSuccessfulLoad(result, url, allowLoadErrors);
   const requestsPerSecond = result.requests.average;
   return Object.freeze({
     connections,
@@ -374,15 +376,20 @@ export async function measureLoadWithRetry(
   {
     attempts = 2,
     measure = measureLoad,
+    allowLoadErrors = false,
   } = {},
 ) {
   if (!Number.isInteger(attempts) || attempts < 1) {
     throw new RangeError("attempts must be a positive integer");
   }
+  const tolerateLoadErrors = allowLoadErrors || options.allowLoadErrors === true;
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const result = await measure(url, options);
+      const result = await measure(url, {
+        ...options,
+        allowLoadErrors: tolerateLoadErrors,
+      });
       return Object.freeze({ ...result, measurementAttempts: attempt });
     } catch (error) {
       lastError = error;
@@ -461,6 +468,7 @@ export async function runSaturationSweep(
   url,
   protocol,
   { processId, responseBytes },
+  { allowLoadErrors = false } = {},
 ) {
   const samples = [];
   for (const connections of protocol.saturationConnections) {
@@ -471,6 +479,7 @@ export async function runSaturationSweep(
         loadWorkers: protocol.loadWorkers,
         processId,
         responseBytes,
+        allowLoadErrors,
       }),
     );
   }

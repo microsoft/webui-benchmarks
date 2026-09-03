@@ -162,6 +162,11 @@ It writes:
 - `results/benchmark-summary.json` - copy-ready WebUI homepage state (complete and progressive RPS + essential browser metrics)
 - `results/benchmark-summary-complete.json` - copy-ready homepage state for the complete suite (SSR only)
 
+Official runs record completed RPS and memory even when a framework overloads
+under the fixed connection load. Such rounds are marked `loadStatus:
+"overloaded"` with timeout and error counts; strict failure behavior remains
+available by omitting `--allow-load-errors` when invoking the runner directly.
+
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
 wildcard:
 

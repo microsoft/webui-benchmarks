@@ -493,8 +493,10 @@ function isDocumentedPartialReport(report) {
   const hasSaturationWarning = report.saturation.some(
     ({ analysis }) => analysis.status === "server-unsaturated",
   );
+  const hasDocumentedOverload = report.config?.allowLoadErrors === true
+    && report.rawRounds.some((round) => round.loadStatus === "overloaded");
   return report.status === "partial"
-    && (windows || hasSaturationWarning)
+    && (windows || hasSaturationWarning || hasDocumentedOverload)
     && hasGreenRuntimeEvidence(report)
     && report.rawRounds.every((round) =>
       (windows
