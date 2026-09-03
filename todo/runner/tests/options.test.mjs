@@ -15,6 +15,7 @@ test("default options use the timeboxed official measurement protocol", () => {
   assert.equal(options.build, true);
   assert.equal(options.runtimeMode, "local");
   assert.equal(options.serverCpu, null);
+  assert.equal(options.allowLoadErrors, false);
   assert.deepEqual(options.protocol, {
     connections: 64,
     durationSeconds: 20,
@@ -37,6 +38,13 @@ test("telemetry overhead validation is opt-in", () => {
   assert.equal(parseOptions([], {}).validateTelemetry, false);
   assert.equal(
     parseOptions(["--validate-telemetry"], {}).validateTelemetry,
+    true,
+  );
+});
+
+test("load errors can be recorded for overload-tolerant runs", () => {
+  assert.equal(
+    parseOptions(["--allow-load-errors"], {}).allowLoadErrors,
     true,
   );
 });
