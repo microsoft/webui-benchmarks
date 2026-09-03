@@ -1,7 +1,7 @@
 # Todo demo site
 
 A single-container demo that offers every todo application in the benchmark
-suite, in both response-mode variants: \*\*13 applications × 2 response modes =
+suite, in both response-mode variants: **13 applications × 2 response modes =
 26 products** behind one HTTP port, which is what an Azure Container App
 ingress exposes. Startup launches every production server and warms its
 `/dynamic` route three times before readiness succeeds.
@@ -56,7 +56,7 @@ application the unmodified root path it is measured on.
 
 | Endpoint            | Purpose                                                   |
 | ------------------- | --------------------------------------------------------- |
-| `/`                 | Gallery of all 24 entry points.                            |
+| `/`                 | Gallery of all 26 entry points.                            |
 | `/benchmark/{product}/…` | Stable, cookie-free RPS endpoint with no redirect. |
 | `/app/{product}/…`  | Interactive launch (pin + redirect to framework root).      |
 | `/healthz`          | Liveness: always `200` once the gateway listens.           |
