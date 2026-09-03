@@ -184,6 +184,7 @@ export async function startFullstackH2Server({ appId, port }) {
       });
     },
   );
+  server.once("close", () => stopHandler?.());
   await new Promise((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolveListen);
@@ -210,7 +211,6 @@ if (isMainModule(import.meta.url)) {
     parseOptions(process.argv.slice(2)),
   );
   const close = () => {
-    stopHandler?.();
     server.close(() => process.exit(0));
   };
   process.once("SIGINT", close);
