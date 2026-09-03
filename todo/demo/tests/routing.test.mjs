@@ -42,7 +42,18 @@ test("only safe read methods are accepted", () => {
   assert.equal(resolve("/", { method: "head" }).kind, "gallery");
 });
 
-test("a launch pins the product and redirects onto the origin root", () => {
+test("a benchmark path proxies directly without session state", () => {
+  const action = resolve(`/benchmark/${first}${ENTRY_ROUTE}`);
+  assert.equal(action.kind, "proxy");
+  assert.equal(action.product.id, first);
+  assert.equal(action.path, ENTRY_ROUTE);
+  assert.equal(
+    resolve(`/benchmark/${first}/activity?filter=all`).path,
+    "/activity?filter=all",
+  );
+});
+
+test("an app launch pins the product and redirects onto the origin root", () => {
   const action = resolve(`/app/${first}${ENTRY_ROUTE}`);
   assert.equal(action.kind, "launch");
   assert.equal(action.product.id, first);
@@ -72,7 +83,7 @@ test("the pinned product serves every other path unchanged", () => {
   );
 });
 
-test("a launch re-pins the browsing session onto another product", () => {
+test("an app launch re-pins the browsing session", () => {
   const action = resolve(`/app/${second}${ENTRY_ROUTE}`, {
     cookie: `${DEMO_COOKIE}=${first}`,
   });

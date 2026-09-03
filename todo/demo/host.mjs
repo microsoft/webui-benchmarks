@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { buildClient } from "../browser/build-clients.mjs";
 import { TODO_ROOT } from "../runner/lib/paths.mjs";
 import { launchCaseServer } from "../runner/lib/server.mjs";
+import { ENTRY_ROUTE } from "./routing.mjs";
 
 /**
  * Applications whose browser client bundle is produced by this repository
@@ -123,6 +124,28 @@ async function launchProduct(product, client, registry, timeoutMilliseconds) {
   });
 }
 
+async function warmProduct(
+  entry,
+  requests = 3,
+  timeoutMilliseconds = 180_000,
+) {
+  for (let request = 0; request < requests; request += 1) {
+    const response = await fetch(`${entry.origin}${ENTRY_ROUTE}`, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMilliseconds),
+    });
+    await response.arrayBuffer();
+    if (response.status !== 200) {
+      throw new Error(
+        `${entry.product.id} warmup returned HTTP ${response.status}`,
+      );
+    }
+    if (response.headers.has("location")) {
+      throw new Error(`${entry.product.id} warmup redirected`);
+    }
+  }
+}
+
 function createScheduler(concurrency) {
   const limit = Math.max(1, concurrency);
   const pending = [];
@@ -174,11 +197,13 @@ export function createDemoHost({
   timeoutMilliseconds = 180_000,
   buildClientForApp = buildDemoClient,
   launch = launchProduct,
+  warm = warmProduct,
 }) {
   const hosted = new Map();
   const launching = new Map();
   const clients = new Map();
   const scheduler = createScheduler(concurrency);
+  let ready = false;
   let stopping = false;
 
   const clientFor = (appId) => {
@@ -219,13 +244,34 @@ export function createDemoHost({
 
   const stopAll = async () => {
     stopping = true;
+    ready = false;
     scheduler.close();
     await Promise.allSettled([...launching.values()]);
     await Promise.allSettled([...hosted.values()].map((entry) => entry.stop()));
     hosted.clear();
   };
 
-  return Object.freeze({ ensureHosted, hosted, launching, stopAll });
+  const prepareAll = async (products, warmupRequests = 3) => {
+    await Promise.all(
+      products.map(async (product) => {
+        const entry = await ensureHosted(product);
+        await scheduler.schedule(
+          () => warm(entry, warmupRequests, timeoutMilliseconds),
+        );
+        progress(`${entry.product.id.padEnd(42)} warmed`);
+      }),
+    );
+    ready = true;
+  };
+
+  return Object.freeze({
+    ensureHosted,
+    hosted,
+    isReady: () => ready,
+    launching,
+    prepareAll,
+    stopAll,
+  });
 }
 
 /**

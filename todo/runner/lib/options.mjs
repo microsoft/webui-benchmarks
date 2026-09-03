@@ -107,6 +107,8 @@ export function parseOptions(argv, environment = process.env) {
       build = true;
     } else if (name === "--validate-telemetry") {
       validateTelemetry = true;
+    } else if (name === "--allow-load-errors") {
+      overrides.allowLoadErrors = true;
     } else if (name === "--skip-build") {
       build = false;
     } else if (
@@ -198,5 +200,6 @@ export function parseOptions(argv, environment = process.env) {
     scalingCores,
     serverCpu,
     validateTelemetry,
+    allowLoadErrors: overrides.allowLoadErrors === true,
   });
 }

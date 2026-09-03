@@ -207,13 +207,14 @@ export async function prepareLoadMeasurement({
   saturationContext,
   saturationNeeded,
   url,
+  allowLoadErrors = false,
 }, {
   runSweep = runSaturationSweep,
   runWarmup = warmup,
 } = {}) {
-  const warmupResult = await runWarmup(url, protocol);
+  const warmupResult = await runWarmup(url, protocol, { allowLoadErrors });
   const sweep = saturationNeeded
-    ? await runSweep(url, protocol, saturationContext)
+    ? await runSweep(url, protocol, saturationContext, { allowLoadErrors })
     : null;
   return Object.freeze({ sweep, warmupResult });
 }
@@ -384,6 +385,7 @@ export async function runBenchmark(options, {
               },
               saturationNeeded: true,
               url,
+              allowLoadErrors: options.allowLoadErrors,
             });
             saturation.push(Object.freeze({
               caseId: benchmarkCase.id,
@@ -405,7 +407,9 @@ export async function runBenchmark(options, {
             ({ affinity, url, validation } = launched);
             startupMemory = await snapshotProcessMemory(server.child.pid);
           }
-          warmupResult = await warmup(url, options.protocol);
+          warmupResult = await warmup(url, options.protocol, {
+            allowLoadErrors: options.allowLoadErrors,
+          });
           const postWarmupMemory = await snapshotProcessMemory(server.child.pid);
           const measurement = await measureLoadWithRetry(url, {
             connections: options.protocol.connections,
@@ -413,6 +417,7 @@ export async function runBenchmark(options, {
             loadWorkers: options.protocol.loadWorkers,
             processId: server.child.pid,
             responseBytes: validation.measuredBytes,
+            allowLoadErrors: options.allowLoadErrors,
           });
           await waitForMemorySettle();
           const postSettleMemory = await snapshotProcessMemory(server.child.pid);
@@ -426,6 +431,7 @@ export async function runBenchmark(options, {
                 loadWorkers: options.protocol.loadWorkers,
                 processId: server.child.pid,
                 responseBytes: validation.measuredBytes,
+                allowLoadErrors: options.allowLoadErrors,
               }),
             )
             : Object.freeze({
@@ -440,6 +446,7 @@ export async function runBenchmark(options, {
           rawRounds.push(Object.freeze({
             affinity,
             caseId: benchmarkCase.id,
+            errors: measurement.errors,
             headline: benchmarkCase.headline,
             inputPolicy: benchmarkCase.inputPolicy,
             latencyP50Ms: measurement.latencyP50Ms,
@@ -448,8 +455,13 @@ export async function runBenchmark(options, {
             latencyP95Status: measurement.latencyP95Status,
             loadGenerator: measurement.loadGenerator,
             metricsStatus: metricsStatus(measurement),
+            loadStatus:
+              measurement.errors + measurement.timeouts + measurement.non2xx > 0
+                ? "overloaded"
+                : "ok",
             measurementAttempts: measurement.measurementAttempts,
             naturalResponseBytes: validation.naturalResponseBytes,
+            non2xx: measurement.non2xx,
             orderIndex,
             payloadPolicy: validation.payloadPolicy,
             requests: measurement.requests,
@@ -473,6 +485,7 @@ export async function runBenchmark(options, {
                 measurement.serverMetrics.intervalMilliseconds ?? null,
               status: measurement.serverMetrics.status,
             }),
+            timeouts: measurement.timeouts,
             streaming: benchmarkCase.streaming,
             throughputBytesPerSecond:
               measurement.throughputBytesPerSecond,

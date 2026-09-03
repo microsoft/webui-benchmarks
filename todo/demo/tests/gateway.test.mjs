@@ -76,7 +76,19 @@ test("the gallery lists every hosted product entry point", async () => {
   });
 });
 
-test("launching a product pins it and hands it the origin root", async () => {
+test("a benchmark path responds directly without redirects or cookies", async () => {
+  await withGateway(async (origin) => {
+    const benchmark = await fetch(`${origin}${product.benchmarkPath}/dynamic`, {
+      redirect: "manual",
+    });
+    assert.equal(benchmark.status, 200);
+    assert.equal(benchmark.headers.get("location"), null);
+    assert.equal(benchmark.headers.get("set-cookie"), null);
+    assert.equal(await benchmark.text(), "upstream /dynamic http");
+  });
+});
+
+test("launching an app pins it and hands it the origin root", async () => {
   await withGateway(async (origin) => {
     const launch = await fetch(`${origin}${product.launchPath}/dynamic`, {
       redirect: "manual",
@@ -123,7 +135,7 @@ test("unpinned, unknown, and unsafe requests are refused", async () => {
   });
 });
 
-test("readiness is immediate while reporting lazy product startup", async () => {
+test("readiness waits until every product is hosted", async () => {
   const gateway = await startDemoGateway({
     handler: createDemoHandler({ hosted: new Map(), products }),
     host: "127.0.0.1",
@@ -135,19 +147,19 @@ test("readiness is immediate while reporting lazy product startup", async () => 
     assert.equal(health.status, 200);
     assert.deepEqual((await health.json()).products, products.length);
     const ready = await fetch(`${origin}/readyz`);
-    assert.equal(ready.status, 200);
+    assert.equal(ready.status, 503);
     const readiness = await ready.json();
     assert.equal(readiness.hosted, 0);
     assert.equal(readiness.products, products.length);
     assert.equal(readiness.starting, 0);
-    assert.equal(readiness.status, "ready");
+    assert.equal(readiness.status, "starting");
     assert.ok(readiness.uptimeSeconds >= 0);
   } finally {
     await gateway.close();
   }
 });
 
-test("launch requests start an unhosted product before redirecting", async () => {
+test("benchmark requests start an unhosted product before proxying", async () => {
   const upstream = await startUpstream();
   const hosted = new Map();
   let launches = 0;
@@ -171,11 +183,12 @@ test("launch requests start an unhosted product before redirecting", async () =>
   });
   try {
     const origin = `http://127.0.0.1:${gateway.port}`;
-    const launch = await fetch(`${origin}${product.launchPath}/dynamic`, {
+    const launch = await fetch(`${origin}${product.benchmarkPath}/dynamic`, {
       redirect: "manual",
     });
-    assert.equal(launch.status, 302);
-    assert.equal(launch.headers.get("location"), "/dynamic");
+    assert.equal(launch.status, 200);
+    assert.equal(launch.headers.get("location"), null);
+    assert.equal(await launch.text(), "upstream /dynamic http");
     assert.equal(launches, 1);
     assert.ok(hosted.has(product.id));
   } finally {

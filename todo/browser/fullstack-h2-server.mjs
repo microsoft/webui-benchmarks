@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { createSecureServer } from "node:http2";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -43,18 +46,66 @@ async function loadHandler(appId) {
     )).handler;
   }
   if (appId === "nuxt") {
-    globalThis._importMeta_ = {
-      env: process.env,
-      url: pathToFileURL(
-        resolve(appRoot, ".output", "server", "index.mjs"),
-      ).href,
-    };
-    const nitro = await import(
-      pathToFileURL(
-        resolve(appRoot, ".output", "server", "chunks", "_", "nitro.mjs"),
-      ).href
+    const nitroPath = resolve(
+      appRoot,
+      ".output",
+      "server",
+      "chunks",
+      "nitro",
+      "nitro.mjs",
     );
-    return nitro.t(nitro.b().h3App);
+    if (!existsSync(nitroPath)) {
+      throw new Error(`Nuxt Nitro server artifact not found: ${nitroPath}`);
+    }
+    const internalPort = await reservePort();
+    const child = spawn(process.execPath, [
+      resolve(appRoot, ".output", "server", "index.mjs"),
+    ], {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        NITRO_HOST: "127.0.0.1",
+        NITRO_PORT: String(internalPort),
+      },
+      stdio: "ignore",
+    });
+    await waitForHttp(`http://127.0.0.1:${internalPort}/cached`, child);
+    const handler = (request, response) => {
+      const headers = Object.fromEntries(
+        Object.entries(request.headers).filter(([name]) => !name.startsWith(":")),
+      );
+      headers.host = `127.0.0.1:${internalPort}`;
+      const proxy = httpRequest({
+        hostname: "127.0.0.1",
+        port: internalPort,
+        method: request.method,
+        path: request.url,
+        headers,
+      }, (upstream) => {
+        const responseHeaders = Object.fromEntries(
+          Object.entries(upstream.headers).filter(
+            ([name]) => ![
+              "connection",
+              "keep-alive",
+              "proxy-connection",
+              "transfer-encoding",
+              "upgrade",
+            ].includes(name),
+          ),
+        );
+        response.writeHead(upstream.statusCode ?? 502, responseHeaders);
+        upstream.pipe(response);
+      });
+      proxy.once("error", (error) => {
+        if (!response.headersSent) response.writeHead(502);
+        response.end(error.message);
+      });
+      request.pipe(proxy);
+    };
+    handler.stop = () => {
+      child.kill("SIGTERM");
+    };
+    return handler;
   }
   const require = createRequire(resolve(appRoot, "package.json"));
   const next = require("next");
@@ -63,11 +114,51 @@ async function loadHandler(appId) {
   return app.getRequestHandler();
 }
 
+async function reservePort() {
+  return await new Promise((resolvePort, reject) => {
+    const server = createHttpServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        reject(new Error("Failed to reserve Nuxt proxy port"));
+        return;
+      }
+      server.close((error) => error ? reject(error) : resolvePort(address.port));
+    });
+  });
+}
+
+async function waitForHttp(url, child) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`Nuxt production server exited with ${child.exitCode}`);
+    }
+    try {
+      await new Promise((resolveRequest, reject) => {
+        const request = httpRequest(url, (response) => {
+          response.resume();
+          response.once("end", resolveRequest);
+        });
+        request.once("error", reject);
+        request.end();
+      });
+      return;
+    } catch {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+    }
+  }
+  child.kill("SIGTERM");
+  throw new Error(`Nuxt production server did not start at ${url}`);
+}
+
 export async function startFullstackH2Server({ appId, port }) {
   const [handler, tls] = await Promise.all([
     loadHandler(appId),
     browserTlsMaterial(),
   ]);
+  const stopHandler = handler.stop;
   const server = createSecureServer(
     {
       allowHTTP1: false,
@@ -93,6 +184,7 @@ export async function startFullstackH2Server({ appId, port }) {
       });
     },
   );
+  server.once("close", () => stopHandler?.());
   await new Promise((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolveListen);
@@ -118,7 +210,9 @@ if (isMainModule(import.meta.url)) {
   const server = await startFullstackH2Server(
     parseOptions(process.argv.slice(2)),
   );
-  const close = () => server.close(() => process.exit(0));
+  const close = () => {
+    server.close(() => process.exit(0));
+  };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
 }

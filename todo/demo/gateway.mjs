@@ -260,6 +260,7 @@ async function proxyRequest({
 export function createDemoHandler({
   hosted,
   ensureHosted = async (product) => hosted.get(product.id),
+  isReady = () => hosted.size === products.length && launching.size === 0,
   launching = new Map(),
   products,
   rateLimiter = createRateLimiter(),
@@ -315,17 +316,18 @@ export function createDemoHandler({
       return;
     }
     if (action.kind === "health" || action.kind === "ready") {
+      const ready = isReady();
       const body = JSON.stringify({
         hosted: hosted.size,
         products: products.length,
         starting: launching.size,
-        status: "ready",
+        status: action.kind === "health" || ready ? "ready" : "starting",
         uptimeSeconds: Math.round((Date.now() - startedAt) / 1_000),
       });
       send(
         request,
         response,
-        200,
+        action.kind === "health" || ready ? 200 : 503,
         JSON_CONTENT_TYPE,
         body,
         { secure },
