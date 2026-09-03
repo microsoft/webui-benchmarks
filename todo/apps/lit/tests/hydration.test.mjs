@@ -24,10 +24,10 @@ test("the client installs hydration support before any lit element", async () =>
   );
   // Hydration support monkeypatches LitElement, so it must be installed before
   // any element module registers a class; assert on source order to lock it in.
-  const componentIndex = clientSource.indexOf('from "./components/');
+  const componentIndex = clientSource.indexOf('import("./components/');
   assert.ok(
     componentIndex !== -1,
-    "client.mjs must import at least one lit component",
+    "client.mjs must dynamically import at least one lit component",
   );
   assert.ok(
     hydrateIndex < componentIndex,

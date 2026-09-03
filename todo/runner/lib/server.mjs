@@ -444,6 +444,14 @@ export async function launchCaseServer(
     ...process.env,
     NODE_ENV: "production",
     WEBUI_BENCH_RESPONSE_MODE: benchmarkCase.responseMode,
+    ...(benchmarkCase.launcher.protocol === undefined
+      ? {}
+      : {
+          WEBUI_BENCH_PROTOCOL: resolve(
+            BENCHMARK_ROOT,
+            benchmarkCase.launcher.protocol,
+          ),
+        }),
   };
   if (benchmarkCase.appId === "webui") {
     env.WEBUI_ADDON_PATH = (await resolveNativeAddon()).path;

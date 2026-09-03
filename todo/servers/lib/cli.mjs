@@ -31,6 +31,7 @@ export function parseServerArgs(
     port: parsePort(
       process.env.WEBUI_BENCH_PORT ?? process.env.PORT ?? "3000",
     ),
+    protocolPath: process.env.WEBUI_BENCH_PROTOCOL,
     responseMode: process.env.WEBUI_BENCH_RESPONSE_MODE ?? "progressive",
   };
   for (let index = 0; index < argv.length; index += 2) {
@@ -47,6 +48,8 @@ export function parseServerArgs(
       options.addonPath = value;
     } else if (argument === "--response-mode") {
       options.responseMode = value;
+    } else if (argument === "--protocol") {
+      options.protocolPath = value;
     } else if (argument === "--app" && allowApp) {
       options.appId = value;
     } else {

@@ -135,7 +135,8 @@ function hasCanonicalProtocol(report) {
       === DEFAULT_PROTOCOL.saturationDurationSeconds
     && config.warmupSeconds === DEFAULT_PROTOCOL.warmupSeconds
     && arraysEqual(config.scalingCores, [1])
-    && config.serverCpu === 0
+    && Number.isInteger(config.serverCpu)
+    && config.serverCpu >= 0
     && hasExactIds(report.builds, expectedBuildIds, ({ id }) => id)
     && report.builds.every(({ status }) => status === "ok");
 }
@@ -229,7 +230,8 @@ function hasCompleteSaturationEvidence(report) {
     return false;
   }
   return report.saturation.every((entry) =>
-    entry.affinity?.status === "applied"
+    entry.affinity?.cpuIndex === report.config.serverCpu
+    && entry.affinity?.status === "applied"
     && Array.isArray(entry.samples)
     && entry.samples.length === DEFAULT_PROTOCOL.saturationConnections.length
     && entry.samples.every((sample, index) =>
@@ -308,11 +310,11 @@ function hasCompleteSummaries(report) {
   );
 }
 
-function isCompleteRawRound(round, stateVariants) {
+function isCompleteRawRound(round, stateVariants, serverCpu) {
   return round?.headline === true
     && round.inputPolicy === "request-timestamped-input"
     && round.payloadPolicy === "natural"
-    && round.affinity?.cpuIndex === 0
+    && round.affinity?.cpuIndex === serverCpu
     && round.affinity?.status === "applied"
     && round.latencyP95Status === "histogram-10us"
     && round.loadGenerator?.status === "available"
@@ -370,7 +372,11 @@ function hasCompleteRawRounds(report) {
       || orderIndex >= OFFICIAL_CASE_COUNT
       || orderIndexes[round].has(orderIndex)
       || expectedOrders[round][orderIndex] !== rawRound.caseId
-      || !isCompleteRawRound(rawRound, report.fixture?.stateVariants)
+      || !isCompleteRawRound(
+        rawRound,
+        report.fixture?.stateVariants,
+        report.config.serverCpu,
+      )
     ) {
       return false;
     }
@@ -782,7 +788,7 @@ function renderRows(rows, browserEvidence, warnings) {
     const warning = warningsByCase.get(row.caseId);
     const warningDetail = warning === undefined
       ? ""
-      : ` · saturation warning: the 128-connection probe was ${
+      : ` · saturation warning: the ${warning.probeConnections}-connection probe was ${
           warning.gainPercent.toFixed(1)
         }% faster`;
     const detail = `${row.renderer} · ${row.transport} · MAD ${formatNumber(row.madRequestsPerSecond)} req/s · p95 ${formatNumber(row.medianP95LatencyMs)} ms · ${formatNumber(row.minimumResponseBytes)}-${formatNumber(row.maximumResponseBytes)} B natural${warningDetail}`;

@@ -9,6 +9,7 @@ import { createWebuiRouteController } from "./lib/webui-engine.mjs";
 export async function startNodeHttpWebuiServer(options) {
   const controller = await createWebuiRouteController({
     addonPath: options.addonPath,
+    protocolPath: options.protocolPath,
     responseMode: options.responseMode,
     runtimeId: "node",
     serverId: "node-http",

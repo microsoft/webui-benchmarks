@@ -52,7 +52,9 @@ export const TIERS = Object.freeze({
 
 const NODE_HTTP_TRANSPORT = "node:http";
 const WEBUI_NATIVE_RENDERER =
-  "@microsoft/webui Protocol.streamResponse (request-materialized Node-API state)";
+  "@microsoft/webui Protocol.streamResponse (Shadow DOM, request-materialized Node-API state)";
+const WEBUI_SHADOW_PROTOCOL =
+  "todo/apps/webui-shadowdom/dist/protocol.bin";
 
 function freezeCase(value) {
   if (typeof value.renderer !== "string" || typeof value.transport !== "string") {
@@ -107,18 +109,18 @@ const COMPLETE_RENDERER_OVERRIDES = Object.freeze({
   vue: { renderer: "@vue/server-renderer renderToString" },
   "webui-bun-serve": {
     renderer:
-      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+      "@microsoft/webui Protocol.render (Shadow DOM, request-materialized Node-API state)",
   },
   "webui-deno-serve": {
     renderer:
-      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+      "@microsoft/webui Protocol.render (Shadow DOM, request-materialized Node-API state)",
   },
   "webui-fast-rust-actix": {
     renderer: "webui-handler render (Rust, FAST V3, single response)",
   },
   "webui-node-http": {
     renderer:
-      "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+      "@microsoft/webui Protocol.render (Shadow DOM, request-materialized Node-API state)",
   },
   "webui-rust-actix": { renderer: "webui-handler render (Rust)" },
   "webui-shadowdom-rust-actix": {
@@ -159,7 +161,11 @@ function webuiRuntimeCase({ buildIds, entry, id, label, runtimeId, serverId, tra
     buildIds,
     id,
     label,
-    launcher: { entry, kind: "webui-runtime" },
+    launcher: {
+      entry,
+      kind: "webui-runtime",
+      protocol: WEBUI_SHADOW_PROTOCOL,
+    },
     productKind: PRODUCT_KINDS.webui,
     renderer: WEBUI_NATIVE_RENDERER,
     runtimeId,
@@ -258,28 +264,28 @@ function officialCases() {
       transport: "actix-web",
     }),
     webuiRuntimeCase({
-      buildIds: ["webui", "native-addon", "bun-serve"],
+      buildIds: ["webui-shadowdom", "native-addon", "bun-serve"],
       entry: "bun.mjs",
       id: "webui-bun-serve",
-      label: "WebUI / Bun.serve",
+      label: "WebUI / Shadow DOM / Bun.serve",
       runtimeId: "bun",
       serverId: "bun-serve",
       transport: "Bun.serve",
     }),
     webuiRuntimeCase({
-      buildIds: ["webui", "native-addon"],
+      buildIds: ["webui-shadowdom", "native-addon"],
       entry: "deno.mjs",
       id: "webui-deno-serve",
-      label: "WebUI / Deno.serve",
+      label: "WebUI / Shadow DOM / Deno.serve",
       runtimeId: "deno",
       serverId: "deno-serve",
       transport: "Deno.serve",
     }),
     webuiRuntimeCase({
-      buildIds: ["webui", "native-addon"],
+      buildIds: ["webui-shadowdom", "native-addon"],
       entry: "node-http.mjs",
       id: "webui-node-http",
-      label: "WebUI / Node node:http",
+      label: "WebUI / Shadow DOM / Node node:http",
       runtimeId: "node",
       serverId: "node-http",
       transport: NODE_HTTP_TRANSPORT,

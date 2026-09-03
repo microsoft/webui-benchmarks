@@ -85,6 +85,11 @@ test("server rendering emits declarative shadow DOM", async () => {
     "output must contain declarative shadow roots",
   );
   assert.match(html, /shadowrootmode="open"/);
+  assert.match(
+    html,
+    /<workspace-app[^>]*\bdefer-hydration\b/,
+    "the root must not upgrade before its request state is restored",
+  );
 });
 
 test("streaming render is byte-identical to the complete render", async () => {

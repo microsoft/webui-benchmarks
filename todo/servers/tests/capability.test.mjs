@@ -104,6 +104,7 @@ test("CLI validates ports and isolates renderer ids as values", () => {
       appId: "react",
       host: "127.0.0.1",
       port: 0,
+      protocolPath: process.env.WEBUI_BENCH_PROTOCOL,
       responseMode: "progressive",
     },
   );
@@ -122,6 +123,14 @@ test("CLI parses and validates --response-mode", () => {
   assert.throws(
     () => parseServerArgs(["--response-mode", "eventual"]),
     /--response-mode must be/,
+  );
+});
+
+test("CLI accepts an explicit WebUI protocol", () => {
+  assert.equal(
+    parseServerArgs(["--protocol", "todo/apps/webui-shadowdom/dist/protocol.bin"])
+      .protocolPath,
+    "todo/apps/webui-shadowdom/dist/protocol.bin",
   );
 });
 
