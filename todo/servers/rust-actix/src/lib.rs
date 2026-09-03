@@ -50,7 +50,7 @@ const REQUEST_TIMESTAMP_FORMAT: &[BorrowedFormatItem<'static>] =
     format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6]Z");
 const STREAM_CHUNK_SIZE: usize = 16 * 1024;
 const STREAM_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
-const STREAM_RENDER_QUEUE_CAPACITY: usize = 128;
+const STREAM_RENDER_QUEUE_CAPACITY: usize = 512;
 const STREAM_RESPONSE_CHANNEL_CAPACITY: usize = 8;
 /// Environment variable that enables the streaming pipeline stage trace. Disabled by
 /// default so production benchmark runs pay no logging cost; set to `1` to attribute
