@@ -46,9 +46,9 @@ Reports default to
   starts cold, while ordinary same-navigation reuse prevents hundreds of
   identical Shadow DOM stylesheet links from becoming artificial downloads.
 - Every browser-facing URL is HTTPS with ALPN restricted to HTTP/2, and every
-  raw navigation must report `nextHopProtocol: "h2"`. Actix uses rustls
-  directly; controlled documents and built framework handlers are hosted
-  directly by `node:http2` compatibility servers.
+  raw navigation must report `nextHopProtocol: "h2"`. Actix uses rustls with
+  explicit `TCP_NODELAY`; controlled documents and built framework handlers are
+  hosted directly by `node:http2`, which disables Nagle on each session socket.
 - Apps are deterministically shuffled per round. Only one production server is
   live at a time. Existing build plans, case metadata, production launchers,
   worker policy, and process-tree cleanup are reused.
@@ -59,7 +59,9 @@ Reports default to
 - WebUI / Light DOM / Rust / Actix is served directly by Actix with no Node
   document proxy.
   The Rust server injects the browser bootstrap through `RenderOptions` and
-  serves both WebUI browser assets itself.
+  serves both WebUI browser assets itself. Light DOM loads the shared stylesheet
+  once at the document level and retains a separate generated stylesheet only
+  for lazy todo-row rendering.
 - WebUI / Shadow DOM / Rust / Actix uses that same direct server, state, and
   authored component graph. Only the compiled DOM/CSS strategy changes; browser
   evidence requires more than 800 open shadow roots.

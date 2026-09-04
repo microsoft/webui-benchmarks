@@ -136,14 +136,13 @@ async function waitForHttp(url, child) {
       throw new Error(`Nuxt production server exited with ${child.exitCode}`);
     }
     try {
-      await new Promise((resolveRequest, reject) => {
-        const request = httpRequest(url, (response) => {
-          response.resume();
-          response.once("end", resolveRequest);
-        });
-        request.once("error", reject);
-        request.end();
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(2_000),
       });
+      await response.arrayBuffer();
+      if (!response.ok) {
+        throw new Error(`Nuxt readiness returned HTTP ${response.status}`);
+      }
       return;
     } catch {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));

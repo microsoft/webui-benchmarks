@@ -113,24 +113,6 @@ export async function executeTodoInteractionSequence({
       await publish(phase);
     }
   };
-  const timeInitialFilter = async (action, predicate) => {
-    const startedAt = performance.now();
-    action();
-    const retryAt = performance.now() + 1_000;
-    while (performance.now() < retryAt) {
-      for (let turn = 0; turn < microtaskSettleTurns; turn++) {
-        if (predicate()) {
-          await nextFrame();
-          return performance.now() - startedAt;
-        }
-        await Promise.resolve();
-      }
-      await nextFrame();
-    }
-    action();
-    await waitFor(predicate, "pending filter");
-    return performance.now() - startedAt;
-  };
   const filterButton = (filterId) =>
     query(
       `.todo-filter[data-action="filter"][data-filter="${filterId}"]`,
@@ -334,7 +316,8 @@ export async function executeTodoInteractionSequence({
       && workspaceHas("data-workspace-view", "table"),
   );
 
-  durations.filterPendingMs = await timeInitialFilter(
+  durations.filterPendingMs = await time(
+    "pending filter",
     () => filterButton("pending").click(),
     () =>
       filterButton("pending")?.getAttribute("aria-pressed") === "true"

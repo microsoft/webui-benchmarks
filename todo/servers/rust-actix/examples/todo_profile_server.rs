@@ -265,6 +265,7 @@ async fn main() -> Result<()> {
             .route("/cached", web::get().to(cached))
     })
     .workers(1)
+    .tcp_nodelay(true)
     .bind((host.as_str(), config.port))
     .with_context(|| format!("failed to bind {}:{}", host, config.port))?;
     let port = server

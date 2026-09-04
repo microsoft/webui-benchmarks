@@ -3,7 +3,6 @@
 
 import { chromium } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { connect as connectHttp2 } from "node:http2";
 import process from "node:process";
 import { buildControlledClients } from "./build-clients.mjs";
 import {
@@ -36,6 +35,7 @@ import { evaluateRuntimePolicy } from "../runner/lib/runtime-policy.mjs";
 import {
   assertServerMetadata,
   launchCaseServer,
+  requestHttp2Ok,
 } from "../runner/lib/server.mjs";
 import { TODO_STATE_VARIANTS } from "../shared/state.mjs";
 import { verifyRuntimeMatrix } from "../servers/verify-runtimes.mjs";
@@ -111,28 +111,11 @@ async function cleanupResources(resources, operationError) {
 
 async function warmBrowserServer(url) {
   if (url.startsWith("https://")) {
-    await new Promise((resolveWarmup, reject) => {
-      const session = connectHttp2(url, { rejectUnauthorized: false });
-      const request = session.request({
-        ":path": "/dynamic",
+    await requestHttp2Ok(`${url}/dynamic`, {
+      headers: {
         "accept-encoding": "identity",
-      });
-      let status;
-      request.on("response", (headers) => {
-        status = Number(headers[":status"]);
-      });
-      request.on("data", () => {});
-      request.on("end", () => {
-        session.close();
-        if (status >= 200 && status < 300) resolveWarmup();
-        else reject(new Error(`Browser warmup returned HTTP ${status}`));
-      });
-      request.once("error", (error) => {
-        session.close();
-        reject(error);
-      });
-      session.once("error", reject);
-      request.end();
+      },
+      timeoutMilliseconds: 30_000,
     });
     return;
   }
