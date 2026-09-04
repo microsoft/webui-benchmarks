@@ -84,6 +84,34 @@ test("WebUI app filter selects the five base DOM/transport products", () => {
   );
 });
 
+test("JavaScript-hosted WebUI rows use the Light DOM protocol", () => {
+  const cases = createBrowserCases([
+    "webui-bun-serve",
+    "webui-deno-serve",
+    "webui-node-http",
+  ]);
+  assert.deepEqual(
+    cases.map(({ label }) => label),
+    [
+      "WebUI / Light DOM / Bun.serve",
+      "WebUI / Light DOM / Deno.serve",
+      "WebUI / Light DOM / Node node:http",
+    ],
+  );
+  assert.ok(
+    cases.every(({ sourceCase }) =>
+      sourceCase.launcher.protocol
+        === "todo/apps/webui-lightdom/dist/protocol.bin"
+    ),
+  );
+  const fast = createBrowserCases(["webui-fast"])[0];
+  assert.equal(fast.label, "WebUI / FAST V3 / Rust / Actix");
+  assert.equal(
+    fast.sourceCase.launcher.protocol,
+    "todo/apps/webui-fast/dist/protocol.bin",
+  );
+});
+
 test("FAST app filter selects its dedicated Rust/Actix product", () => {
   const cases = createBrowserCases(["webui-fast"]);
   assert.deepEqual(
@@ -134,6 +162,17 @@ test("official options require exactly ten rounds and the complete matrix", () =
     1,
   );
   assert.equal(normalizeOptions({ mode: "official" }).build, true);
+  assert.equal(
+    normalizeOptions({
+      appFilters: ["webui-node-http"],
+      mode: "refresh",
+    }).rounds,
+    10,
+  );
+  assert.throws(
+    () => normalizeOptions({ mode: "refresh" }),
+    /at least one app filter/u,
+  );
 });
 
 test("browser SSR renderers always load framework production runtimes", () => {

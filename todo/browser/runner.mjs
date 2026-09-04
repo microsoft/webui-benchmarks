@@ -236,8 +236,8 @@ export async function withFreshChromium(
 
 function normalizeOptions(options) {
   const mode = options.mode ?? "official";
-  if (!["official", "quick"].includes(mode)) {
-    throw new Error("Browser benchmark mode must be official or quick");
+  if (!["official", "quick", "refresh"].includes(mode)) {
+    throw new Error("Browser benchmark mode must be official, refresh, or quick");
   }
   const rounds = options.rounds
     ?? (mode === "quick" ? QUICK_ROUNDS : OFFICIAL_MINIMUM_ROUNDS);
@@ -255,6 +255,9 @@ function normalizeOptions(options) {
   if (mode === "official" && (options.appFilters?.length ?? 0) !== 0) {
     throw new RangeError("official mode requires the complete product matrix");
   }
+  if (mode === "refresh" && (options.appFilters?.length ?? 0) === 0) {
+    throw new RangeError("refresh mode requires at least one app filter");
+  }
   const viewport = Object.freeze({
     height: options.viewport?.height ?? DEFAULT_VIEWPORT.height,
     width: options.viewport?.width ?? DEFAULT_VIEWPORT.width,
@@ -269,7 +272,7 @@ function normalizeOptions(options) {
   }
   return Object.freeze({
     appFilters: Object.freeze(options.appFilters ?? []),
-    build: mode === "official" || options.build === true,
+    build: mode !== "quick" || options.build === true,
     headless: options.headless !== false,
     json: options.json === true,
     mode,
@@ -448,7 +451,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
   const options = normalizeOptions(inputOptions);
   const browserCases = createBrowserCases(options.appFilters);
   const runtimeVerification = verifyRuntimeMatrix({
-    official: options.mode === "official",
+    official: options.mode !== "quick",
   });
   const requiredRuntimes = [
     "node",
@@ -460,7 +463,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     runtimeVerification,
     {
       quick: options.mode === "quick",
-      runtimeMode: options.mode === "official" ? "official" : "local",
+      runtimeMode: options.mode === "quick" ? "local" : "official",
     },
     requiredRuntimes,
   );
@@ -545,7 +548,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
           continue;
         }
         let rawRound;
-        const attempts = options.mode === "official"
+        const attempts = options.mode !== "quick"
           ? OFFICIAL_INFRASTRUCTURE_ATTEMPTS
           : 1;
         for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -600,7 +603,7 @@ export async function runBrowserBenchmark(inputOptions = {}) {
     throw new Error("The browser benchmark changed a shared fixture snapshot");
   }
   if (
-    options.mode === "official"
+    options.mode !== "quick"
     && rawRounds.some(({ status }) => status !== "ok")
   ) {
     const failures = rawRounds

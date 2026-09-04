@@ -23,7 +23,7 @@ function validReport() {
       mode: "dynamic",
       payloadPolicy: "natural",
       renderer:
-        "@microsoft/webui Protocol.render (Shadow DOM, request-materialized Node-API state)",
+        "@microsoft/webui Protocol.render (Light DOM, request-materialized Node-API state)",
       serverId: "node-http",
       transport: "node:http",
       workerCount: 1,

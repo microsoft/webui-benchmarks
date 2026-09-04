@@ -39,6 +39,8 @@ export function parseBrowserOptions(argv) {
       options.json = true;
     } else if (option === "--official") {
       options.mode = "official";
+    } else if (option === "--refresh") {
+      options.mode = "refresh";
     } else if (option === "--output") {
       options.outputPath = nextValue(argv, index, option);
       index += 1;
@@ -75,6 +77,7 @@ function help() {
     "Usage: node todo/browser/cli.mjs [options]",
     "",
     "  --official          Run exactly ten randomized rounds (default)",
+    "  --refresh           Run ten randomized rounds for selected app ids",
     "  --quick             Run one smoke round",
     "  --apps LIST         Comma-separated app ids",
     "  --build             Build selected production server artifacts first",

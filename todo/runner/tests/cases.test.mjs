@@ -170,7 +170,7 @@ test("framework rows keep their own production servers", () => {
   );
 });
 
-test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
+test("WebUI runtime rows use Light DOM while FAST V3 remains distinct", () => {
   const webui = createCaseMatrix().filter(
     (benchmarkCase) => benchmarkCase.productKind === PRODUCT_KINDS.webui,
   );
@@ -203,17 +203,22 @@ test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
   assert.deepEqual(
     webui.slice(3).map((benchmarkCase) => benchmarkCase.label),
     [
-      "WebUI / Shadow DOM / Bun.serve",
-      "WebUI / Shadow DOM / Deno.serve",
-      "WebUI / Shadow DOM / Node node:http",
+      "WebUI / Light DOM / Bun.serve",
+      "WebUI / Light DOM / Deno.serve",
+      "WebUI / Light DOM / Node node:http",
     ],
   );
   assert.ok(
     webui.slice(3).every(
       (benchmarkCase) =>
         benchmarkCase.launcher.protocol
-          === "todo/apps/webui-shadowdom/dist/protocol.bin",
+          === "todo/apps/webui-lightdom/dist/protocol.bin",
     ),
+  );
+  assert.equal(webui[2].label, "WebUI / FAST V3 / Rust / Actix");
+  assert.equal(
+    webui[2].launcher.protocol,
+    "todo/apps/webui-fast/dist/protocol.bin",
   );
 });
 
@@ -386,7 +391,8 @@ test("packed WebUI builds consume artifacts without rebuilding package sources",
   }).map(({ id }) => id);
   assert.equal(ids.includes("webui-package"), false);
   assert.equal(ids.includes("native-addon"), true);
-  assert.equal(ids.includes("webui-shadowdom"), true);
+  assert.equal(ids.includes("webui"), true);
+  assert.equal(ids.includes("webui-shadowdom"), false);
 });
 
 test("browser build plan always includes native TLS material", () => {

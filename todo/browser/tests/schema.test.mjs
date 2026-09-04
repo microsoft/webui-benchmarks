@@ -160,3 +160,22 @@ test("rejects filtered or unavailable official evidence", () => {
     ),
   );
 });
+
+test("allows filtered refresh evidence but still requires ten successful rounds", () => {
+  const report = reportFixture();
+  report.mode = "refresh";
+  report.roundsPerApp = 10;
+  const validation = validateBrowserReport(report);
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((error) =>
+      error.includes("complete ordered product matrix")
+    ),
+    false,
+  );
+  assert.ok(
+    validation.errors.some((error) =>
+      error.includes("refresh result must be successful")
+    ),
+  );
+});

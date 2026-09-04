@@ -17,3 +17,16 @@ test("browser options ignore the pnpm argument separator", () => {
     },
   );
 });
+
+test("browser options expose selective ten-round refreshes", () => {
+  assert.deepEqual(
+    parseBrowserOptions(["--refresh", "--apps", "webui-node-http"]),
+    {
+      appFilters: ["webui-node-http"],
+      build: false,
+      headless: true,
+      json: false,
+      mode: "refresh",
+    },
+  );
+});
