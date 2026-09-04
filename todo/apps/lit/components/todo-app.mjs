@@ -38,7 +38,7 @@ export class TodoApp extends LitElement {
 
   #workspaceIntelligence = createRef();
 
-  #workspaceModel = {};
+  #workspaceModel;
 
   constructor() {
     super();
@@ -71,10 +71,10 @@ export class TodoApp extends LitElement {
     this.todos = state.todos;
     this.footer = state.footer;
     this.#workspaceModel = state.intelligence;
-    const workspace = this.#workspaceIntelligence.value;
-    if (workspace === undefined) {
-      this.intelligence = state.intelligence;
-    } else {
+    this.intelligence = state.intelligence;
+    const workspace = this.#workspaceIntelligence.value
+      ?? this.renderRoot.querySelector("workspace-intelligence");
+    if (workspace !== null && workspace !== undefined) {
       workspace.setWorkspaceState(state.todos, state.intelligence);
     }
   }
@@ -88,7 +88,7 @@ export class TodoApp extends LitElement {
       selection: this.selection,
       todos: this.todos,
       footer: this.footer,
-      intelligence: this.#workspaceModel,
+      intelligence: this.#workspaceModel ?? this.intelligence,
     };
   }
 
@@ -122,6 +122,7 @@ export class TodoApp extends LitElement {
 
   onWorkspaceChange = (event) => {
     this.#workspaceModel = event.detail.intelligence;
+    this.intelligence = event.detail.intelligence;
   };
 
   render() {

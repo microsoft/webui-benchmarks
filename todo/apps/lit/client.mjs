@@ -2,13 +2,22 @@
 // Licensed under the MIT license.
 
 // Lit's hydration support must be installed before any `LitElement` subclass is
-// defined, so this import stays first and the component modules load after it.
+// defined. esbuild may initialize `lit` before this side-effect module, so
+// explicitly apply the hook before dynamically loading component definitions.
 import "@lit-labs/ssr-client/lit-element-hydrate-support.js";
 import { Router } from "@lit-labs/router";
-import { html } from "lit";
+import { hydrate } from "@lit-labs/ssr-client";
+import { LitElement, html } from "lit";
 import { publishHydrated } from "../../shared/hydration.mjs";
-import { WorkspaceApp } from "./components/workspace-app.mjs";
-import "./components/todo-app.mjs";
+
+if (!LitElement.observedAttributes?.includes("defer-hydration")) {
+  globalThis.litElementHydrateSupport({ LitElement });
+}
+
+const [{ WorkspaceApp }, { workspace }] = await Promise.all([
+  import("./components/workspace-app.mjs"),
+  import("./template.mjs"),
+]);
 
 export { WorkspaceApp };
 
@@ -48,17 +57,14 @@ export async function hydrateTodo(target, state) {
   const shell = target.querySelector("workspace-app")
     ?? target.closest?.("workspace-app")
     ?? target;
-  shell.state = state;
   await customElements.whenDefined("workspace-app");
   const router = installRouter(shell);
-  const navigate = () => shell.goto(window.location.pathname);
   const originalGoto = router.goto.bind(router);
   router.goto = async (pathname) => {
     await originalGoto(pathname);
     shell.goto(pathname);
   };
-  navigate();
-  shell.removeAttribute("defer-hydration");
+  hydrate(workspace(state, window.location.pathname), target);
   await shell.updateComplete;
   publishHydrated("lit");
   return shell;

@@ -19,7 +19,7 @@ import { runtimeVersion } from "./runtime.mjs";
 // import.meta.url: a Bun `--compile` executable embeds this module under a
 // virtual `/$bunfs/` root, so a URL relative to the module's own location no
 // longer points at a real file on disk.
-const protocolPath = resolve(
+const defaultProtocolPath = resolve(
   process.cwd(),
   "todo",
   "apps",
@@ -172,6 +172,7 @@ function streamWebuiResponse(protocol, state, requestPath) {
 
 export async function createWebuiRouteController({
   addonPath = undefined,
+  protocolPath = defaultProtocolPath,
   responseMode = "progressive",
   runtimeId,
   serverId,
@@ -179,9 +180,10 @@ export async function createWebuiRouteController({
   assertRuntime(runtimeId);
   const addon = await resolveNativeAddon(addonPath);
   process.env.WEBUI_ADDON_PATH = addon.path;
-  if (!existsSync(protocolPath)) {
+  const resolvedProtocolPath = resolve(protocolPath);
+  if (!existsSync(resolvedProtocolPath)) {
     throw new Error(
-      `Missing ${protocolPath}. Build the controlled WebUI renderer before starting the server.`,
+      `Missing ${resolvedProtocolPath}. Build the controlled WebUI renderer before starting the server.`,
     );
   }
 
@@ -201,7 +203,7 @@ export async function createWebuiRouteController({
 
   let protocol;
   try {
-    protocol = new Protocol(readFileSync(protocolPath), { plugin: "webui" });
+    protocol = new Protocol(readFileSync(resolvedProtocolPath), { plugin: "webui" });
     if (typeof protocol.render !== "function") {
       throw new TypeError(
         `The native addon must provide render(); observed ${typeof protocol.render}`,
@@ -248,4 +250,4 @@ export async function createWebuiRouteController({
   });
 }
 
-export const WEBUI_PROTOCOL_PATH = protocolPath;
+export const WEBUI_PROTOCOL_PATH = defaultProtocolPath;

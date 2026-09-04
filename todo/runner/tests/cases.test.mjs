@@ -200,6 +200,21 @@ test("WebUI rows cover Light, Shadow, FAST V3, Bun, Deno, and Node", () => {
     webui.map((benchmarkCase) => benchmarkCase.runtimeId),
     ["rust", "rust", "rust", "bun", "deno", "node"],
   );
+  assert.deepEqual(
+    webui.slice(3).map((benchmarkCase) => benchmarkCase.label),
+    [
+      "WebUI / Shadow DOM / Bun.serve",
+      "WebUI / Shadow DOM / Deno.serve",
+      "WebUI / Shadow DOM / Node node:http",
+    ],
+  );
+  assert.ok(
+    webui.slice(3).every(
+      (benchmarkCase) =>
+        benchmarkCase.launcher.protocol
+          === "todo/apps/webui-shadowdom/dist/protocol.bin",
+    ),
+  );
 });
 
 test("assertCaseMatrix rejects any deviation from the official contract", () => {
@@ -371,7 +386,7 @@ test("packed WebUI builds consume artifacts without rebuilding package sources",
   }).map(({ id }) => id);
   assert.equal(ids.includes("webui-package"), false);
   assert.equal(ids.includes("native-addon"), true);
-  assert.equal(ids.includes("webui"), true);
+  assert.equal(ids.includes("webui-shadowdom"), true);
 });
 
 test("browser build plan always includes native TLS material", () => {

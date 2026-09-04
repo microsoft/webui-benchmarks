@@ -42,6 +42,7 @@ import { verifyRuntimeMatrix } from "../servers/verify-runtimes.mjs";
 
 const DEFAULT_VIEWPORT = Object.freeze({ height: 900, width: 1_440 });
 const DEFAULT_SEED = "webui-ssr-todo-browser-outcomes";
+const OFFICIAL_INFRASTRUCTURE_ATTEMPTS = 2;
 const CHROMIUM_ARGS = Object.freeze([
   "--disable-backgrounding-occluded-windows",
   "--disable-background-timer-throttling",
@@ -447,6 +448,14 @@ function summariesForCases(cases, rawRounds) {
   );
 }
 
+export function isRetryableBrowserInfrastructureFailure(reason) {
+  return typeof reason === "string"
+    && (
+      reason.includes("Target page, context or browser has been closed")
+      || reason.includes("X connection error received")
+    );
+}
+
 export function enforceProductionMode(environment = process.env) {
   environment.NODE_ENV = "production";
 }
@@ -552,18 +561,34 @@ export async function runBrowserBenchmark(inputOptions = {}) {
           );
           continue;
         }
-        const rawRound = await runCaseRound({
-          browserCase,
-          clientBundle: clients.bundles.get(browserCase.appId),
-          headless: options.headless,
-          order,
-          registry,
-          round,
-          serverRenderer: clients.serverRenderers.get(browserCase.appId),
-          verifiedRuntimes,
-          viewport: options.viewport,
-          webuiDependency,
-        });
+        let rawRound;
+        const attempts = options.mode === "official"
+          ? OFFICIAL_INFRASTRUCTURE_ATTEMPTS
+          : 1;
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+          rawRound = await runCaseRound({
+            browserCase,
+            clientBundle: clients.bundles.get(browserCase.appId),
+            headless: options.headless,
+            order,
+            registry,
+            round,
+            serverRenderer: clients.serverRenderers.get(browserCase.appId),
+            verifiedRuntimes,
+            viewport: options.viewport,
+            webuiDependency,
+          });
+          if (
+            rawRound.status === "ok"
+            || !isRetryableBrowserInfrastructureFailure(rawRound.reason)
+            || attempt === attempts
+          ) {
+            break;
+          }
+          options.progress(
+            `retrying browser infrastructure failure: ${browserCase.label}`,
+          );
+        }
         browserVersion ??= rawRound.browserVersion ?? null;
         rawRounds.push(rawRound);
       }

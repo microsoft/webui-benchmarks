@@ -621,8 +621,8 @@ test("accepts complete Windows reports with intentional process telemetry gaps",
 test("publishes fixed-load saturation warnings without hiding them", () => {
   const value = windowsPartialReport();
   const [entry] = value.saturation;
-  entry.samples[1].requestsPerSecond =
-    entry.samples[0].requestsPerSecond * 1.2;
+  entry.samples.at(-1).requestsPerSecond =
+    entry.samples.at(-2).requestsPerSecond * 1.2;
   entry.analysis = analyzeSaturation(entry.samples);
   const summary = buildBenchmarkSummary(value);
   assert.equal(entry.analysis.status, "server-unsaturated");
@@ -648,8 +648,8 @@ test("publishes disclosed fixed-load warnings on non-Windows hosts", () => {
     processPlatform: "linux",
   };
   const [entry] = value.saturation;
-  entry.samples[1].requestsPerSecond =
-    entry.samples[0].requestsPerSecond * 1.2;
+  entry.samples.at(-1).requestsPerSecond =
+    entry.samples.at(-2).requestsPerSecond * 1.2;
   entry.analysis = analyzeSaturation(entry.samples);
   const summary = buildBenchmarkSummary(value);
   assert.equal(entry.analysis.status, "server-unsaturated");
@@ -831,6 +831,18 @@ test("refuses dirty or incomplete benchmark evidence", () => {
     () => buildBenchmarkSummary(dirty),
     /clean, complete, unfiltered canonical official report/u,
   );
+});
+
+test("accepts complete evidence pinned to a nonzero server CPU", () => {
+  const value = report();
+  value.config.serverCpu = 8;
+  for (const round of value.rawRounds) {
+    round.affinity.cpuIndex = 8;
+  }
+  for (const entry of value.saturation) {
+    entry.affinity.cpuIndex = 8;
+  }
+  assert.doesNotThrow(() => buildBenchmarkSummary(value));
 });
 
 test("rejects noncanonical or stale complete reports", async (t) => {

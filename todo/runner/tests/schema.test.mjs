@@ -22,7 +22,8 @@ function validReport() {
       inputPolicy: "request-timestamped-input",
       mode: "dynamic",
       payloadPolicy: "natural",
-      renderer: "@microsoft/webui Protocol.render (request-materialized Node-API state)",
+      renderer:
+        "@microsoft/webui Protocol.render (Shadow DOM, request-materialized Node-API state)",
       serverId: "node-http",
       transport: "node:http",
       workerCount: 1,

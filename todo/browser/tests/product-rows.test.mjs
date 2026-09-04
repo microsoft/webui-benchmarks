@@ -10,6 +10,7 @@ import {
 import { serveAllBrowserApps } from "../serve-all.mjs";
 import {
   enforceProductionMode,
+  isRetryableBrowserInfrastructureFailure,
   normalizeOptions,
 } from "../runner.mjs";
 
@@ -139,4 +140,25 @@ test("browser SSR renderers always load framework production runtimes", () => {
   const environment = { NODE_ENV: "development" };
   enforceProductionMode(environment);
   assert.equal(environment.NODE_ENV, "production");
+});
+
+test("only browser-process infrastructure failures are retryable", () => {
+  assert.equal(
+    isRetryableBrowserInfrastructureFailure(
+      "page.evaluate: Target page, context or browser has been closed",
+    ),
+    true,
+  );
+  assert.equal(
+    isRetryableBrowserInfrastructureFailure(
+      "Chromium logs: X connection error received.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRetryableBrowserInfrastructureFailure(
+      "Expected 100 todos after hydration, received 300",
+    ),
+    false,
+  );
 });

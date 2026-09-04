@@ -9,17 +9,13 @@
 import { render } from "@lit-labs/ssr";
 import { RenderResultReadable } from "@lit-labs/ssr/lib/render-result-readable.js";
 import { Readable } from "node:stream";
-import { html } from "lit";
-import { matchRoute } from "./routes.mjs";
+import { workspace } from "./template.mjs";
 import "./components/workspace-app.mjs";
 import "./components/activity-page.mjs";
 import "./components/settings-page.mjs";
 
-function workspace(state, requestPath) {
-  return html`<workspace-app
-    route="${matchRoute(requestPath)}"
-    .state=${state}
-  ></workspace-app>`;
+function renderWorkspace(state, requestPath) {
+  return render(workspace(state, requestPath), { deferHydration: true });
 }
 
 /**
@@ -28,7 +24,7 @@ function workspace(state, requestPath) {
  */
 export function renderTodo(state, requestPath = "/dynamic") {
   let html = "";
-  for (const chunk of render(workspace(state, requestPath))) {
+  for (const chunk of renderWorkspace(state, requestPath)) {
     html += chunk;
   }
   return html;
@@ -41,6 +37,6 @@ export function renderTodo(state, requestPath = "/dynamic") {
  */
 export function renderTodoStream(state, requestPath = "/dynamic") {
   return Readable.toWeb(
-    new RenderResultReadable(render(workspace(state, requestPath))),
+    new RenderResultReadable(renderWorkspace(state, requestPath)),
   );
 }

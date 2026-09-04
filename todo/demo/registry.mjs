@@ -10,10 +10,10 @@ export const DEMO_REGISTRY_SCHEMA = "webui.ssr-todo-demo-registry/v1";
 
 /**
  * The demo hosts one server per todo application, not one server per official
- * benchmark row. The official matrix intentionally measures the same WebUI
- * Light DOM application on four runtime hosts (Actix, Bun, Deno, Node); the
- * demo keeps only its canonical Rust/Actix host so every hosted product is a
- * distinct application rather than a repeated one.
+ * benchmark row. The official matrix measures the Shadow DOM WebUI application
+ * on Actix, Bun, Deno, and Node; the demo keeps only its canonical Rust/Actix
+ * host so every hosted product is a distinct application rather than a
+ * repeated one.
  */
 const ALTERNATE_RUNTIME_HOSTS = Object.freeze(
   new Set(["webui-bun-serve", "webui-deno-serve", "webui-node-http"]),

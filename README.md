@@ -14,9 +14,9 @@ it.
 | 1 | `webui-rust-actix` | `webui-handler` `StreamingResponse` (Rust) | `actix-web` |
 | 2 | `webui-shadowdom-rust-actix` | `StreamingResponse` (Rust, Shadow DOM) | `actix-web` |
 | 3 | `webui-fast-rust-actix` | chunked `ResponseWriter` (Rust, FAST V3) | `actix-web` |
-| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Bun.serve` |
-| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` | `Deno.serve` |
-| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` | `node:http` |
+| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `Bun.serve` |
+| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `Deno.serve` |
+| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `node:http` |
 | 7 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
 | 8 | `nuxt` | Nuxt production SSR | nitro node-server |
 | 9 | `next` | Next.js production App Router SSR | `next start` |
