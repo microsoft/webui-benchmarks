@@ -48,18 +48,18 @@ function validateMode(report, errors) {
     }
     return;
   }
-  if (report.mode !== "official") {
-    errors.push("mode must be quick or official");
+  if (!["official", "refresh"].includes(report.mode)) {
+    errors.push("mode must be quick, refresh, or official");
   } else if (report.roundsPerApp !== OFFICIAL_MINIMUM_ROUNDS) {
     errors.push(
-      `official mode requires exactly ${OFFICIAL_MINIMUM_ROUNDS} rounds per app`,
+      `${report.mode} mode requires exactly ${OFFICIAL_MINIMUM_ROUNDS} rounds per app`,
     );
   } else if (
     report.runtimePolicy?.status !== "ok"
     || report.runtimeVerification?.mode !== "official"
     || report.runtimeVerification?.status !== "ok"
   ) {
-    errors.push("official mode requires verified pinned runtimes");
+    errors.push(`${report.mode} mode requires verified pinned runtimes`);
   }
 }
 
@@ -183,8 +183,8 @@ function validateRawRounds(report, productIds, errors) {
       errors.push(`${prefix} must be non-headline dynamic evidence`);
     }
     if (round.status !== "ok") {
-      if (report.mode === "official") {
-        errors.push(`${prefix} official result must be successful`);
+      if (report.mode !== "quick") {
+        errors.push(`${prefix} ${report.mode} result must be successful`);
       }
       if (typeof round.reason !== "string" || round.reason.length === 0) {
         errors.push(`${prefix} unavailable result must provide a reason`);

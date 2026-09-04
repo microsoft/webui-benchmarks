@@ -15,6 +15,7 @@ const generatedSourcePath = resolve(outputPath, "src");
 const projectionBundlePath = resolve(outputPath, "projection-client.js");
 const projectionManifestPath = resolve(outputPath, "webui-projection.json");
 const protocolPath = resolve(outputPath, "protocol.bin");
+const browserStylesPath = resolve(outputPath, "browser", "styles.css");
 const linkedStylesPath = resolve(outputPath, "browser", "light");
 const stylesPath = resolve(here, "..", "..", "shared", "styles.css");
 let buildPromise;
@@ -38,28 +39,6 @@ export function build() {
     mkdir(outputPath, { recursive: true }),
   ]).then(async ([css]) => {
     await cp(sourcePath, generatedSourcePath, { recursive: true });
-    await writeFile(
-      resolve(generatedSourcePath, "todo-app", "todo-app.css"),
-      css,
-      "utf8",
-    );
-    await Promise.all(
-      [
-        "app-shell",
-        "activity-page",
-        "settings-page",
-        "workspace-intelligence",
-      ].map(async (component) => {
-        await mkdir(resolve(generatedSourcePath, component), {
-          recursive: true,
-        });
-        await writeFile(
-          resolve(generatedSourcePath, component, `${component}.css`),
-          css,
-          "utf8",
-        );
-      }),
-    );
     await buildBundle({
       absWorkingDir: here,
       banner: {
@@ -89,8 +68,10 @@ export function build() {
       plugin: "webui",
       projectionManifests: [projectionManifestPath],
     });
+    await mkdir(dirname(browserStylesPath), { recursive: true });
     await Promise.all([
       writeFile(protocolPath, result.protocol),
+      writeFile(browserStylesPath, css, "utf8"),
       writeCssFiles(result.cssFiles),
     ]);
     return {

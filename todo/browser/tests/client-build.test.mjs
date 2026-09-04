@@ -153,14 +153,18 @@ test("writes WebUI assets for the direct Rust browser server", async () => {
       `${appId} must emit lazy browser chunks`,
     );
     if (appId === "webui") {
-      for (const dom of ["light", "shadow"]) {
-        assert.ok(
-          bundle.additionalAssets.has(
-            `/__browser/${dom}/app-shell.css`,
-          ),
-          `WebUI must serve ${dom} DOM component CSS`,
-        );
-      }
+      assert.ok(
+        bundle.additionalAssets.has("/__browser/styles.css"),
+        "WebUI Light DOM must serve one shared stylesheet",
+      );
+      assert.ok(
+        bundle.additionalAssets.has("/__browser/light/todo-item.css"),
+        "WebUI Light DOM must preserve lazy-rendering CSS",
+      );
+      assert.ok(
+        bundle.additionalAssets.has("/__browser/shadow/app-shell.css"),
+        "WebUI Shadow DOM must serve component CSS",
+      );
     }
   }
 });

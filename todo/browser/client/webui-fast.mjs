@@ -7,14 +7,6 @@ function animationFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
-function afterInitialPaint() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, 0);
-    });
-  });
-}
-
 const startedAt = performance.now();
 const componentHydration = (async () => {
   await import("../../apps/webui-fast/browser-entry.js");
@@ -28,7 +20,6 @@ const componentHydration = (async () => {
 })();
 benchmarkGlobal.__TODO_BENCH_FORCE_HYDRATION__ = () => componentHydration;
 await componentHydration;
-await afterInitialPaint();
 await animationFrame();
 await animationFrame();
 const readyAtMs = performance.now();

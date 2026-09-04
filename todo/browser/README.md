@@ -20,6 +20,9 @@ Run from the repository root:
 # Official: build production outputs, then run exactly ten randomized rounds.
 node todo\browser\cli.mjs --official --build
 
+# Selective refresh: retain official methodology for only the named rows.
+node todo\browser\cli.mjs --refresh --apps webui-bun-serve,webui-deno-serve,webui-node-http --headed
+
 # One smoke round, optionally narrowed to apps.
 node todo\browser\cli.mjs --quick --apps vue,react,next
 
@@ -32,9 +35,10 @@ node --test $tests.FullName
 ```
 
 Reports default to
-`results/ssr-todo-browser-outcomes-{official|quick}.json`.
-`--output`, `--seed`, `--rounds` (official: 7), `--viewport`, and
-`--headed` are available for diagnostics.
+`results/ssr-todo-browser-outcomes-{official|refresh|quick}.json`.
+`--output`, `--seed`, `--rounds` (official/refresh: 10), `--viewport`, and
+`--headed` are available for diagnostics. Refresh reports remain filtered
+evidence and cannot replace a complete official matrix by themselves.
 
 ## Method
 
@@ -46,9 +50,9 @@ Reports default to
   starts cold, while ordinary same-navigation reuse prevents hundreds of
   identical Shadow DOM stylesheet links from becoming artificial downloads.
 - Every browser-facing URL is HTTPS with ALPN restricted to HTTP/2, and every
-  raw navigation must report `nextHopProtocol: "h2"`. Actix uses rustls
-  directly; controlled documents and built framework handlers are hosted
-  directly by `node:http2` compatibility servers.
+  raw navigation must report `nextHopProtocol: "h2"`. Actix uses rustls with
+  explicit `TCP_NODELAY`; controlled documents and built framework handlers are
+  hosted directly by `node:http2`, which disables Nagle on each session socket.
 - Apps are deterministically shuffled per round. Only one production server is
   live at a time. Existing build plans, case metadata, production launchers,
   worker policy, and process-tree cleanup are reused.
@@ -59,10 +63,16 @@ Reports default to
 - WebUI / Light DOM / Rust / Actix is served directly by Actix with no Node
   document proxy.
   The Rust server injects the browser bootstrap through `RenderOptions` and
-  serves both WebUI browser assets itself.
+  serves both WebUI browser assets itself. Light DOM loads the shared stylesheet
+  once at the document level and retains a separate generated stylesheet only
+  for lazy todo-row rendering.
 - WebUI / Shadow DOM / Rust / Actix uses that same direct server, state, and
   authored component graph. Only the compiled DOM/CSS strategy changes; browser
   evidence requires more than 800 open shadow roots.
+- WebUI / Light DOM / Bun, Deno, and Node use the same Light DOM protocol and
+  browser assets as the Rust row. Only the JavaScript runtime and its native
+  HTTP server change; the Node HTTP/2 browser adapter does not substitute a
+  Shadow DOM document.
 - Controlled renderers receive their initial state once from the browser
   document adapter. WebUI already embeds its selected hydration state in
   `#webui-data`, so the adapter records `initialStateSource: "ssr-document"`

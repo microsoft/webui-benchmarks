@@ -2,7 +2,7 @@
   "name": "@microsoft/webui-benchmarks",
   "version": "0.0.0",
   "private": true,
-  "description": "Canonical 15-row SSR and browser benchmark suite for WebUI and production framework peers.",
+  "description": "Canonical 16-row SSR and browser benchmark suite for WebUI and production framework peers.",
   "license": "MIT",
   "type": "module",
   "repository": {

@@ -1785,7 +1785,8 @@ pub async fn run(config: ServerConfig) -> Result<()> {
             .route("/favicon.ico", web::get().to(favicon))
             .default_service(web::to(not_found))
     })
-    .workers(1);
+    .workers(1)
+    .tcp_nodelay(true);
     let server = if config.tls {
         server
             .bind_rustls_0_23((host.as_str(), config.port), local_http2_tls_config()?)

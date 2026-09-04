@@ -20,6 +20,15 @@ const linkedStylesPath = resolve(
   "shadow",
 );
 const stylesPath = resolve(here, "styles");
+const sharedStylesPath = resolve(
+  lightAppPath,
+  "..",
+  "..",
+  "shared",
+  "styles.css",
+);
+const lightDomStylesheet =
+  '<link rel="stylesheet" href="/__browser/styles.css" />';
 
 const COMPONENTS = Object.freeze([
   "todo-app",
@@ -37,6 +46,16 @@ const COMPONENTS = Object.freeze([
 ]);
 
 let buildPromise;
+
+export function removeLightDomStylesheet(indexHtml) {
+  const parts = indexHtml.split(lightDomStylesheet);
+  if (parts.length !== 2) {
+    throw new Error(
+      "Expected exactly one Light DOM document stylesheet in index.html",
+    );
+  }
+  return parts.join("");
+}
 
 async function writeCssFiles(cssFiles) {
   await rm(linkedStylesPath, { force: true, recursive: true });
@@ -59,20 +78,43 @@ export function build() {
       generatedSourcePath,
       { recursive: true },
     );
+    const indexPath = resolve(generatedSourcePath, "index.html");
+    const indexHtml = await readFile(indexPath, "utf8");
+    await writeFile(
+      indexPath,
+      removeLightDomStylesheet(indexHtml),
+      "utf8",
+    );
+    const sharedStyles = await readFile(sharedStylesPath, "utf8");
     await Promise.all(
-      COMPONENTS.map(async (component) => {
-        const target = resolve(
-          generatedSourcePath,
-          component,
-          `${component}.css`,
-        );
-        await rm(target, { force: true });
-        const css = await readFile(
-          resolve(stylesPath, `${component}.css`),
-          "utf8",
-        );
-        await writeFile(target, css, "utf8");
-      }),
+      [
+        ...COMPONENTS.map(async (component) => {
+          const target = resolve(
+            generatedSourcePath,
+            component,
+            `${component}.css`,
+          );
+          await rm(target, { force: true });
+          const css = await readFile(
+            resolve(stylesPath, `${component}.css`),
+            "utf8",
+          );
+          await writeFile(target, css, "utf8");
+        }),
+        ...[
+          "activity-page",
+          "app-shell",
+          "settings-page",
+          "workspace-intelligence",
+        ].map(async (component) => {
+          const target = resolve(
+            generatedSourcePath,
+            component,
+            `${component}.css`,
+          );
+          await writeFile(target, sharedStyles, "utf8");
+        }),
+      ],
     );
     const result = buildProtocol({
       appDir: generatedSourcePath,

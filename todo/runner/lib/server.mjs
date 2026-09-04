@@ -143,6 +143,60 @@ async function announcedServer(command, args, options) {
   }
 }
 
+export function requestHttp2Ok(
+  url,
+  { headers = {}, timeoutMilliseconds = 2_000 } = {},
+) {
+  return new Promise((resolveRequest, reject) => {
+    const target = new URL(url);
+    const session = connectHttp2(target.origin, {
+      rejectUnauthorized: false,
+    });
+    const request = session.request({
+      ...headers,
+      ":path": `${target.pathname}${target.search}`,
+    });
+    let settled = false;
+    let status;
+    const finish = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      if (error === undefined) {
+        session.close();
+        resolveRequest();
+      } else {
+        request.close();
+        session.destroy();
+        reject(error);
+      }
+    };
+    const timeout = setTimeout(() => {
+      finish(
+        new Error(
+          `HTTP/2 request timed out after ${timeoutMilliseconds}ms`,
+        ),
+      );
+    }, timeoutMilliseconds);
+    request.on("response", (headers) => {
+      status = Number(headers[":status"]);
+    });
+    request.on("data", () => {});
+    request.on("end", () => {
+      if (status >= 200 && status < 300) {
+        finish();
+      } else {
+        finish(new Error(`Readiness returned HTTP ${status}`));
+      }
+    });
+    request.once("error", finish);
+    session.once("error", finish);
+    request.end();
+  });
+}
+
 async function waitForHttp(url, launched, timeoutMilliseconds) {
   const deadline = performance.now() + timeoutMilliseconds;
   let lastError;
@@ -158,29 +212,15 @@ async function waitForHttp(url, launched, timeoutMilliseconds) {
     }
     try {
       if (url.startsWith("https://")) {
-        await new Promise((resolveRequest, reject) => {
-          const target = new URL(url);
-          const session = connectHttp2(target.origin, {
-            rejectUnauthorized: false,
-          });
-          const request = session.request({ ":path": target.pathname });
-          let status;
-          request.on("response", (headers) => {
-            status = Number(headers[":status"]);
-          });
-          request.on("data", () => {});
-          request.on("end", () => {
-            session.close();
-            if (status >= 200 && status < 300) resolveRequest();
-            else reject(new Error(`Readiness returned HTTP ${status}`));
-          });
-          request.once("error", (error) => {
-            session.close();
-            reject(error);
-          });
-          session.once("error", reject);
-          request.end();
-        });
+        await requestHttp2Ok(
+          url,
+          {
+            timeoutMilliseconds: Math.max(
+              1,
+              Math.min(2_000, Math.ceil(deadline - performance.now())),
+            ),
+          },
+        );
         return;
       }
       const response = await fetch(url, {

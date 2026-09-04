@@ -14,9 +14,9 @@ it.
 | 1 | `webui-rust-actix` | `webui-handler` `StreamingResponse` (Rust) | `actix-web` |
 | 2 | `webui-shadowdom-rust-actix` | `StreamingResponse` (Rust, Shadow DOM) | `actix-web` |
 | 3 | `webui-fast-rust-actix` | chunked `ResponseWriter` (Rust, FAST V3) | `actix-web` |
-| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `Bun.serve` |
-| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `Deno.serve` |
-| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` (Shadow DOM) | `node:http` |
+| 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `Bun.serve` |
+| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `Deno.serve` |
+| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `node:http` |
 | 7 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
 | 8 | `nuxt` | Nuxt production SSR | nitro node-server |
 | 9 | `next` | Next.js production App Router SSR | `next start` |
@@ -28,12 +28,12 @@ it.
 | 15 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
 | 16 | `lit` | `@lit-labs/ssr` `RenderResultReadable` (declarative shadow DOM) | `node:http` |
 
-The WebUI rows isolate Light DOM, Shadow DOM, FAST V3 hydration, and four
-runtime hosts. WebUI Shadow DOM, FAST V3, and Lit are the three shadow-DOM
-products, so the suite separates the shadow-root cost from the framework
-rendering it. The production framework rows use their real production build
-and server adapters. Product renderers without a canonical server share the
-same minimal `node:http` transport.
+The WebUI rows isolate Light DOM across four runtime hosts, Shadow DOM on the
+canonical Rust host, and FAST V3 hydration. WebUI Shadow DOM, FAST V3, and Lit
+are the three shadow-DOM products, so the suite separates the shadow-root cost
+from the framework rendering it. The production framework rows use their real
+production build and server adapters. Product renderers without a canonical
+server share the same minimal `node:http` transport.
 
 Dynamic responses use each renderer's native streaming surface. WebUI Light
 and Shadow use semantic streaming boundaries; FAST uses a chunked writer;
