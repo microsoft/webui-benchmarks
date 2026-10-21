@@ -105,6 +105,6 @@
     "esbuild": "0.28.2",
     "esbuild-plugin-solid": "0.6.0",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.2.4"
   }
 }
