@@ -36,9 +36,19 @@ function parseOptions(argv) {
 async function loadHandler(appId) {
   const appRoot = resolve(TODO_ROOT, "apps", appId);
   if (appId === "astro") {
-    return (await import(
-      pathToFileURL(resolve(appRoot, "dist", "server", "h2-entry.mjs")).href
-    )).handler;
+    const autostart = process.env.ASTRO_NODE_AUTOSTART;
+    process.env.ASTRO_NODE_AUTOSTART = "disabled";
+    try {
+      return (await import(
+        pathToFileURL(resolve(appRoot, "dist", "server", "entry.mjs")).href
+      )).handler;
+    } finally {
+      if (autostart === undefined) {
+        delete process.env.ASTRO_NODE_AUTOSTART;
+      } else {
+        process.env.ASTRO_NODE_AUTOSTART = autostart;
+      }
+    }
   }
   if (appId === "sveltekit") {
     return (await import(

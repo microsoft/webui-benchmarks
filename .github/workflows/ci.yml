@@ -22,15 +22,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.19.0
+          node-version: 26.12.0
 
-      - name: Enable pinned pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.5.3 --activate
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@12.14.0
 
       - name: Install pinned Rust
-        run: rustup toolchain install 1.98 --profile minimal
+        run: rustup toolchain install 1.99.1 --profile minimal
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

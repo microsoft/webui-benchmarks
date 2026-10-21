@@ -8,7 +8,7 @@
     "start": "node .output/server/index.mjs"
   },
   "engines": {
-    "node": "24.19.0"
+    "node": "26.12.0"
   },
   "webuiBenchmark": {
     "schema": "webui.ssr-todo-app/v1",

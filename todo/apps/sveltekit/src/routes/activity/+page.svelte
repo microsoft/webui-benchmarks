@@ -2,7 +2,7 @@
 <!-- Licensed under the MIT license. -->
 
 <script>
-  import ActivityPage from "$lib/components/activity-page.svelte";
+  import ActivityPage from "#lib/components/activity-page.svelte";
   export let data;
 </script>
 

@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "astro build && node write-h2-entry.mjs",
+    "build": "astro build",
     "start": "node dist/server/entry.mjs"
   },
   "engines": {
-    "node": "24.19.0"
+    "node": "26.12.0"
   },
   "webuiBenchmark": {
     "schema": "webui.ssr-todo-app/v1",

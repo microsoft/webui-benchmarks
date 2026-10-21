@@ -32,6 +32,7 @@ import {
   TODO_ROOT,
 } from "./paths.mjs";
 import { resolveNativeAddon } from "../../servers/lib/webui-engine.mjs";
+import { loadRuntimePins } from "../../servers/verify-runtimes.mjs";
 import {
   collectWebuiDependency,
   configuredWebuiCheckout,
@@ -118,8 +119,9 @@ export function loadFullStackMetadata(appId) {
   if (metadata?.schema !== APP_METADATA_SCHEMA || metadata.id !== appId) {
     throw new Error(`${appId} has invalid webuiBenchmark metadata`);
   }
-  if (manifest.engines?.node !== "24.19.0") {
-    throw new Error(`${appId} must pin Node 24.19.0`);
+  const nodeVersion = loadRuntimePins().runtimes.node.version;
+  if (manifest.engines?.node !== nodeVersion) {
+    throw new Error(`${appId} must pin Node ${nodeVersion}`);
   }
   const rootManifest = readJson(resolve(BENCHMARK_ROOT, "package.json"));
   const dependencies = {

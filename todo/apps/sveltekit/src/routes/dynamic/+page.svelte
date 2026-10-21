@@ -2,7 +2,7 @@
 <!-- Licensed under the MIT license. -->
 
 <script>
-  import TodoApp from "$lib/components/todo-app.svelte";
+  import TodoApp from "#lib/components/todo-app.svelte";
 
   export let data;
 </script>

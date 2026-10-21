@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { nextDynamicTodoState } from "$lib/server-state.mjs";
+import { nextDynamicTodoState } from "#lib/server-state.mjs";
 
 export function load({ setHeaders }) {
   setHeaders({

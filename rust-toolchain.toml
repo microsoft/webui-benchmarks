@@ -2,5 +2,5 @@
 # Licensed under the MIT license.
 
 [toolchain]
-channel = "1.98"
+channel = "1.99.1"
 profile = "minimal"

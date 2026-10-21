@@ -14,17 +14,17 @@ license = "MIT"
 repository = "https://github.com/microsoft/webui-benchmarks"
 
 [workspace.dependencies]
-actix-web = "=4.14.0"
-anyhow = "=1.0.103"
+actix-web = "=4.17.0"
+anyhow = "=1.0.104"
 bytes = "=1.12.1"
 futures-core = "=0.3.34"
 mimalloc = "=0.1.52"
-rcgen = "=0.14.8"
-rustls = "=0.23.41"
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = { version = "=1.0.151", features = ["raw_value"] }
-time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
-tokio = { version = "=1.53.1", features = ["rt", "sync", "time"] }
+rcgen = "=0.14.10"
+rustls = "=0.23.46"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.154", features = ["raw_value"] }
+time = { version = "=0.3.55", features = ["local-offset", "formatting", "macros"] }
+tokio = { version = "=1.54.0", features = ["rt", "sync", "time"] }
 microsoft-webui-handler = "=3.0.4"
 
 [workspace.lints.clippy]

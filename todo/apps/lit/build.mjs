@@ -35,7 +35,7 @@ function buildServer() {
     minify: true,
     outfile: serverArtifactPath,
     platform: "node",
-    target: "node24",
+    target: "node26",
   });
 }
 

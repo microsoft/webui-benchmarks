@@ -41,7 +41,7 @@ export function build() {
       plugins: [
         solidPlugin({ solid: { generate: "ssr", hydratable: true } }),
       ],
-      target: "node24",
+      target: "node26",
     });
     return { artifactPath, css };
   });
