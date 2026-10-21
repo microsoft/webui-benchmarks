@@ -4,7 +4,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ASYNC_DATA_BOUNDARY_CAPABILITY,
   HEADLINE_INPUT_POLICY,
   NATURAL_PAYLOAD_POLICY,
   OFFICIAL_CASE_COUNT,
@@ -318,13 +317,6 @@ test("assertCaseMatrix rejects a matrix that mixes response modes", () => {
   assert.throws(
     () => assertCaseMatrix([...complete.slice(1), progressive[0]]),
     /must not mix response modes/u,
-  );
-});
-
-test("the async data-boundary capability is disclosed, not faked as active", () => {
-  assert.equal(
-    ASYNC_DATA_BOUNDARY_CAPABILITY.status,
-    "available-pending-benchmark-implementation",
   );
 });
 

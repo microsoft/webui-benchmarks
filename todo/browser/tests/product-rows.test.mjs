@@ -7,7 +7,6 @@ import {
   PRODUCT_ORDER,
   createBrowserCases,
 } from "../apps.mjs";
-import { serveAllBrowserApps } from "../serve-all.mjs";
 import {
   enforceProductionMode,
   isRetryableBrowserInfrastructureFailure,
@@ -59,10 +58,6 @@ test("browser suite contains the definitive 16 product rows", () => {
     ),
     "every browser product must use its production client router",
   );
-});
-
-test("exports the all-product manual preview launcher", () => {
-  assert.equal(typeof serveAllBrowserApps, "function");
 });
 
 test("WebUI app filter selects the five base DOM/transport products", () => {

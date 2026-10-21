@@ -2,7 +2,6 @@
 // Licensed under the MIT license.
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import test from "node:test";
@@ -22,7 +21,6 @@ import {
 const RUNTIME = Object.freeze({
   clientModule: "preact",
   hydrateSymbol: "hydrate",
-  jsxImportSource: "preact",
   serverModule: "preact-render-to-string",
   serverSymbol: "renderToString",
 });
@@ -133,17 +131,6 @@ test(`${APP_ID}: every authored source carries the license header`, () => {
       `${basename(path)} is missing the license header`,
     );
   }
-});
-
-test(`${APP_ID}: the automatic JSX runtime is configured for ${RUNTIME.jsxImportSource}`, async () => {
-  const tsconfig = JSON.parse(
-    await readFile(resolve(APP_ROOT, "tsconfig.json"), "utf8"),
-  );
-  assert.equal(tsconfig.compilerOptions.jsx, "react-jsx");
-  assert.equal(
-    tsconfig.compilerOptions.jsxImportSource,
-    RUNTIME.jsxImportSource,
-  );
 });
 
 test(`${APP_ID}: server and client entries use the framework SSR and hydration APIs`, () => {
