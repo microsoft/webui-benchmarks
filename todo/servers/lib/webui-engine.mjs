@@ -31,15 +31,11 @@ function runtimeAvailable(runtimeId) {
   if (runtimeId === "bun") {
     return typeof globalThis.Bun !== "undefined";
   }
-  if (runtimeId === "deno") {
-    return typeof globalThis.Deno !== "undefined";
-  }
   return (
     runtimeId === "node"
     && typeof process !== "undefined"
     && process.release?.name === "node"
     && typeof globalThis.Bun === "undefined"
-    && typeof globalThis.Deno === "undefined"
   );
 }
 

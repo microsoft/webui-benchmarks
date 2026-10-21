@@ -6,7 +6,7 @@ import { webuiReleaseVersion } from "../../shared/webui-dependency.mjs";
 export const OFFICIAL_MATRIX_ID = "official-ssr-matrix";
 export const HEADLINE_INPUT_POLICY = "request-timestamped-input";
 export const NATURAL_PAYLOAD_POLICY = "natural";
-export const OFFICIAL_CASE_COUNT = 16;
+export const OFFICIAL_CASE_COUNT = 15;
 
 export const PRODUCT_KINDS = Object.freeze({
   framework: "framework-server",
@@ -112,10 +112,6 @@ const COMPLETE_RENDERER_OVERRIDES = Object.freeze({
   solid: { renderer: "solid-js/web renderToString" },
   vue: { renderer: "@vue/server-renderer renderToString" },
   "webui-bun-serve": {
-    renderer:
-      "@microsoft/webui Protocol.render (Light DOM, request-materialized Node-API state)",
-  },
-  "webui-deno-serve": {
     renderer:
       "@microsoft/webui Protocol.render (Light DOM, request-materialized Node-API state)",
   },
@@ -278,15 +274,6 @@ function officialCases() {
     }),
     webuiRuntimeCase({
       buildIds: ["webui", "native-addon"],
-      entry: "deno.mjs",
-      id: "webui-deno-serve",
-      label: "WebUI / Light DOM / Deno.serve",
-      runtimeId: "deno",
-      serverId: "deno-serve",
-      transport: "Deno.serve",
-    }),
-    webuiRuntimeCase({
-      buildIds: ["webui", "native-addon"],
       entry: "node-http.mjs",
       id: "webui-node-http",
       label: "WebUI / Light DOM / Node node:http",
@@ -363,7 +350,7 @@ function officialCases() {
 }
 
 /**
- * Build the official 16-row matrix for one response-mode suite. Product
+ * Build the official 15-row matrix for one response-mode suite. Product
  * identity (case id, appId, productKind, transport, runtimeId, serverId)
  * never changes between suites: only the response contract (renderer label,
  * streaming label, and the launcher's `responseMode` hint consumed by

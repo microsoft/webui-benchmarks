@@ -53,8 +53,6 @@ test("fixture hash ignores generated framework and browser outputs", () => {
     for (const directory of [
       ".git",
       ".browser-output",
-      ".deno",
-      ".deno-cache",
       ".next",
       ".nuxt",
       ".output",

@@ -65,7 +65,6 @@ const IGNORED_DIRECTORIES = new Set([
   ".astro",
   ".browser-output",
   ".cache",
-  ".deno",
   ".next",
   ".nuxt",
   ".output",
@@ -95,7 +94,7 @@ function readJson(path) {
 }
 
 function isIgnoredDirectory(name) {
-  if (IGNORED_DIRECTORIES.has(name) || name.startsWith(".deno")) {
+  if (IGNORED_DIRECTORIES.has(name)) {
     return true;
   }
   const normalized = name.toLowerCase();

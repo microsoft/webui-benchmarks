@@ -4,7 +4,7 @@
 # WebUI benchmarks
 
 This repository is the canonical home of the WebUI SSR framework benchmark
-suite. It compares sixteen equivalent routed workspace applications in one
+suite. It compares fifteen equivalent routed workspace applications in one
 official dynamic SSR matrix and keeps the browser hydration, interaction, raw
 capture, profiling, and correctness evidence beside the runner that produced
 it.
@@ -15,20 +15,19 @@ it.
 | 2 | `webui-shadowdom-rust-actix` | `StreamingResponse` (Rust, Shadow DOM) | `actix-web` |
 | 3 | `webui-fast-rust-actix` | chunked `ResponseWriter` (Rust, FAST V3) | `actix-web` |
 | 4 | `webui-bun-serve` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `Bun.serve` |
-| 5 | `webui-deno-serve` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `Deno.serve` |
-| 6 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `node:http` |
-| 7 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
-| 8 | `nuxt` | Nuxt production SSR | nitro node-server |
-| 9 | `next` | Next.js production App Router SSR | `next start` |
-| 10 | `astro` | Astro production SSR + hydrated Preact island | `@astrojs/node` |
-| 11 | `vue` | `@vue/server-renderer` `renderToWebStream` | `node:http` |
-| 12 | `preact` | `preact-render-to-string` `renderToReadableStream` | `node:http` |
-| 13 | `react` | `react-dom/server` `renderToReadableStream` | `node:http` |
-| 14 | `react-tanstack` | React stream + TanStack Router `renderRouterToStream` | `node:http` |
-| 15 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
-| 16 | `lit` | `@lit-labs/ssr` `RenderResultReadable` (declarative shadow DOM) | `node:http` |
+| 5 | `webui-node-http` | `@microsoft/webui` `Protocol.streamResponse` (Light DOM) | `node:http` |
+| 6 | `sveltekit` | SvelteKit production SSR | `@sveltejs/adapter-node` |
+| 7 | `nuxt` | Nuxt production SSR | nitro node-server |
+| 8 | `next` | Next.js production App Router SSR | `next start` |
+| 9 | `astro` | Astro production SSR + hydrated Preact island | `@astrojs/node` |
+| 10 | `vue` | `@vue/server-renderer` `renderToWebStream` | `node:http` |
+| 11 | `preact` | `preact-render-to-string` `renderToReadableStream` | `node:http` |
+| 12 | `react` | `react-dom/server` `renderToReadableStream` | `node:http` |
+| 13 | `react-tanstack` | React stream + TanStack Router `renderRouterToStream` | `node:http` |
+| 14 | `solid` | `solid-js/web` `renderToStream` | `node:http` |
+| 15 | `lit` | `@lit-labs/ssr` `RenderResultReadable` (declarative shadow DOM) | `node:http` |
 
-The WebUI rows isolate Light DOM across four runtime hosts, Shadow DOM on the
+The WebUI rows isolate Light DOM across three runtime hosts, Shadow DOM on the
 canonical Rust host, and FAST V3 hydration. WebUI Shadow DOM, FAST V3, and Lit
 are the three shadow-DOM products, so the suite separates the shadow-root cost
 from the framework rendering it. The production framework rows use their real
@@ -67,7 +66,7 @@ to a toy comparison.
 
 ## Reproducible setup
 
-The official runtime pins are Node `24.19.0`, Bun `1.4.0`, Deno `2.9.6`,
+The official runtime pins are Node `24.19.0`, Bun `1.4.0`,
 Rust `1.98`, and pnpm `11.5.3`. Framework and adapter versions are exact in
 their package manifests.
 
@@ -241,7 +240,7 @@ process/context/page, and the shared interaction sequence.
 
 ## Response-mode suites
 
-The official 16-row product matrix is measured in two response-mode suites.
+The official 15-row product matrix is measured in two response-mode suites.
 Product identity (case id, app id, transport, runtime) never changes between
 them: only the response contract does. Every case exposes a `responseMode`
 field (`complete` or `progressive`), and reports never mix the two: a report's
@@ -259,7 +258,7 @@ requests/second, p95 latency, render CPU, response bytes, and memory.
   Actix worker and answers with one `Content-Length` response. It does not
   allocate the progressive suite's render thread or projected worker-state
   clone (`todo/servers/rust-actix/src/lib.rs`).
-- **WebUI JS runtimes (Bun/Deno/Node) and the controlled renderer tier**
+- **WebUI JS runtimes (Bun/Node) and the controlled renderer tier**
   (React, Vue, Preact, Solid, React + TanStack Router) call each app's own
   `render()` adapter -- the same complete-response API (`renderToString`,
   `renderRouterToString`, ...) they already shipped alongside `renderStream()`
@@ -344,7 +343,7 @@ pnpm run export:webui -- --input results/benchmark-summary.json
 The extractor writes `webui.json` beside the input by default. Pass
 `--output <path>` to choose another location. By default it keeps only the
 canonical `webui-rust-actix` row. Pass `--all` to retain the Shadow DOM, FAST,
-Bun, Deno, and Node WebUI variants too:
+Bun, and Node WebUI variants too:
 
 ```bash
 pnpm run export:webui -- \
@@ -398,7 +397,7 @@ decomposition.
     ├── demo/                   # Single-container demo site for all 24 products
     ├── profile/                # Rust profiling harness and methodology
     ├── runner/                 # Build graph, RPS runner, schema, reporting
-    ├── servers/                # Node, Bun, Deno, and Rust/Actix servers
+    ├── servers/                # Node, Bun, and Rust/Actix servers
     └── shared/                 # Frozen state and correctness contract
 ```
 

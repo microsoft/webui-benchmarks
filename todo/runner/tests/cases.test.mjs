@@ -21,7 +21,6 @@ const EXPECTED_ROWS = Object.freeze([
   "webui-shadowdom-rust-actix",
   "webui-fast-rust-actix",
   "webui-bun-serve",
-  "webui-deno-serve",
   "webui-node-http",
   "sveltekit",
   "nuxt",
@@ -35,10 +34,10 @@ const EXPECTED_ROWS = Object.freeze([
   "solid",
 ]);
 
-test("official matrix publishes exactly the 16 approved rows in order", () => {
+test("official matrix publishes exactly the 15 approved rows in order", () => {
   const matrix = createCaseMatrix();
   assert.equal(matrix.length, OFFICIAL_CASE_COUNT);
-  assert.equal(matrix.length, 16);
+  assert.equal(matrix.length, 15);
   assert.deepEqual(
     matrix.map((benchmarkCase) => benchmarkCase.id),
     EXPECTED_ROWS,
@@ -180,7 +179,6 @@ test("WebUI runtime rows use Light DOM while FAST V3 remains distinct", () => {
       "actix-web",
       "actix-web",
       "Bun.serve",
-      "Deno.serve",
       "node:http",
     ],
   );
@@ -192,18 +190,16 @@ test("WebUI runtime rows use Light DOM while FAST V3 remains distinct", () => {
       "native-chunks",
       "progressive-boundaries",
       "progressive-boundaries",
-      "progressive-boundaries",
     ],
   );
   assert.deepEqual(
     webui.map((benchmarkCase) => benchmarkCase.runtimeId),
-    ["rust", "rust", "rust", "bun", "deno", "node"],
+    ["rust", "rust", "rust", "bun", "node"],
   );
   assert.deepEqual(
     webui.slice(3).map((benchmarkCase) => benchmarkCase.label),
     [
       "WebUI / Light DOM / Bun.serve",
-      "WebUI / Light DOM / Deno.serve",
       "WebUI / Light DOM / Node node:http",
     ],
   );
@@ -223,7 +219,7 @@ test("WebUI runtime rows use Light DOM while FAST V3 remains distinct", () => {
 
 test("assertCaseMatrix rejects any deviation from the official contract", () => {
   const matrix = createCaseMatrix();
-  assert.throws(() => assertCaseMatrix(matrix.slice(1)), /exactly 16 rows/u);
+  assert.throws(() => assertCaseMatrix(matrix.slice(1)), /exactly 15 rows/u);
   assert.throws(
     () =>
       assertCaseMatrix([
@@ -326,9 +322,9 @@ test("case filtering accepts ids, kinds, app ids, and wildcards", () => {
   assert.equal(filterCases(matrix, ["react-tanstack"]).length, 1);
   assert.equal(filterCases(matrix, ["renderer"]).length, 6);
   assert.equal(filterCases(matrix, ["framework"]).length, 4);
-  assert.equal(filterCases(matrix, ["runtime"]).length, 6);
-  assert.equal(filterCases(matrix, ["webui-*"]).length, 6);
-  assert.equal(filterCases(matrix, []).length, 16);
+  assert.equal(filterCases(matrix, ["runtime"]).length, 5);
+  assert.equal(filterCases(matrix, ["webui-*"]).length, 5);
+  assert.equal(filterCases(matrix, []).length, 15);
   assert.throws(() => filterCases(matrix, ["does-not-exist"]), /No benchmark/u);
 });
 

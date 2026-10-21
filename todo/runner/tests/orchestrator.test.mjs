@@ -61,12 +61,12 @@ test("unsupported native runtime reports its addon failure", () => {
       {
         addonCapability: {
           code: "native-addon-load-failed",
-          message: "Deno could not load the native addon.",
+          message: "Bun could not load the native addon.",
         },
       },
       "generic",
     ),
-    "Deno could not load the native addon.",
+    "Bun could not load the native addon.",
   );
 });
 

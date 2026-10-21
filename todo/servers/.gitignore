@@ -3,6 +3,5 @@
 
 generated/
 node_modules/
-.deno/
 rust-actix/Cargo.lock
 rust-actix/target/

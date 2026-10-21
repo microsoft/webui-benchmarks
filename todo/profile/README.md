@@ -150,10 +150,10 @@ WebUI Rust delivered 148.2% higher median throughput. Shadow DOM reached
 1,067.7 req/s after Link CSS removed repeated inline style text. See the generated
 performance page for all thirteen rows, MAD, p95 latency, and byte ranges.
 
-### Why Actix, Bun, Deno, and Node converge
+### Why Actix, Bun, and Node converge
 
-All WebUI runtime rows execute the same release-built Rust renderer. Node, Bun,
-and Deno retain the 32 immutable structural variants, then materialize the
+All WebUI runtime rows execute the same release-built Rust renderer. Node and
+Bun retain the 32 immutable structural variants, then materialize the
 current request timestamp and call `render` per request. JSON serialization,
 native parsing, timestamp state construction, and SSR are all included in the
 headline request path rather than hidden in startup preparation. Rust/Actix
@@ -171,7 +171,6 @@ Final isolated and official measurements attribute the request cost as follows:
 | Previous deep-clone request-state phase | 414 us |
 | Reused request-state rewrite phase | 81 us |
 | Official Rust/Actix service time (`1 / 1,408.9`) | 709.77 us |
-| Official Deno service time (`1 / 769.2`) | 1,299.79 us |
 | Official Node service time (`1 / 744.5`) | 1,343.18 us |
 | Official Bun service time (`1 / 703.5`) | 1,421.46 us |
 

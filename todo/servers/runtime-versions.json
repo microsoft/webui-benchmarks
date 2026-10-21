@@ -10,11 +10,6 @@
       "args": ["--version"],
       "command": "bun",
       "version": "1.4.0"
-    },
-    "deno": {
-      "args": ["--version"],
-      "command": "deno",
-      "version": "2.9.6"
     }
   }
 }

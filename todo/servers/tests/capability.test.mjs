@@ -16,26 +16,26 @@ import {
 import { serializeStatePool } from "../write-state-pool.mjs";
 import { spawnServer } from "./child-server.mjs";
 
-test("absent Deno is skipped locally and required officially", () => {
+test("absent Bun is skipped locally and required officially", () => {
   const pins = loadRuntimePins();
   const run = (definition, runtimeId) =>
-    runtimeId === "deno"
+    runtimeId === "bun"
       ? { installed: false, version: null }
       : { installed: true, version: definition.version };
   const local = verifyRuntimeMatrix({ pins, run });
-  const localDeno = local.runtimes.find(({ runtimeId }) => runtimeId === "deno");
+  const localBun = local.runtimes.find(({ runtimeId }) => runtimeId === "bun");
   assert.equal(local.status, "ok");
-  assert.equal(localDeno.status, "skipped");
-  assert.equal(localDeno.code, "runtime-not-installed");
-  assert.equal(localDeno.required, false);
+  assert.equal(localBun.status, "skipped");
+  assert.equal(localBun.code, "runtime-not-installed");
+  assert.equal(localBun.required, false);
 
   const official = verifyRuntimeMatrix({ official: true, pins, run });
-  const officialDeno = official.runtimes.find(
-    ({ runtimeId }) => runtimeId === "deno",
+  const officialBun = official.runtimes.find(
+    ({ runtimeId }) => runtimeId === "bun",
   );
   assert.equal(official.status, "unsupported");
-  assert.equal(officialDeno.status, "unsupported");
-  assert.equal(officialDeno.required, true);
+  assert.equal(officialBun.status, "unsupported");
+  assert.equal(officialBun.required, true);
 });
 
 test("runtime mismatches are informational locally and fatal officially", () => {
@@ -53,13 +53,13 @@ test("runtime mismatches are informational locally and fatal officially", () => 
 
 test("local capability probe uses pinned package runtimes", () => {
   const local = verifyRuntimeMatrix();
+  assert.deepEqual(
+    local.runtimes.map(({ runtimeId }) => runtimeId),
+    ["node", "bun"],
+  );
   const bun = local.runtimes.find(({ runtimeId }) => runtimeId === "bun");
-  const deno = local.runtimes.find(({ runtimeId }) => runtimeId === "deno");
-  assert.ok(deno);
   assert.equal(bun?.versionMatches, true);
-  assert.equal(deno.versionMatches, true);
   assert.equal(bun?.status, "available");
-  assert.equal(deno.status, "available");
   assert.equal(local.status, "ok");
 });
 

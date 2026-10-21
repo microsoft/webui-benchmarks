@@ -13,7 +13,6 @@ import {
 } from "./metadata.mjs";
 import { spawnManagedProcess } from "./process-tree.mjs";
 import { BENCHMARK_ROOT, BUILD_ROOT, bunServeBinaryPath } from "./paths.mjs";
-import { resolveRuntimeExecutable } from "../../servers/lib/runtime-executable.mjs";
 import { resolveNativeAddon } from "../../servers/lib/webui-engine.mjs";
 
 const SERVER_SCHEMA = "webui.ssr-todo-server/v1";
@@ -392,22 +391,7 @@ function runtimeCommand(benchmarkCase) {
       command: bunServeBinaryPath(),
     };
   }
-  return {
-    args: [
-      "run",
-      "--config",
-      resolve(BENCHMARK_ROOT, "todo", "servers", "deno.json"),
-      "--allow-env",
-      "--allow-ffi",
-      "--allow-net",
-      "--allow-read",
-      "--allow-sys",
-      entry,
-      "--port",
-      "0",
-    ],
-    command: resolveRuntimeExecutable("deno"),
-  };
+  throw new RangeError(`Unknown WebUI runtime '${benchmarkCase.runtimeId}'`);
 }
 
 export async function launchCaseServer(
