@@ -22,10 +22,10 @@ mimalloc = "=0.1.52"
 rcgen = "=0.14.8"
 rustls = "=0.23.41"
 serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = { version = "=1.0.150", features = ["raw_value"] }
+serde_json = { version = "=1.0.151", features = ["raw_value"] }
 time = { version = "=0.3.53", features = ["local-offset", "formatting", "macros"] }
 tokio = { version = "=1.53.1", features = ["rt", "sync", "time"] }
-microsoft-webui-handler = "=0.0.28"
+microsoft-webui-handler = "=3.0.4"
 
 [workspace.lints.clippy]
 perf = { level = "deny", priority = -1 }

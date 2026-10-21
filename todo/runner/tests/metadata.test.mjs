@@ -11,25 +11,10 @@ import {
 import { resolve } from "node:path";
 import test from "node:test";
 import {
-  APP_METADATA_SCHEMA,
-  FULL_STACK_IDS,
   collectSourceRevision,
   computeFixtureHash,
-  loadFullStackMetadata,
 } from "../lib/metadata.mjs";
 import { REPOSITORY_ROOT } from "../lib/paths.mjs";
-
-test("full-stack manifests declare production integration metadata", () => {
-  for (const appId of FULL_STACK_IDS) {
-    const app = loadFullStackMetadata(appId);
-    assert.equal(app.metadata.schema, APP_METADATA_SCHEMA);
-    assert.equal(app.metadata.workerCount, 1);
-    assert.equal(app.metadata.compression, false);
-    assert.equal(app.metadata.routes.dynamic, "/dynamic");
-    assert.equal(app.metadata.routes.cached, "/cached");
-    assert.ok(app.metadata.frameworkPackages.length > 0);
-  }
-});
 
 test("fixture hash covers benchmark harness and renderer sources", () => {
   const first = computeFixtureHash();

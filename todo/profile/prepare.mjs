@@ -94,7 +94,7 @@ actix-web = "=4.14.0"
 anyhow = "=1.0.103"
 criterion = "=0.8.2"
 serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.150"
+serde_json = "=1.0.151"
 microsoft-webui-handler = ${crateDependency("webui-handler")}
 microsoft-webui-protocol = ${crateDependency("webui-protocol")}
 microsoft-webui-state = ${crateDependency("webui-state")}

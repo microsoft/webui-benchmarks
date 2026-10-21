@@ -952,9 +952,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "microsoft-webui-expressions"
-version = "0.0.28"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d48b16e006ce1fe14bf6f450238475ce8f7c96f72de96d0c9ad4e39f9844c0c0"
+checksum = "1b2b12a6ba01bd50cdf2cdaa9bff4f0e88f230c2640be6fef4bfb70129e3106a"
 dependencies = [
  "microsoft-webui-protocol",
  "microsoft-webui-state",
@@ -964,9 +964,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-handler"
-version = "0.0.28"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6318f6fcc5f06018995523860d50be5bfde8b7b62002b3d0983480e8f5169b9"
+checksum = "2d6242aa510fb8887f507805a57c7190f6ccbfa47fef36e521071f99bba340a9"
 dependencies = [
  "memchr",
  "microsoft-webui-expressions",
@@ -979,9 +979,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-protocol"
-version = "0.0.28"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc4b7b75dca09a865208155376b7776cdc7df9996f86ed66b5a54fbc840373fe"
+checksum = "ec336b76afd0d985bd8ddebb03e69ef56e5c3e17d3c80b1ca5ed28eac892620f"
 dependencies = [
  "prost",
  "serde",
@@ -991,9 +991,9 @@ dependencies = [
 
 [[package]]
 name = "microsoft-webui-state"
-version = "0.0.28"
+version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24d495cbb615f7ae68e43d76936e0f7311282dfefc094bb55b3b416a8657d201"
+checksum = "4d0b53524d534a7a1e22c3bd31104c6539868d6cf5580043d497d8eb8eff4968"
 dependencies = [
  "serde_json",
 ]
@@ -1415,9 +1415,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.150"
+version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
+checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
  "itoa",
  "memchr",
