@@ -90,11 +90,11 @@ name = "inventory_probe"
 path = "src/inventory_probe.rs"
 
 [dependencies]
-actix-web = "=4.14.0"
-anyhow = "=1.0.103"
+actix-web = "=4.17.0"
+anyhow = "=1.0.104"
 criterion = "=0.8.2"
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.151"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
 microsoft-webui-handler = ${crateDependency("webui-handler")}
 microsoft-webui-protocol = ${crateDependency("webui-protocol")}
 microsoft-webui-state = ${crateDependency("webui-state")}

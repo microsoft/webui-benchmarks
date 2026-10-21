@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { CACHED_TODO_STATE } from "$lib/server-state.mjs";
+import { CACHED_TODO_STATE } from "#lib/server-state.mjs";
 
 export function load({ setHeaders }) {
   setHeaders({

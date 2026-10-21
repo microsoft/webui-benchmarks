@@ -12,9 +12,9 @@
 
 # The Rust toolchain is pinned by `rust-toolchain.toml`; taking it from the
 # official image keeps the build reproducible and offline-friendly.
-FROM rust:1.98-bookworm AS rust
+FROM rust:1.99.1-bookworm AS rust
 
-FROM node:24.19.0-bookworm AS builder
+FROM node:26.12.0-bookworm AS builder
 
 ENV CARGO_HOME=/usr/local/cargo \
     CARGO_TERM_COLOR=never \
@@ -37,12 +37,12 @@ COPY todo/apps/nuxt/package.json todo/apps/nuxt/
 COPY todo/apps/sveltekit/package.json todo/apps/sveltekit/
 COPY todo/apps/webui-fast/package.json todo/apps/webui-fast/
 COPY todo/apps/webui-shadowdom/package.json todo/apps/webui-shadowdom/
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN npm install --global pnpm@12.14.0 && pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm run build
 
-FROM node:24.19.0-bookworm-slim AS runtime
+FROM node:26.12.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=8080 \

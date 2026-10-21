@@ -66,12 +66,16 @@ to a toy comparison.
 
 ## Reproducible setup
 
-The official runtime pins are Node `24.19.0`, Bun `1.4.0`,
-Rust `1.98`, and pnpm `11.5.3`. Framework and adapter versions are exact in
-their package manifests.
+The official runtime pins are Node `26.12.0`, Bun `1.4.3`,
+Rust `1.99.1`, and pnpm `12.14.0`. These use stable releases, not prereleases;
+Node uses the current stable release rather than the older LTS line.
+Application libraries, routers, adapters, shared workload dependencies, build
+and test tools, and Rust crates are pinned exactly in their manifests.
+TypeScript uses the latest compatible 6.x release (`6.0.3`) across the suite:
+SvelteKit 3 requires the JavaScript compiler API removed in TypeScript 7.
 
 ```bash
-corepack enable
+npm install --global pnpm@12.14.0
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm run verify:runtimes
@@ -82,6 +86,11 @@ pnpm test
 `pnpm run build` creates every controlled renderer, Rust server, TLS helper,
 and production framework output. Generated `dist`, `target`, framework cache,
 and `node_modules` trees are intentionally untracked.
+
+Dependency refreshes update both lockfiles and keep shared renderer/compiler
+versions aligned. Existing files under `results/` remain historical evidence;
+rerun `pnpm run bench:official` after an upgrade before publishing comparisons
+with the new versions.
 
 ## WebUI dependency strategy
 

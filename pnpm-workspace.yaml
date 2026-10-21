@@ -6,7 +6,7 @@ packages:
   - todo/apps/*
 
 overrides:
-  babel-preset-solid: 1.9.12
+  babel-preset-solid: 1.9.16
 
 allowBuilds:
   '@microsoft/webui': true
@@ -24,3 +24,4 @@ minimumReleaseAgeExclude:
   - '@microsoft/webui-win32-arm64@3.0.4'
   - '@microsoft/webui-win32-x64@3.0.4'
   - '@microsoft/webui@3.0.4'
+  - immer@11.2.5
