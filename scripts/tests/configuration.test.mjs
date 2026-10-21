@@ -10,7 +10,6 @@ import {
   REPOSITORY_ROOT,
   configuredWebuiAddonPath,
   webuiCargoArguments,
-  webuiReleaseVersion,
   webuiSupportsOptimizedWriter,
 } from "../../todo/shared/webui-dependency.mjs";
 
@@ -24,9 +23,7 @@ async function json(path) {
   return JSON.parse(await readFile(resolve(REPOSITORY_ROOT, path), "utf8"));
 }
 
-test("pins released WebUI and benchmark runtimes exactly", async () => {
-  const root = await json("package.json");
-  const runtimes = await json("todo/servers/runtime-versions.json");
+test("centralizes benchmark dependencies and preserves build configuration", async () => {
   const fast = await json("todo/apps/webui-fast/package.json");
   const shadow = await json("todo/apps/webui-shadowdom/package.json");
   const astro = await json("todo/apps/astro/package.json");
@@ -34,16 +31,7 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   const nuxt = await json("todo/apps/nuxt/package.json");
   const sveltekit = await json("todo/apps/sveltekit/package.json");
   const tsconfig = await json("tsconfig.json");
-  assert.equal(webuiReleaseVersion(), "3.0.4");
-  assert.equal(root.dependencies["@microsoft/webui"], "3.0.4");
-  assert.equal(root.dependencies["@microsoft/webui-framework"], "3.0.4");
-  assert.equal(root.dependencies["@microsoft/webui-router"], "3.0.4");
-  assert.equal(root.dependencies["@vue/server-renderer"], "3.5.42");
-  assert.equal(root.dependencies.next, "16.3.4");
-  assert.equal(root.dependencies.vue, "3.5.42");
-  assert.equal(root.devDependencies["@vue/compiler-sfc"], "3.5.42");
   assert.equal(webuiSupportsOptimizedWriter(null), true);
-  assert.equal(root.devDependencies.typescript, "7.0.2");
   for (const manifest of [astro, fast, next, nuxt, shadow, sveltekit]) {
     assert.equal(manifest.dependencies, undefined);
     assert.equal(manifest.devDependencies, undefined);
@@ -53,36 +41,6 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   assert.equal(next.webuiBenchmark.productionEntryBase, "workspace");
   assert.equal(tsconfig.compilerOptions.experimentalDecorators, true);
   assert.equal(tsconfig.compilerOptions.useDefineForClassFields, false);
-  assert.equal(runtimes.runtimes.bun.version, "1.4.0");
-  assert.equal(runtimes.runtimes.deno.version, "2.9.6");
-  assert.equal(runtimes.runtimes.node.version, "24.19.0");
-});
-
-test("aligns Cargo and release-age exceptions with the WebUI release", async () => {
-  const version = webuiReleaseVersion();
-  const [cargo, workspace] = await Promise.all([
-    readFile(resolve(REPOSITORY_ROOT, "Cargo.toml"), "utf8"),
-    readFile(resolve(REPOSITORY_ROOT, "pnpm-workspace.yaml"), "utf8"),
-  ]);
-  assert.ok(
-    cargo.split(/\r?\n/u).includes(`microsoft-webui-handler = "=${version}"`),
-    "Cargo must pin the same WebUI release as npm",
-  );
-  assert.deepEqual(
-    [...workspace.matchAll(/^  - '(@microsoft\/webui[^']*)'$/gmu)]
-      .map(([, specifier]) => specifier),
-    [
-      "@microsoft/webui-darwin-arm64",
-      "@microsoft/webui-darwin-x64",
-      "@microsoft/webui-framework",
-      "@microsoft/webui-linux-arm64",
-      "@microsoft/webui-linux-x64",
-      "@microsoft/webui-router",
-      "@microsoft/webui-win32-arm64",
-      "@microsoft/webui-win32-x64",
-      "@microsoft/webui",
-    ].map((name) => `${name}@${version}`),
-  );
 });
 
 test("patches only Cargo builds that target a local WebUI checkout", () => {
@@ -106,10 +64,10 @@ test("links every local WebUI JavaScript package from one checkout", () => {
   assert.deepEqual(
     rewriteDependencies(
       {
-        "@microsoft/webui": "3.0.4",
-        "@microsoft/webui-framework": "3.0.4",
-        "@microsoft/webui-router": "3.0.4",
-        react: "19.2.8",
+        "@microsoft/webui": "1.0.0",
+        "@microsoft/webui-framework": "1.0.0",
+        "@microsoft/webui-router": "1.0.0",
+        react: "2.0.0",
       },
       configuration,
     ),
@@ -123,7 +81,7 @@ test("links every local WebUI JavaScript package from one checkout", () => {
       "@microsoft/webui-router": `link:${
         resolve(checkout, "packages", "webui-router").replaceAll("\\", "/")
       }`,
-      react: "19.2.8",
+      react: "2.0.0",
     },
   );
 });

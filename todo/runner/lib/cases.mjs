@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+import { webuiReleaseVersion } from "../../shared/webui-dependency.mjs";
+
 export const OFFICIAL_MATRIX_ID = "official-ssr-matrix";
 export const HEADLINE_INPUT_POLICY = "request-timestamped-input";
 export const NATURAL_PAYLOAD_POLICY = "natural";
@@ -24,21 +26,23 @@ export const RESPONSE_MODES = Object.freeze({
   progressive: "progressive",
 });
 
+const WEBUI_RELEASE_VERSION = webuiReleaseVersion();
+
 // WebUI's resumable async data-boundary (StreamingSession) is a first-class
-// capability in WebUI 3.0.4, but this suite does not yet implement the
+// capability in the canonical WebUI release, but this suite does not implement the
 // dedicated async shell/list boundary workload. The progressive suite honestly
 // reports that implementation gap so consumers do not mistake "unchanged
 // native streaming" for "new async data-boundary streaming". See README.md for
 // the follow-up.
 export const ASYNC_DATA_BOUNDARY_CAPABILITY = Object.freeze({
-  canonicalWebuiVersion: "3.0.4",
+  canonicalWebuiVersion: WEBUI_RELEASE_VERSION,
   notes:
     "The progressive suite continues to measure each product's existing "
     + "native progressive/streaming boundaries unchanged. A dedicated "
     + "above-the-fold-shell / below-the-fold-async-list workload driven by "
     + "WebUI's resumable StreamingSession boundary API is intentionally not "
-    + "implemented yet against canonical WebUI 3.0.4. This is disclosed "
-    + "capability metadata, not an active measurement.",
+    + `implemented yet against canonical WebUI ${WEBUI_RELEASE_VERSION}. `
+    + "This is disclosed capability metadata, not an active measurement.",
   requiredCapability: "StreamingSession resumable async data-boundary API",
   status: "available-pending-benchmark-implementation",
 });
