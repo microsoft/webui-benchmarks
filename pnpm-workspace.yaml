@@ -16,12 +16,12 @@ allowBuilds:
   sharp: true
 
 minimumReleaseAgeExclude:
-  - '@microsoft/webui-darwin-arm64@0.0.28'
-  - '@microsoft/webui-darwin-x64@0.0.28'
-  - '@microsoft/webui-framework@0.0.28'
-  - '@microsoft/webui-linux-arm64@0.0.28'
-  - '@microsoft/webui-linux-x64@0.0.28'
-  - '@microsoft/webui-router@0.0.28'
-  - '@microsoft/webui-win32-arm64@0.0.28'
-  - '@microsoft/webui-win32-x64@0.0.28'
-  - '@microsoft/webui@0.0.28'
+  - '@microsoft/webui-darwin-arm64@3.0.4'
+  - '@microsoft/webui-darwin-x64@3.0.4'
+  - '@microsoft/webui-framework@3.0.4'
+  - '@microsoft/webui-linux-arm64@3.0.4'
+  - '@microsoft/webui-linux-x64@3.0.4'
+  - '@microsoft/webui-router@3.0.4'
+  - '@microsoft/webui-win32-arm64@3.0.4'
+  - '@microsoft/webui-win32-x64@3.0.4'
+  - '@microsoft/webui@3.0.4'

@@ -25,19 +25,19 @@ export const RESPONSE_MODES = Object.freeze({
 });
 
 // WebUI's resumable async data-boundary (StreamingSession) is a first-class
-// capability in WebUI 0.0.28, but this suite does not yet implement the
+// capability in WebUI 3.0.4, but this suite does not yet implement the
 // dedicated async shell/list boundary workload. The progressive suite honestly
 // reports that implementation gap so consumers do not mistake "unchanged
 // native streaming" for "new async data-boundary streaming". See README.md for
 // the follow-up.
 export const ASYNC_DATA_BOUNDARY_CAPABILITY = Object.freeze({
-  canonicalWebuiVersion: "0.0.28",
+  canonicalWebuiVersion: "3.0.4",
   notes:
     "The progressive suite continues to measure each product's existing "
     + "native progressive/streaming boundaries unchanged. A dedicated "
     + "above-the-fold-shell / below-the-fold-async-list workload driven by "
     + "WebUI's resumable StreamingSession boundary API is intentionally not "
-    + "implemented yet against canonical WebUI 0.0.28. This is disclosed "
+    + "implemented yet against canonical WebUI 3.0.4. This is disclosed "
     + "capability metadata, not an active measurement.",
   requiredCapability: "StreamingSession resumable async data-boundary API",
   status: "available-pending-benchmark-implementation",

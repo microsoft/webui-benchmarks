@@ -32,14 +32,14 @@ importers:
         specifier: 3.0.2
         version: 3.0.2
       '@microsoft/webui':
-        specifier: 0.0.28
-        version: 0.0.28(esbuild@0.28.2)(typescript@7.0.2)
+        specifier: 3.0.4
+        version: 3.0.4(esbuild@0.28.2)(typescript@7.0.2)
       '@microsoft/webui-framework':
-        specifier: 0.0.28
-        version: 0.0.28
+        specifier: 3.0.4
+        version: 3.0.4
       '@microsoft/webui-router':
-        specifier: 0.0.28
-        version: 0.0.28
+        specifier: 3.0.4
+        version: 3.0.4
       '@solidjs/router':
         specifier: 1.0.0
         version: 1.0.0(solid-js@1.9.15)
@@ -922,44 +922,44 @@ packages:
   '@microsoft/fast-element@3.0.2':
     resolution: {integrity: sha512-eNCfcReRuPXyHOB9fwISEIz7BtCFstbZ6SEWrpcsSkVTQ4CCqr0pBYb9RTPbdqLY86Bt2cnEihDaX4zsKCgwpg==}
 
-  '@microsoft/webui-darwin-arm64@0.0.28':
-    resolution: {integrity: sha512-y8vCvwtSrONtVNjLdIEKtXtkENfrd3ILkZS2QH2UzvQ4+SGDoGoMPp8HfD79j2LDqBv8n1GYWWqkEIeynZtkPg==}
+  '@microsoft/webui-darwin-arm64@3.0.4':
+    resolution: {integrity: sha512-ktz1fWDse5wUMZ5nERPV4xZvC6KbKelgQfoBkWgyiOu9+hgM5BkJUKxZmrWpZxXLMNt/vcZyVNJj+iR36eq+ZQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@microsoft/webui-darwin-x64@0.0.28':
-    resolution: {integrity: sha512-S44rvASdpTM2uE5TmdalJo1sgHlIZ5RU2Sl+xUfscK8S2YxavMOYDAlKm3IYqz+JuzdAsePz8Czc1eThKre15w==}
+  '@microsoft/webui-darwin-x64@3.0.4':
+    resolution: {integrity: sha512-EredQuy4MXhepvhuir8e3t36o26EdI1toh6+5jpIcsRRl+kBIDXDBmayLZcQTtzcq0EpDtDQXTfz9NDGnivwyQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@microsoft/webui-framework@0.0.28':
-    resolution: {integrity: sha512-lRmv7ixRa+bEtDm5VPzqX1fm3GKwlfDyBxtD9GeBaYkE+7qQJa2fqgE9CVP1bpcSnFWPxqEyUjSSHB5Y4EQkrw==}
+  '@microsoft/webui-framework@3.0.4':
+    resolution: {integrity: sha512-LLlHSCFOaOvdapex3wo4emtXmaacbQXxFidn7yvl/cxrpiAXP2H0gRnf7j1w+JirvKcTdsC4E64Xfd0nr7268g==}
 
-  '@microsoft/webui-linux-arm64@0.0.28':
-    resolution: {integrity: sha512-ea/eui9jbqM9JTqCRwYZ52zqa9HA78XM84Q+4jMDlC667VSV5CVtXS+ZwJGKkwXu68kBBKxADLcHD0vyQ6MzMw==}
+  '@microsoft/webui-linux-arm64@3.0.4':
+    resolution: {integrity: sha512-35OtlanTPQDDhadGJvrQ5qtAO04Lsp2E67aEzATDPG1EPOPQoeVuZjdyHwl56AvwNn9IYbzbk76eEX1FwEkL5g==}
     cpu: [arm64]
     os: [linux]
 
-  '@microsoft/webui-linux-x64@0.0.28':
-    resolution: {integrity: sha512-IqPt5RUQK03oF8pt7eG0WkYxNyLCSjaJGlke8BqGY6Y+nZAJ1S3s6jvIlf8cepU3sV/IxcEJMAcxju20MaYbaQ==}
+  '@microsoft/webui-linux-x64@3.0.4':
+    resolution: {integrity: sha512-4Te+LjAnwabsEAmrGLkTgTBbSRhRWEQsF0zGdx4wCHs6Fla4hu+5gvQy06+RTVGVZw3JtHXxjgl+V1ENRLMJxQ==}
     cpu: [x64]
     os: [linux]
 
-  '@microsoft/webui-router@0.0.28':
-    resolution: {integrity: sha512-OQhIEmVmRZG6CmtiLf1BZ3SEmwBE1dHbXNFsAVxdTeL6llMpX7m5PMgV7VCfNmlpAh1L76dmhf1/wJJICC9ORQ==}
+  '@microsoft/webui-router@3.0.4':
+    resolution: {integrity: sha512-8tSQYB1TdXRLgZNyK+S/qKQztQ3depmdxnVSClmuuucH06H3z7Gs5pE7po1HKx1Q+flykfI54jk4sxx3WDFlOQ==}
 
-  '@microsoft/webui-win32-arm64@0.0.28':
-    resolution: {integrity: sha512-FnU7J6/l049ZebaG02JizfSiSkpiHzkd7QBMwdv6kSNel4vUcdgfv88rZ4WZWB3lDcSIVRCupe0IaiOw4F9ysg==}
+  '@microsoft/webui-win32-arm64@3.0.4':
+    resolution: {integrity: sha512-elWnEL3mNJkLGU4csTRl+uhGAF6394nEnJuuLUIpEuy2nhqoaUZDVCbR9oMqwFMlrOxXZdRHykqosTIi+7zUkA==}
     cpu: [arm64]
     os: [win32]
 
-  '@microsoft/webui-win32-x64@0.0.28':
-    resolution: {integrity: sha512-49LS11FuytJ8GhYpFUK4z08b/I5m9JEXZDaN3nrYbHyAV55v564jYL54qRalWc1tAqBFQAPYHFh93Di+9NGHSQ==}
+  '@microsoft/webui-win32-x64@3.0.4':
+    resolution: {integrity: sha512-bIju9PEPCWIbgrsefr1y5QjzEKu0fsNVQUxvzcXoxyuE3STS/NxisXFncdB+DoWJsMdDilG8DgrZBOvHScKTIw==}
     cpu: [x64]
     os: [win32]
 
-  '@microsoft/webui@0.0.28':
-    resolution: {integrity: sha512-H1YXrmo+D0S9roxr8JEETYnx2JSpNxvWBhCXp4WsSCicgiq7JAh5AND2OkiEVzSnFmzJR7blUe171owuYVpZzg==}
+  '@microsoft/webui@3.0.4':
+    resolution: {integrity: sha512-ZJiEEJB0Af6iILxs6Lrn5YImUAohls7h8eLJPa9uXziiwZWish8TQq21Aai1opKqnJjw1ucB/Q4HxEvymDqQ3A==}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -5745,36 +5745,36 @@ snapshots:
 
   '@microsoft/fast-element@3.0.2': {}
 
-  '@microsoft/webui-darwin-arm64@0.0.28':
+  '@microsoft/webui-darwin-arm64@3.0.4':
     optional: true
 
-  '@microsoft/webui-darwin-x64@0.0.28':
+  '@microsoft/webui-darwin-x64@3.0.4':
     optional: true
 
-  '@microsoft/webui-framework@0.0.28': {}
+  '@microsoft/webui-framework@3.0.4': {}
 
-  '@microsoft/webui-linux-arm64@0.0.28':
+  '@microsoft/webui-linux-arm64@3.0.4':
     optional: true
 
-  '@microsoft/webui-linux-x64@0.0.28':
+  '@microsoft/webui-linux-x64@3.0.4':
     optional: true
 
-  '@microsoft/webui-router@0.0.28': {}
+  '@microsoft/webui-router@3.0.4': {}
 
-  '@microsoft/webui-win32-arm64@0.0.28':
+  '@microsoft/webui-win32-arm64@3.0.4':
     optional: true
 
-  '@microsoft/webui-win32-x64@0.0.28':
+  '@microsoft/webui-win32-x64@3.0.4':
     optional: true
 
-  '@microsoft/webui@0.0.28(esbuild@0.28.2)(typescript@7.0.2)':
+  '@microsoft/webui@3.0.4(esbuild@0.28.2)(typescript@7.0.2)':
     optionalDependencies:
-      '@microsoft/webui-darwin-arm64': 0.0.28
-      '@microsoft/webui-darwin-x64': 0.0.28
-      '@microsoft/webui-linux-arm64': 0.0.28
-      '@microsoft/webui-linux-x64': 0.0.28
-      '@microsoft/webui-win32-arm64': 0.0.28
-      '@microsoft/webui-win32-x64': 0.0.28
+      '@microsoft/webui-darwin-arm64': 3.0.4
+      '@microsoft/webui-darwin-x64': 3.0.4
+      '@microsoft/webui-linux-arm64': 3.0.4
+      '@microsoft/webui-linux-x64': 3.0.4
+      '@microsoft/webui-win32-arm64': 3.0.4
+      '@microsoft/webui-win32-x64': 3.0.4
       esbuild: 0.28.2
       typescript: 7.0.2
 

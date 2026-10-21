@@ -1422,7 +1422,7 @@ async fn dynamic(request: HttpRequest, state: web::Data<AppState>) -> HttpRespon
                         });
                 }
             };
-            return match state.protocol.render_partial(
+            return match state.protocol.render_partial_json(
                 &state_json,
                 ENTRY_ID,
                 request_path,

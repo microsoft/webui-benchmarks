@@ -326,7 +326,7 @@ test("the async data-boundary capability is disclosed, not faked as active", () 
     ASYNC_DATA_BOUNDARY_CAPABILITY.status,
     "available-pending-benchmark-implementation",
   );
-  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "0.0.28");
+  assert.equal(ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion, "3.0.4");
 });
 
 test("case filtering accepts ids, kinds, app ids, and wildcards", () => {

@@ -86,7 +86,7 @@ and `node_modules` trees are intentionally untracked.
 
 ## WebUI dependency strategy
 
-The canonical manifests benchmark the released WebUI `0.0.28` npm packages
+The canonical manifests benchmark the released WebUI `3.0.4` npm packages
 and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
@@ -109,7 +109,7 @@ refreshed explicitly with `pnpm run webui:sync`.
 Use `--ref` instead of `--path` to create an untracked shallow checkout:
 
 ```bash
-pnpm run webui:local -- --ref v0.0.28
+pnpm run webui:local -- --ref v3.0.4
 pnpm run build
 ```
 
@@ -297,7 +297,7 @@ workload in the progressive suite: an above-the-fold shell/workbench that
 renders immediately, with the below-the-fold todo list resolving later through
 a shared, configured async readiness delay, driven for WebUI by its
 resumable `StreamingSession` boundary API. The canonical WebUI dependency
-(`@microsoft/webui@0.0.28`; see `todo/runner/lib/cases.mjs`'s
+(`@microsoft/webui@3.0.4`; see `todo/runner/lib/cases.mjs`'s
 `ASYNC_DATA_BOUNDARY_CAPABILITY`) exposes that API, but the dedicated workload
 is not implemented yet. This gap is disclosed as metadata
 (`status: "available-pending-benchmark-implementation"`) and the progressive

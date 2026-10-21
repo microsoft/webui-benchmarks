@@ -34,10 +34,10 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   const nuxt = await json("todo/apps/nuxt/package.json");
   const sveltekit = await json("todo/apps/sveltekit/package.json");
   const tsconfig = await json("tsconfig.json");
-  assert.equal(webuiReleaseVersion(), "0.0.28");
-  assert.equal(root.dependencies["@microsoft/webui"], "0.0.28");
-  assert.equal(root.dependencies["@microsoft/webui-framework"], "0.0.28");
-  assert.equal(root.dependencies["@microsoft/webui-router"], "0.0.28");
+  assert.equal(webuiReleaseVersion(), "3.0.4");
+  assert.equal(root.dependencies["@microsoft/webui"], "3.0.4");
+  assert.equal(root.dependencies["@microsoft/webui-framework"], "3.0.4");
+  assert.equal(root.dependencies["@microsoft/webui-router"], "3.0.4");
   assert.equal(root.dependencies["@vue/server-renderer"], "3.5.42");
   assert.equal(root.dependencies.next, "16.3.4");
   assert.equal(root.dependencies.vue, "3.5.42");
@@ -56,6 +56,33 @@ test("pins released WebUI and benchmark runtimes exactly", async () => {
   assert.equal(runtimes.runtimes.bun.version, "1.4.0");
   assert.equal(runtimes.runtimes.deno.version, "2.9.6");
   assert.equal(runtimes.runtimes.node.version, "24.19.0");
+});
+
+test("aligns Cargo and release-age exceptions with the WebUI release", async () => {
+  const version = webuiReleaseVersion();
+  const [cargo, workspace] = await Promise.all([
+    readFile(resolve(REPOSITORY_ROOT, "Cargo.toml"), "utf8"),
+    readFile(resolve(REPOSITORY_ROOT, "pnpm-workspace.yaml"), "utf8"),
+  ]);
+  assert.ok(
+    cargo.split(/\r?\n/u).includes(`microsoft-webui-handler = "=${version}"`),
+    "Cargo must pin the same WebUI release as npm",
+  );
+  assert.deepEqual(
+    [...workspace.matchAll(/^  - '(@microsoft\/webui[^']*)'$/gmu)]
+      .map(([, specifier]) => specifier),
+    [
+      "@microsoft/webui-darwin-arm64",
+      "@microsoft/webui-darwin-x64",
+      "@microsoft/webui-framework",
+      "@microsoft/webui-linux-arm64",
+      "@microsoft/webui-linux-x64",
+      "@microsoft/webui-router",
+      "@microsoft/webui-win32-arm64",
+      "@microsoft/webui-win32-x64",
+      "@microsoft/webui",
+    ].map((name) => `${name}@${version}`),
+  );
 });
 
 test("patches only Cargo builds that target a local WebUI checkout", () => {
@@ -79,9 +106,9 @@ test("links every local WebUI JavaScript package from one checkout", () => {
   assert.deepEqual(
     rewriteDependencies(
       {
-        "@microsoft/webui": "0.0.28",
-        "@microsoft/webui-framework": "0.0.28",
-        "@microsoft/webui-router": "0.0.28",
+        "@microsoft/webui": "3.0.4",
+        "@microsoft/webui-framework": "3.0.4",
+        "@microsoft/webui-router": "3.0.4",
         react: "19.2.8",
       },
       configuration,

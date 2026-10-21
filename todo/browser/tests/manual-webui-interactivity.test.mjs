@@ -11,10 +11,11 @@ import { withCaseResources } from "../runner.mjs";
 import { ProcessRegistry } from "../../runner/lib/process-tree.mjs";
 
 test(
-  "hydrates direct WebUI variants without benchmark request headers",
+  "hydrates WebUI variants and serves partial routes without benchmark headers",
   { skip: !existsSync(chromium.executablePath()), timeout: 120_000 },
   async () => {
     const cases = createBrowserCases([
+      "webui-rust-actix",
       "webui-shadowdom-rust-actix",
       "webui-fast-rust-actix",
     ]);
@@ -62,6 +63,16 @@ test(
               await page.locator(
                 '[data-workspace-panel="insights"]',
               ).waitFor();
+              const partialResponse = await context.request.get(
+                `${url}/activity`,
+                { headers: { accept: "application/json" } },
+              );
+              assert.equal(partialResponse.status(), 200);
+              assert.match(
+                partialResponse.headers()["content-type"],
+                /^application\/json\b/u,
+              );
+              assert.equal((await partialResponse.json()).path, "/activity");
               assert.deepEqual(pageErrors, []);
             } finally {
               await context.close();
