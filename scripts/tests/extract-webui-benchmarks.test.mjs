@@ -41,7 +41,7 @@ function row(caseId, label, requestsPerSecond, firstContentfulPaintMs) {
 function benchmarkSummary() {
   const benchmarks = {
     description:
-      "Compare 7 product paths by single-core throughput or browser cost.",
+      "Compare 6 product paths by single-core throughput or browser cost.",
     hasUnavailable: false,
     link: "/webui/guide/concepts/performance/",
     methodology: "SSR methodology",
@@ -94,7 +94,6 @@ function benchmarkSummary() {
       ),
       row("webui-node-http", "WebUI / Node", 100, 40),
       row("webui-bun-serve", "WebUI / Bun", 90, 50),
-      row("webui-deno-serve", "WebUI / Deno", 80, 60),
     ],
     selectedMetric: "requestsPerSecond",
     selectedMetricDescription: "Median server throughput.",
@@ -154,16 +153,15 @@ test("--all behavior keeps and reranks every WebUI row", () => {
       "webui-fast-rust-actix",
       "webui-node-http",
       "webui-bun-serve",
-      "webui-deno-serve",
     ],
   );
   assert.deepEqual(
     filtered.benchmarks.rows.map(({ rank }) => rank),
-    ["1", "2", "3", "4", "5", "6"],
+    ["1", "2", "3", "4", "5"],
   );
   assert.match(
     filtered.benchmarks.description,
-    /^Compare 6 WebUI product paths\b/u,
+    /^Compare 5 WebUI product paths\b/u,
   );
 });
 
@@ -251,7 +249,6 @@ test("writes every WebUI row when all is enabled", async (t) => {
       "webui-fast-rust-actix",
       "webui-node-http",
       "webui-bun-serve",
-      "webui-deno-serve",
     ],
   );
 });

@@ -18,7 +18,6 @@ const EXPECTED_PRODUCTS = Object.freeze([
   "webui-shadowdom-rust-actix",
   "webui-fast-rust-actix",
   "webui-bun-serve",
-  "webui-deno-serve",
   "webui-node-http",
   "sveltekit",
   "nuxt",
@@ -32,14 +31,14 @@ const EXPECTED_PRODUCTS = Object.freeze([
   "solid",
 ]);
 
-test("browser suite contains the definitive 16 product rows", () => {
+test("browser suite contains the definitive 15 product rows", () => {
   const cases = createBrowserCases();
   assert.deepEqual(PRODUCT_ORDER, EXPECTED_PRODUCTS);
   assert.deepEqual(
     cases.map(({ productId }) => productId),
     EXPECTED_PRODUCTS,
   );
-  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 16);
+  assert.equal(new Set(cases.map(({ productId }) => productId)).size, 15);
   assert.ok(
     cases.every(({ clientMode, hydration }) =>
       hydration.status !== "unsupported"
@@ -60,7 +59,7 @@ test("browser suite contains the definitive 16 product rows", () => {
   );
 });
 
-test("WebUI app filter selects the five base DOM/transport products", () => {
+test("WebUI app filter selects the four base DOM/transport products", () => {
   const cases = createBrowserCases(["webui"]);
   assert.deepEqual(
     cases.map(({ productId }) => productId),
@@ -68,7 +67,6 @@ test("WebUI app filter selects the five base DOM/transport products", () => {
       "webui-rust-actix",
       "webui-shadowdom-rust-actix",
       "webui-bun-serve",
-      "webui-deno-serve",
       "webui-node-http",
     ],
   );
@@ -82,14 +80,12 @@ test("WebUI app filter selects the five base DOM/transport products", () => {
 test("JavaScript-hosted WebUI rows use the Light DOM protocol", () => {
   const cases = createBrowserCases([
     "webui-bun-serve",
-    "webui-deno-serve",
     "webui-node-http",
   ]);
   assert.deepEqual(
     cases.map(({ label }) => label),
     [
       "WebUI / Light DOM / Bun.serve",
-      "WebUI / Light DOM / Deno.serve",
       "WebUI / Light DOM / Node node:http",
     ],
   );
@@ -135,7 +131,6 @@ test("records only native viewport hydration capabilities", () => {
     "webui-rust-actix",
     "webui-shadowdom-rust-actix",
     "webui-bun-serve",
-    "webui-deno-serve",
     "webui-node-http",
     "nuxt",
     "astro",

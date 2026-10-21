@@ -44,7 +44,7 @@ the shared snapshots.
 - `contract.mjs` defines component boundaries, fields, branches, loops,
   selectors, text, sentinels, and interactions.
 - `state.mjs` provides deterministic, timestamped portable JavaScript state. It has no
-  Node-specific imports and can be loaded by Node, Bun, Deno, and build tools.
+  Node-specific imports and can be loaded by Node, Bun, and build tools.
 - `workspace-intelligence.mjs` is the shared production feature engine. It
   derives search, table, analytics, validation, export, immutable-update, and
   recurrence state used by every product.

@@ -3,7 +3,7 @@
 
 import { existsSync, realpathSync } from "node:fs";
 import process from "node:process";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const benchmarkRoot = fileURLToPath(
@@ -20,17 +20,13 @@ export function resolveRuntimeExecutable(
   if (runtimeId === "node") {
     return process.execPath;
   }
-  const packageRoot = resolve(root, "node_modules", runtimeId);
-  const fileNames = runtimeId === "bun"
-    ? platform === "win32"
-      ? ["bun.exe"]
-      : ["bun", "bun.exe"]
-    : platform === "win32"
-      ? ["deno.exe"]
-      : ["deno", "deno.exe"];
-  const directory = runtimeId === "bun"
-    ? resolve(packageRoot, "bin")
-    : packageRoot;
+  if (runtimeId !== "bun") {
+    throw new RangeError(`Unknown runtime '${runtimeId}'`);
+  }
+  const directory = resolve(root, "node_modules", "bun", "bin");
+  const fileNames = platform === "win32"
+    ? ["bun.exe"]
+    : ["bun", "bun.exe"];
   for (const fileName of fileNames) {
     const candidate = resolve(directory, fileName);
     if (existsSync(candidate)) {

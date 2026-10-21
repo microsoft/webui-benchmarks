@@ -36,7 +36,7 @@ function validReport() {
       },
     },
     matrix: {
-      expectedCaseCount: 16,
+      expectedCaseCount: 15,
       id: "official-ssr-matrix",
       naturalResponseBytes: {
         byCase: [],
@@ -159,7 +159,7 @@ test("schema rejects multi-worker cases and wrong matrix size", () => {
   size.matrix.expectedCaseCount = 46;
   assert.match(
     validateReportSchema(size).errors.join("\n"),
-    /exactly 16 rows/u,
+    /exactly 15 rows/u,
   );
 });
 

@@ -21,7 +21,7 @@ Run from the repository root:
 node todo\browser\cli.mjs --official --build
 
 # Selective refresh: retain official methodology for only the named rows.
-node todo\browser\cli.mjs --refresh --apps webui-bun-serve,webui-deno-serve,webui-node-http --headed
+node todo\browser\cli.mjs --refresh --apps webui-bun-serve,webui-node-http --headed
 
 # One smoke round, optionally narrowed to apps.
 node todo\browser\cli.mjs --quick --apps vue,react,next
@@ -69,7 +69,7 @@ evidence and cannot replace a complete official matrix by themselves.
 - WebUI / Shadow DOM / Rust / Actix uses that same direct server, state, and
   authored component graph. Only the compiled DOM/CSS strategy changes; browser
   evidence requires more than 800 open shadow roots.
-- WebUI / Light DOM / Bun, Deno, and Node use the same Light DOM protocol and
+- WebUI / Light DOM / Bun and Node use the same Light DOM protocol and
   browser assets as the Rust row. Only the JavaScript runtime and its native
   HTTP server change; the Node HTTP/2 browser adapter does not substitute a
   Shadow DOM document.

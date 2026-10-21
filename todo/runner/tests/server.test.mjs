@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http2";
 import test from "node:test";
-import { requestHttp2Ok } from "../lib/server.mjs";
+import { launchCaseServer, requestHttp2Ok } from "../lib/server.mjs";
 
 async function listen(server) {
   await new Promise((resolve, reject) => {
@@ -21,6 +21,16 @@ async function close(server) {
     server.close((error) => error ? reject(error) : resolve());
   });
 }
+
+test("WebUI launcher rejects unknown runtimes before spawning", async () => {
+  await assert.rejects(
+    launchCaseServer({
+      launcher: { entry: "node-http.mjs", kind: "webui-runtime" },
+      runtimeId: "unsupported",
+    }, {}),
+    /Unknown WebUI runtime 'unsupported'/u,
+  );
+});
 
 test("HTTP/2 readiness accepts a successful response", async () => {
   const server = createServer();

@@ -25,8 +25,6 @@ Run from the repository root:
 node todo/servers/node-http.mjs --port 3001
 node todo/servers/node-renderer.mjs --app react --port 3002
 bun todo/servers/bun.mjs --port 3004
-deno run --config todo/servers/deno.json --allow-env --allow-ffi \
-  --allow-net --allow-read --allow-sys todo/servers/deno.mjs --port 3005
 ```
 
 Set `WEBUI_ADDON_PATH` (or pass `--addon`) to force every JavaScript runtime to
@@ -44,9 +42,9 @@ that rejects the top-level `await` in `bun.mjs`'s startup block. Run
 `bun build todo/servers/bun.mjs --compile --bytecode --splitting --format=esm
 --outfile target/bun/webui-bun-serve`) to reproduce it locally.
 
-`node todo/servers/verify-runtimes.mjs --official` enforces Node 24.19.0,
-Bun 1.4.0, and Deno 2.9.6. Local verification reports an absent Deno as
-`skipped`; official verification fails it. Generate the Rust state input with:
+`node todo/servers/verify-runtimes.mjs --official` enforces Node 24.19.0
+and Bun 1.4.0. Local verification reports an absent Bun as `skipped`;
+official verification fails it. Generate the Rust state input with:
 
 ```text
 node todo/servers/write-state-pool.mjs

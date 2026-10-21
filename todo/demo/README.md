@@ -17,7 +17,7 @@ docker compose -f todo/demo/docker-compose.yml up --build
 
 The registry is derived from the official benchmark matrix
 (`todo/runner/lib/cases.mjs`), so a product can never drift from the case it
-demonstrates. The three alternate WebUI runtime hosts (Bun, Deno, Node) are
+demonstrates. The two alternate WebUI runtime hosts (Bun and Node) are
 excluded because they run the same Light DOM application as the canonical
 Rust/Actix host; every other official case is hosted twice:
 
