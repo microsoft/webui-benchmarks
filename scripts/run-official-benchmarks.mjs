@@ -80,6 +80,15 @@ export const OFFICIAL_BENCHMARK_STEPS = Object.freeze([
     id: "summary-complete",
     script: "scripts/export-benchmark-summary.mjs",
   }),
+  Object.freeze({
+    arguments: Object.freeze([
+      "--input",
+      OFFICIAL_BENCHMARK_OUTPUTS.summary,
+      "--optional",
+    ]),
+    id: "sync-webui",
+    script: "scripts/sync-webui-benchmark-summary.mjs",
+  }),
 ]);
 
 function executeStep(step) {

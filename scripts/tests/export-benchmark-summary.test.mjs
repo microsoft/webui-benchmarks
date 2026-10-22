@@ -280,6 +280,9 @@ function report() {
     },
     status: "ok",
     summaries,
+    versions: {
+      frameworks: { webui: ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion },
+    },
   };
 }
 
@@ -491,6 +494,7 @@ function browserReport(ssrReport = report()) {
       id,
       status: "ok",
     })),
+    createdAt: "2026-08-25T01:00:00.000Z",
     cleanup: {
       processRegistryEmpty: true,
       status: "verified",
@@ -710,6 +714,23 @@ test("combines complete and progressive throughput with only essential browser m
     "complete",
     "progressive",
   ]);
+  assert.deepEqual(summary.benchmarks.campaign, {
+    browserMeasuredAt: "2026-08-25T01:00:00.000Z",
+    browserRoundsPerApp: 10,
+    canonicalWebuiVersion: ASYNC_DATA_BOUNDARY_CAPABILITY.canonicalWebuiVersion,
+    completeMeasuredAt: complete.createdAt,
+    fixtureDigest: progressive.fixture.hash.value,
+    matrixId: "official-ssr-matrix",
+    progressiveMeasuredAt: progressive.createdAt,
+    responseModes: ["complete", "progressive"],
+    rowCount: 15,
+    serverMeasuredRounds: 1,
+    sourceCommit: progressive.sourceRevision.commit,
+    sourceDigest: progressive.sourceRevision.sourceDigest,
+    status: "official-uniform",
+    uniformOfficialMatrix: true,
+    workingTreeDirty: false,
+  });
   assert.equal(
     summary.benchmarks.rows.every((row) =>
       Object.keys(row.metrics).length === 5
