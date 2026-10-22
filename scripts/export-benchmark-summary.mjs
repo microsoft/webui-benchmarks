@@ -938,7 +938,68 @@ function matchingResponseModeReports(progressiveReport, completeReport) {
       === JSON.stringify(completeReport.versions?.webuiDependency ?? null);
 }
 
-function combinedBenchmarkSummary(progressive, complete) {
+function campaignMetadata(
+  progressiveReport,
+  completeReport = null,
+  browserReport = null,
+) {
+  const sourceRevision = progressiveReport.sourceRevision;
+  const versions = progressiveReport.versions ?? {};
+  const webuiDependency = versions.webuiDependency ?? {};
+  const canonicalWebuiVersion =
+    typeof webuiDependency.version === "string"
+      ? webuiDependency.version
+      : versions.frameworks?.webui ?? null;
+  if (!/^\d+\.\d+\.\d+$/u.test(canonicalWebuiVersion ?? "")) {
+    throw new Error("Official benchmark evidence requires an exact WebUI version");
+  }
+  if (
+    !/^[0-9a-f]{40}$/u.test(sourceRevision?.commit ?? "")
+    || !/^[0-9a-f]{64}$/u.test(sourceRevision?.sourceDigest ?? "")
+    || sourceRevision.sourceDigest !== progressiveReport.fixture?.hash?.value
+    || sourceRevision.workingTreeDirty !== false
+    || progressiveReport.matrix?.id !== "official-ssr-matrix"
+    || completeReport?.fixture?.hash?.value !== progressiveReport.fixture.hash.value
+    || ![
+      progressiveReport.createdAt,
+      completeReport?.createdAt,
+      browserReport?.createdAt,
+    ].every((value) => typeof value === "string"
+      && Number.isFinite(Date.parse(value)))
+  ) {
+    throw new Error("Campaign provenance requires matching source digests, a clean revision, and report timestamps");
+  }
+  const progressiveMode =
+    progressiveReport.policies?.responseMode ?? "progressive";
+  const responseModes = completeReport === null
+    ? [progressiveMode === "complete" ? "complete" : "progressive"]
+    : ["complete", "progressive"];
+  return {
+    browserMeasuredAt: browserReport?.createdAt ?? null,
+    browserRoundsPerApp: browserReport?.roundsPerApp ?? null,
+    canonicalWebuiVersion,
+    completeMeasuredAt: completeReport?.createdAt ?? null,
+    fixtureDigest: progressiveReport.fixture?.hash?.value ?? null,
+    matrixId: progressiveReport.matrix.id,
+    progressiveMeasuredAt: progressiveReport.createdAt ?? null,
+    responseModes,
+    rowCount: OFFICIAL_CASE_COUNT,
+    serverMeasuredRounds: progressiveReport.config?.rounds ?? null,
+    sourceCommit: sourceRevision?.commit ?? null,
+    sourceDigest: sourceRevision?.sourceDigest ?? null,
+    status: "official-uniform",
+    uniformOfficialMatrix: true,
+    workingTreeDirty: sourceRevision?.workingTreeDirty ?? null,
+  };
+}
+
+function combinedBenchmarkSummary(
+  progressive,
+  complete,
+  progressiveReport,
+  completeReport,
+  browserReport,
+) {
   const progressiveRps = progressive.benchmarks.metrics.find(
     ({ id }) => id === "requestsPerSecond",
   );
@@ -1002,6 +1063,11 @@ function combinedBenchmarkSummary(progressive, complete) {
   ];
   const benchmarks = {
     ...progressive.benchmarks,
+    campaign: campaignMetadata(
+      progressiveReport,
+      completeReport,
+      browserReport,
+    ),
     description:
       "Compare the same product workload in complete and progressive response modes, then inspect the three browser cost metrics that matter most.",
     hasUnavailable: rows.some(({ metrics: rowMetrics }) =>
@@ -1044,7 +1110,13 @@ export function buildBenchmarkSummary(
       "Combined benchmark summary requires matching progressive and complete official reports",
     );
   }
-  return combinedBenchmarkSummary(progressive, complete);
+  return combinedBenchmarkSummary(
+    progressive,
+    complete,
+    report,
+    completeReport,
+    browserReport,
+  );
 }
 
 export async function exportBenchmarkSummary(

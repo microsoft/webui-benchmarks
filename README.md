@@ -174,6 +174,21 @@ It writes:
 - `results/benchmark-summary.json` - copy-ready WebUI homepage state (complete and progressive RPS + essential browser metrics)
 - `results/benchmark-summary-complete.json` - copy-ready homepage state for the complete suite (SSR only)
 
+The combined summary includes campaign timestamps, source commit and fixture
+digest. When a sibling `../webui` checkout exists, the workflow synchronizes
+`results/benchmark-summary.json` into
+`docs/.webui-press/state/benchmark-summary.json` there. No other checkout is
+modified if that sibling is absent. Synchronize existing results explicitly with:
+
+```bash
+pnpm run sync:webui:benchmarks -- --webui ../webui
+```
+
+The WebUI docs keep their `prepare:benchmarks` step: it validates the campaign,
+strips bulk telemetry from browser state, and generates the full explorer,
+homepage previews, and sanitized JSON download. Synchronization updates the
+source snapshot only; it does not build or start the docs site.
+
 Official runs record completed RPS and memory even when a framework overloads
 under the fixed connection load. Such rounds are marked `loadStatus:
 "overloaded"` with timeout and error counts; strict failure behavior remains

@@ -45,6 +45,7 @@
     "bench:todo:browser": "node todo/browser/cli.mjs",
     "export:summary": "node scripts/export-benchmark-summary.mjs",
     "export:webui": "node scripts/extract-webui-benchmarks.mjs",
+    "sync:webui:benchmarks": "node scripts/sync-webui-benchmark-summary.mjs",
     "profile:prepare": "node todo/profile/prepare.mjs",
     "verify:runtimes": "node todo/servers/verify-runtimes.mjs --official",
     "webui:configure": "node scripts/configure-webui.mjs",

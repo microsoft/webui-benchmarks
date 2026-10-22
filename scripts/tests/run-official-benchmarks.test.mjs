@@ -19,7 +19,14 @@ test("official workflow emits raw evidence and copy-ready summaries for both sui
   assert.equal(outputs, OFFICIAL_BENCHMARK_OUTPUTS);
   assert.deepEqual(
     observed.map(({ id }) => id),
-    ["ssr", "ssr-complete", "browser", "summary", "summary-complete"],
+    [
+      "ssr",
+      "ssr-complete",
+      "browser",
+      "summary",
+      "summary-complete",
+      "sync-webui",
+    ],
   );
   assert.deepEqual(OFFICIAL_BENCHMARK_OUTPUTS, {
     browser: "results/ssr-todo-browser-outcomes-official.json",
@@ -72,6 +79,14 @@ test("official workflow emits raw evidence and copy-ready summaries for both sui
       OFFICIAL_BENCHMARK_OUTPUTS.ssrComplete,
       "--output",
       OFFICIAL_BENCHMARK_OUTPUTS.summaryComplete,
+    ],
+  );
+  assert.deepEqual(
+    OFFICIAL_BENCHMARK_STEPS[5].arguments,
+    [
+      "--input",
+      OFFICIAL_BENCHMARK_OUTPUTS.summary,
+      "--optional",
     ],
   );
 });
