@@ -24,7 +24,7 @@ rustls = "=0.23.46"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["raw_value"] }
 time = { version = "=0.3.55", features = ["local-offset", "formatting", "macros"] }
-tokio = { version = "=1.54.0", features = ["rt", "sync", "time"] }
+tokio = { version = "=1.54.1", features = ["rt", "sync", "time"] }
 microsoft-webui-handler = "=3.0.4"
 
 [workspace.lints.clippy]
