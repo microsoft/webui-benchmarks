@@ -48,7 +48,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "The SSR shell has painted, interaction hydration and route intent preloading are installed, and two animation frames have completed.",
-    router: "@microsoft/webui-router",
+    router: "@microsoft/webui-delivery",
   }),
   "webui-fast": Object.freeze({
     clientMode: "hydrate",
@@ -65,7 +65,7 @@ const CLIENT_METADATA = Object.freeze({
     }),
     readinessDefinition:
       "FAST has hydrated the declarative component tree and two animation frames have completed.",
-    router: "@microsoft/webui-router",
+    router: "@microsoft/webui-delivery",
   }),
   react: Object.freeze({
     clientMode: "hydrate",
@@ -306,8 +306,8 @@ export function frameworkVersionsForApp(appId, versions) {
   if (appId === "webui") {
     return Object.freeze({
       "@microsoft/webui": versions.webui,
-      "@microsoft/webui-router":
-        versions.controlled["@microsoft/webui-router"],
+      "@microsoft/webui-delivery":
+        versions.controlled["@microsoft/webui-delivery"],
     });
   }
   if (appId === "webui-fast") {
@@ -315,8 +315,8 @@ export function frameworkVersionsForApp(appId, versions) {
       "@microsoft/fast-element":
         versions.controlled["@microsoft/fast-element"],
       "@microsoft/webui": versions.webui,
-      "@microsoft/webui-router":
-        versions.controlled["@microsoft/webui-router"],
+      "@microsoft/webui-delivery":
+        versions.controlled["@microsoft/webui-delivery"],
     });
   }
   return Object.freeze(

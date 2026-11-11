@@ -98,7 +98,7 @@ export function configuredWebuiConfiguration(environment = process.env) {
     resolve(checkout, "Cargo.toml"),
     resolve(checkout, "packages", "webui", "package.json"),
     resolve(checkout, "packages", "webui-framework", "package.json"),
-    resolve(checkout, "packages", "webui-router", "package.json"),
+    resolve(checkout, "packages", "webui-delivery", "package.json"),
     resolve(checkout, "crates", "webui-handler", "Cargo.toml"),
   ]) {
     if (!existsSync(path)) {
@@ -188,15 +188,16 @@ export function webuiReleaseVersion() {
   const manifest = readJson(resolve(REPOSITORY_ROOT, "package.json"));
   const webui = manifest.dependencies?.["@microsoft/webui"];
   const framework = manifest.dependencies?.["@microsoft/webui-framework"];
-  const router = manifest.dependencies?.["@microsoft/webui-router"];
+  const delivery = manifest.dependencies?.["@microsoft/webui-delivery"];
   if (
     typeof webui !== "string"
     || webui !== framework
-    || webui !== router
     || !/^\d+\.\d+\.\d+$/u.test(webui)
+    || typeof delivery !== "string"
+    || !/^\d+\.\d+\.\d+$/u.test(delivery)
   ) {
     throw new Error(
-      "WebUI, WebUI Framework, and WebUI Router must use one exact version",
+      "WebUI and WebUI Framework must share one exact version; WebUI Delivery must use an exact version",
     );
   }
   return webui;
@@ -307,7 +308,7 @@ export function webuiFixtureRoots() {
     resolve(checkout, "crates", "webui"),
     resolve(checkout, "packages", "webui"),
     resolve(checkout, "packages", "webui-framework"),
-    resolve(checkout, "packages", "webui-router"),
+    resolve(checkout, "packages", "webui-delivery"),
   ]);
 }
 

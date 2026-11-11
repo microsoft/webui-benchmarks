@@ -38,12 +38,12 @@ const publicRegistry = "--registry=https://registry.npmjs.org";
 const packageDirectories = Object.freeze({
   "@microsoft/webui": "webui",
   "@microsoft/webui-framework": "webui-framework",
-  "@microsoft/webui-router": "webui-router",
+  "@microsoft/webui-delivery": "webui-delivery",
 });
 const packedArchiveNames = Object.freeze({
   "@microsoft/webui": "webui-local.tgz",
   "@microsoft/webui-framework": "webui-framework-local.tgz",
-  "@microsoft/webui-router": "webui-router-local.tgz",
+  "@microsoft/webui-delivery": "webui-delivery-local.tgz",
 });
 
 function resolvePnpmInvocation() {
@@ -433,7 +433,7 @@ function prepareCheckout(checkout) {
       "--filter",
       "@microsoft/webui-framework",
       "--filter",
-      "@microsoft/webui-router",
+      "@microsoft/webui-delivery",
       "run",
       "build",
     ],

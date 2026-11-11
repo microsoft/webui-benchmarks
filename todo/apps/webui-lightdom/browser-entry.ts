@@ -7,9 +7,9 @@ import {
 } from "@microsoft/webui-framework/interaction-hydration.js";
 import "@microsoft/webui-framework/streaming.js";
 import {
-  prepareRoutePreload,
-  type PreparedRoutePreload,
-} from "@microsoft/webui-router/preload.js";
+  routePreload,
+  type RoutePreload,
+} from "@microsoft/webui-delivery/router.js";
 
 const benchmarkGlobal = globalThis as typeof globalThis & {
   __TODO_BENCH_FORCE_HYDRATION__?: () => Promise<void>;
@@ -61,13 +61,14 @@ function waitForHydrated(): Promise<void> {
 }
 
 let activation: Promise<void> | undefined;
-let prepared: PreparedRoutePreload | undefined;
+let preload: RoutePreload | undefined;
 const activate = (): Promise<void> => {
   activation ??= Promise.all([
     import("./component-definitions.js"),
-    import("@microsoft/webui-router"),
-  ]).then(async ([, { Router }]) => {
-    Router.start({ loaders, preload: prepared });
+    import("@microsoft/webui-delivery/router.js"),
+  ]).then(async ([, { WebUIRouter }]) => {
+    const router = new WebUIRouter();
+    router.start({ loaders, preload });
     await waitForHydrated();
   });
   return activation;
@@ -75,7 +76,7 @@ const activate = (): Promise<void> => {
 const disposeHydration = installInteractionHydration({
   load: activate,
   onError(error) {
-    prepared?.destroy();
+    preload?.destroy();
     const message = error instanceof Error ? error.message : String(error);
     benchmarkGlobal.__TODO_BENCH_READY__ = Object.freeze({
       clientMode: "interaction-hydrate",
@@ -92,9 +93,10 @@ const disposeHydration = installInteractionHydration({
   },
 });
 try {
-  prepared = prepareRoutePreload({
+  preload = routePreload({
     onIntent: () => wakeInteractionHydration(),
   });
+  preload.prepare();
 } catch (error) {
   disposeHydration();
   throw error;

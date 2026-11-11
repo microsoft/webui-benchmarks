@@ -107,7 +107,7 @@ const definitions = Object.freeze({
           "--filter",
           "@microsoft/webui-framework",
           "--filter",
-          "@microsoft/webui-router",
+          "@microsoft/webui-delivery",
           "run",
           "build",
         ],
@@ -118,7 +118,7 @@ const definitions = Object.freeze({
     dependsOn: Object.freeze([]),
     display: synchronizedSourcePackages
       ? "node scripts/configure-webui.mjs --sync"
-      : "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
+      : "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-delivery run build",
     id: "webui-package",
   }),
   "native-addon": Object.freeze({

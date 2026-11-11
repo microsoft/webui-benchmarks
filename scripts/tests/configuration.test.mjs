@@ -39,9 +39,9 @@ test("benchmark dependencies use exact stable versions and matching renderers", 
     dependencies["@microsoft/webui"],
     dependencies["@microsoft/webui-framework"],
   );
-  assert.equal(
-    dependencies["@microsoft/webui"],
-    dependencies["@microsoft/webui-router"],
+  assert.match(
+    dependencies["@microsoft/webui-delivery"],
+    /^\d+\.\d+\.\d+$/u,
   );
 });
 
@@ -113,7 +113,7 @@ test("links every local WebUI JavaScript package from one checkout", () => {
       {
         "@microsoft/webui": "1.0.0",
         "@microsoft/webui-framework": "1.0.0",
-        "@microsoft/webui-router": "1.0.0",
+        "@microsoft/webui-delivery": "1.0.0",
         react: "2.0.0",
       },
       configuration,
@@ -125,8 +125,8 @@ test("links every local WebUI JavaScript package from one checkout", () => {
       "@microsoft/webui-framework": `link:${
         resolve(checkout, "packages", "webui-framework").replaceAll("\\", "/")
       }`,
-      "@microsoft/webui-router": `link:${
-        resolve(checkout, "packages", "webui-router").replaceAll("\\", "/")
+      "@microsoft/webui-delivery": `link:${
+        resolve(checkout, "packages", "webui-delivery").replaceAll("\\", "/")
       }`,
       react: "2.0.0",
     },
@@ -141,8 +141,8 @@ test("packed mode resolves immutable package artifacts", () => {
       "@microsoft/webui": ".cache/webui-pack/webui-local.tgz",
       "@microsoft/webui-framework":
         ".cache/webui-pack/webui-framework-local.tgz",
-      "@microsoft/webui-router":
-        ".cache/webui-pack/webui-router-local.tgz",
+      "@microsoft/webui-delivery":
+        ".cache/webui-pack/webui-delivery-local.tgz",
     },
   };
   const specifiers = packageSpecifiers(configuration);
@@ -152,8 +152,8 @@ test("packed mode resolves immutable package artifacts", () => {
     /webui-framework-local\.tgz$/u,
   );
   assert.match(
-    specifiers["@microsoft/webui-router"],
-    /webui-router-local\.tgz$/u,
+    specifiers["@microsoft/webui-delivery"],
+    /webui-delivery-local\.tgz$/u,
   );
 });
 

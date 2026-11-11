@@ -9,7 +9,7 @@ const configPath = resolve(repositoryRoot, ".webui-local.json");
 const packageDirectories = Object.freeze({
   "@microsoft/webui": "webui",
   "@microsoft/webui-framework": "webui-framework",
-  "@microsoft/webui-router": "webui-router",
+  "@microsoft/webui-delivery": "webui-delivery",
 });
 
 function configuredDependency() {
