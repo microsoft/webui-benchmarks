@@ -15,7 +15,7 @@ function summary() {
   return {
     benchmarks: {
       campaign: {
-        canonicalWebuiVersion: "3.0.4",
+        canonicalWebuiVersion: "3.1.1",
         browserMeasuredAt: "2026-10-22T01:47:35.884Z",
         completeMeasuredAt: "2026-10-22T01:39:47.554Z",
         progressiveMeasuredAt: "2026-10-22T01:29:33.368Z",

@@ -43,7 +43,7 @@ that rejects the top-level `await` in `bun.mjs`'s startup block. Run
 --outfile target/bun/webui-bun-serve`) to reproduce it locally.
 
 `node todo/servers/verify-runtimes.mjs --official` enforces Node 26.12.0
-and Bun 1.4.3. Local verification reports an absent Bun as `skipped`;
+and Bun 1.4.4. Local verification reports an absent Bun as `skipped`;
 official verification fails it. Generate the Rust state input with:
 
 ```text

@@ -4,7 +4,7 @@
 import { FASTElement, observable } from "@microsoft/fast-element";
 import { declarativeTemplate } from "@microsoft/fast-element/declarative.js";
 import { observerMap } from "@microsoft/fast-element/observer-map.js";
-import type { RouteLoaderContext } from "@microsoft/webui-router";
+import type { RouteLoaderContext } from "@microsoft/webui-delivery/router.js";
 import {
   saveSettings,
   selectDensity,

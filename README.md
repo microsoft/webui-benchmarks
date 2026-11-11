@@ -49,7 +49,7 @@ Every browser product exposes the same three-page workspace:
 | Activity | `/activity` | filter deployments, expand an event, mark all read |
 | Settings | `/settings` | toggle a preference, select density, save |
 
-WebUI and FAST use `@microsoft/webui-router` with dynamically imported route
+WebUI and FAST use `@microsoft/webui-delivery` with dynamically imported route
 components. React uses React Router, the separate `react-tanstack` row uses
 TanStack Router's SSR pipeline, Preact uses `preact-iso`, Vue uses Vue Router,
 and Solid uses Solid Router. Lit uses `@lit-labs/router`, which is Lit's own
@@ -66,7 +66,7 @@ to a toy comparison.
 
 ## Reproducible setup
 
-The official runtime pins are Node `26.12.0`, Bun `1.4.3`,
+The official runtime pins are Node `26.12.0`, Bun `1.4.4`,
 Rust `1.99.1`, and pnpm `12.14.0`. These use stable releases, not prereleases;
 Node uses the current stable release rather than the older LTS line.
 Application libraries, routers, adapters, shared workload dependencies, build
@@ -94,8 +94,9 @@ with the new versions.
 
 ## WebUI dependency strategy
 
-The canonical manifests benchmark the released WebUI `3.0.4` npm packages
-and `microsoft-webui-handler` crate. The package lock, Cargo lock, report
+The canonical manifests benchmark the released WebUI `3.1.1` npm packages
+and `microsoft-webui-handler` crate. WebUI Router is pinned to its latest
+published release, `3.0.5`. The package lock, Cargo lock, report
 metadata, and fixture digest retain the exact resolved dependency evidence.
 
 Use source-link mode for the fastest development loop. It builds WebUI,
@@ -117,7 +118,7 @@ refreshed explicitly with `pnpm run webui:sync`.
 Use `--ref` instead of `--path` to create an untracked shallow checkout:
 
 ```bash
-pnpm run webui:local -- --ref v3.0.4
+pnpm run webui:local -- --ref v3.1.1
 pnpm run build
 ```
 

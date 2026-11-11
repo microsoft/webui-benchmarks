@@ -2,7 +2,7 @@
 // Licensed under the MIT license.
 
 import { enableHydration } from "@microsoft/fast-element/hydration.js";
-import { Router } from "@microsoft/webui-router";
+import { WebUIRouter } from "@microsoft/webui-delivery/router.js";
 import { publishHydrated } from "../../shared/hydration.mjs";
 
 const hydration = enableHydration();
@@ -11,7 +11,7 @@ await Promise.all(
   COMPONENT_NAMES.map((name) => customElements.whenDefined(name)),
 );
 await hydration.whenHydrated();
-Router.start({
+new WebUIRouter().start({
   loaders: {
     "activity-page": async () => {
       await import("./src/activity-page/activity-page.js");

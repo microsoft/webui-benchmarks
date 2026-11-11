@@ -340,7 +340,7 @@ test("build plan deduplicates exact production and release commands", () => {
   const commands = plan.map((entry) => entry.display);
   assert.equal(
     commands.includes(
-      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-router run build",
+      "pnpm --filter @microsoft/webui --filter @microsoft/webui-framework --filter @microsoft/webui-delivery run build",
     ),
     false,
   );

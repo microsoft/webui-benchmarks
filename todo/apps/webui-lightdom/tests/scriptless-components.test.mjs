@@ -74,7 +74,7 @@ test("the app shell defers its authored graph until interaction", async () => {
   assert.match(template, /w-hydrate="interaction"/u);
   assert.match(template, /<boundary name="navigation-ready">/u);
   assert.match(entry, /installInteractionHydration/u);
-  assert.match(entry, /prepareRoutePreload/u);
+  assert.match(entry, /routePreload/u);
   assert.match(entry, /wakeInteractionHydration/u);
   assert.match(entry, /import\("\.\/component-definitions\.js"\)/u);
   assert.doesNotMatch(entry, /^import \{ Router \}/mu);
