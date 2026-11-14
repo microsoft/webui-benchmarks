@@ -17,4 +17,5 @@ benchmark-summary.json
 
 `target/` remains disposable build output. Do not move full raw captures into
 the WebUI documentation repository; publish only `benchmark-summary.json` when
-the homepage needs an update.
+the homepage needs an update. JSON files in this directory are ignored by Git;
+archive any captures you want to retain or share separately.
