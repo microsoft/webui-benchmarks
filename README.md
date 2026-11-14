@@ -5,9 +5,15 @@
 
 This repository is the canonical home of the WebUI SSR framework benchmark
 suite. It compares fifteen equivalent routed workspace applications in one
-official dynamic SSR matrix and keeps the browser hydration, interaction, raw
-capture, profiling, and correctness evidence beside the runner that produced
-it.
+official dynamic SSR matrix, with browser hydration, interaction, profiling,
+and correctness measurements alongside the runner. Generated reports are
+stored locally and are not tracked in Git.
+
+Start with [setup](#reproducible-setup) and a [quick run](#run-the-benchmark).
+Issues are the preferred way to contribute; maintainers will ask for pull
+requests when help is needed. See [Contributing](./CONTRIBUTING.md) and
+[Support](./SUPPORT.md). Benchmark results depend on the workload, machine,
+and measurement methodology; this suite is not a universal framework ranking.
 
 | # | Case id | Product SSR renderer | HTTP transport |
 | --- | --- | --- | --- |
@@ -73,6 +79,12 @@ Application libraries, routers, adapters, shared workload dependencies, build
 and test tools, and Rust crates are pinned exactly in their manifests.
 TypeScript uses the latest compatible 6.x release (`6.0.3`) across the suite:
 SvelteKit 3 requires the JavaScript compiler API removed in TypeScript 7.
+
+Install the pinned Node and Rust toolchains before running the commands below.
+Bun is installed as a workspace dependency; the runner resolves that copy.
+On Linux, Playwright may also require system packages: use
+`pnpm exec playwright install --with-deps chromium` when needed. The official
+browser campaign runs headed Chromium and requires a working graphical display.
 
 ```bash
 npm install --global pnpm@12.14.0
@@ -196,12 +208,13 @@ under the fixed connection load. Such rounds are marked `loadStatus:
 available by omitting `--allow-load-errors` when invoking the runner directly.
 
 Run a quick smoke or select rows by case id, app id, kind, runtime, server, or
-wildcard:
+wildcard. Quick runs skip builds by default, so run `pnpm run build` first or
+pass `--build`:
 
 ```bash
 pnpm run bench:quick
 pnpm run bench:quick -- --case react
-pnpm run bench:quick -- --case webui-*
+pnpm run bench:quick -- --case 'webui-*'
 ```
 
 Run only the official timeboxed SSR matrix when investigating server results.
@@ -249,7 +262,7 @@ pnpm run preview:all
 
 The command prints each HTTPS URL and keeps every server alive until Ctrl+C.
 
-Host all 24 demo products (12 applications × both response modes) behind a
+Host all 26 demo products (13 applications × both response modes) behind a
 single port, which is what the container image deploys:
 
 ```bash
@@ -321,7 +334,7 @@ workload in the progressive suite: an above-the-fold shell/workbench that
 renders immediately, with the below-the-fold todo list resolving later through
 a shared, configured async readiness delay, driven for WebUI by its
 resumable `StreamingSession` boundary API. The canonical WebUI dependency
-(`@microsoft/webui@3.0.4`; see `todo/runner/lib/cases.mjs`'s
+(`@microsoft/webui@3.1.1`; see `todo/runner/lib/cases.mjs`'s
 `ASYNC_DATA_BOUNDARY_CAPABILITY`) exposes that API, but the dedicated workload
 is not implemented yet. This gap is disclosed as metadata
 (`status: "available-pending-benchmark-implementation"`) and the progressive
@@ -330,9 +343,10 @@ unchanged.
 
 ## Result ownership and publishing
 
-Full raw reports and named baselines belong in [`results/`](./results/). CI runs
-may retain them as workflow artifacts. Copy `results/benchmark-summary.json`
-into the WebUI documentation state; do not copy either raw report.
+Full raw reports and named baselines are written to [`results/`](./results/).
+JSON files there are ignored by Git; archive them separately if they need to be
+retained or shared. Copy `results/benchmark-summary.json` into the WebUI
+documentation state; do not copy either raw report.
 
 Export only the compact homepage DTO from a clean, unfiltered, complete
 canonical official SSR report. Add the matching headed browser report when
@@ -419,7 +433,7 @@ decomposition.
 └── todo/
     ├── apps/                   # WebUI and production framework apps
     ├── browser/                # Hydration and interaction measurements
-    ├── demo/                   # Single-container demo site for all 24 products
+    ├── demo/                   # Single-container demo site for all 26 products
     ├── profile/                # Rust profiling harness and methodology
     ├── runner/                 # Build graph, RPS runner, schema, reporting
     ├── servers/                # Node, Bun, and Rust/Actix servers
